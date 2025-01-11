@@ -1,18 +1,18 @@
 import express from "express";
-import { DocumentsService } from "./services/DocumentsService";
+import path from "path";
+import documentsRouter from "./controllers/DocumentsController";
 
 const app = express();
-const port = 3000;
-
-const documentsService = new DocumentsService();
+const port = 3001;
 
 app.use(express.json());
 
-app.get("/documents", (req, res) => {
-  const type = req.query.type as string || "";
-  const documents = documentsService.getAllDocumentsByType(type);
-  res.json(documents);
+app.get("/", (req, res) => {
+  const filePath = path.join(__dirname, "views", "index.html");
+  res.sendFile(filePath);
 });
+
+app.use("/documents", documentsRouter);
 
 app.listen(port, () => {
   console.log(`Server running at http://localhost:${port}`);

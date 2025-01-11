@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document Management System</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+      background-color: #f4f4f9;
+      color: #333;
+    }
+
+    header {
+      background-color: #28b463;
+      color: #fff;
+      padding: 1rem;
+      text-align: center;
+      font-size: 2rem;
+      font-weight: bold;
+    }
+
+    main {
+      flex: 1;
+      display: flex;
+      justify-content: space-evenly;
+      align-items: flex-start;
+      overflow-y: auto;
+      padding: 2rem;
+    }
+
+    .tree, .description-box {
+      background-color: #fff;
+      border-radius: 10px;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+      padding: 1.5rem;
+      width: 45%;
+    }
+
+    .tree ul {
+      list-style: none;
+      padding-left: 1rem;
+    }
+
+    .tree ul li {
+      position: relative;
+      margin: 0.5rem 0;
+      padding-left: 1.5rem;
+    }
+
+    .tree ul li.directory::before {
+      content: "📁";
+      position: absolute;
+      left: 0;
+      top: 0;
+      color: #6200ea;
+    }
+
+    .tree ul li .file-symbol {
+      color: #6200ea;
+      font-weight: bold;
+      margin-right: 0.3rem;
+    }
+
+    .file-description {
+      font-size: 0.9rem;
+      color: #555;
+      margin-left: 1rem;
+    }
+
+    .description-box h2 {
+      font-size: 1.5rem;
+      margin-bottom: 1rem;
+      color: #333;
+    }
+
+    .description-box p {
+      margin: 0.5rem 0;
+      line-height: 1.5;
+      color: #555;
+    }
+
+    .description-box ul {
+      list-style-type: disc;
+      padding-left: 2rem;
+    }
+
+    .upload-link {
+      margin-top: 1.5rem;
+      padding: 1rem;
+      background-color: #f9f9f9;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .upload-link a {
+      color: #28b463;
+      font-weight: bold;
+      text-decoration: none;
+    }
+
+    .upload-link a:hover {
+      text-decoration: underline;
+    }
+
+    .link-table {
+      margin-top: 1.5rem;
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    .link-table td {
+      padding: 0.5rem;
+      border: 1px solid #ddd;
+      text-align: left;
+    }
+
+    .link-table a {
+      color: #28b463;
+      font-weight: bold;
+      text-decoration: none;
+    }
+
+    .link-table a:hover {
+      text-decoration: underline;
+    }
+
+    .filter-container {
+      margin-top: 1rem;
+    }
+
+    .filter-container select,
+    .filter-container input {
+      padding: 0.5rem;
+      font-size: 1rem;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      margin-top: 0.5rem;
+      display: block;
+    }
+
+    footer {
+      background-color: #ddd;
+      padding: 1rem;
+      display: flex;
+      justify-content: flex-start;
+      align-items: flex-end;
+      gap: 1rem;
+      flex-wrap: wrap;
+    }
+
+    .info-box {
+      border: 1px solid #bbb;
+      border-radius: 5px;
+      padding: 1rem;
+      background-color: #fff;
+      flex: 1;
+      min-width: 120px;
+      text-align: center;
+    }
+
+    .info-box span {
+      display: block;
+      font-size: 1.2rem;
+      font-weight: bold;
+      color: #333;
+    }
+
+    .info-content {
+      font-size: 1rem;
+      margin-top: 0.5rem;
+      color: #555;
+    }
+  </style>
+  <script>
+    function updateLink() {
+      const selectElement = document.getElementById("filterOptions");
+      const inputElement = document.getElementById("filterInput");
+      const selectedValue = selectElement.value;
+      const inputValue = inputElement.value.trim();
+      const linkElement = document.getElementById("sortLink");
+
+      if (inputValue) {
+        linkElement.href = `http://localhost:3001/documents/byType?${selectedValue}=${encodeURIComponent(inputValue)}`;
+      } else {
+        linkElement.href = '#'; // Reset link if input is empty
+      }
+    }
+  </script>
+</head>
+<body>
+  <header>Document Management System</header>
+  <main>
+    <div class="description-box">
+      <h2>Documents Register</h2>
+      <p>Generate a module named <b>Documents</b> for the documents register. Create a controller named <b>Documents</b> that will handle individual endpoints. The document must have properties:</p>
+      <ul>
+        <li>id, name, type, description, publish date</li>
+      </ul>
+      <p>Into the controller, create four different methods which are:</p>
+      <ul>
+        <li><b>getAllDocumentsByType()</b> - Method: GET, used to fetch the list of all documents with the same type.</li>
+        <li><b>updateDocument()</b> - Method: GET, used to update document description by passing the documentID as a parameter.</li>
+        <li><b>addDocument()</b> - Method: POST, used to create and post a new document to the existing document list.</li>
+        <li><b>deleteDocument()</b> - Method: DELETE, used to delete a document by passing the documentID as a query parameter.</li>
+      </ul>
+      <div class="upload-link">
+        Project is uploaded here: <a href="https://github.com/dilianpapanchev/DocumentsManager" target="_blank">https://github.com/dilianpapanchev/DocumentsManager</a>
+      </div>
+      <table class="link-table">
+        <tr>
+          <td><a href="http://localhost:3001/documents" target="_blank">All Documents</a></td>
+        </tr>
+        <tr>
+          <td>
+            <a href="#" id="sortLink" target="_blank">List Documents by sort</a>
+            <div class="filter-container">
+              <label for="filterOptions">Choose a filter:</label>
+              <select id="filterOptions" onchange="updateLink()">
+                <option value="id">id</option>
+                <option value="name">name</option>
+                <option value="type">type</option>
+                <option value="description">description</option>
+                <option value="publishDate">publishDate</option>
+              </select>
+              <label for="filterInput">Enter value:</label>
+              <input type="text" id="filterInput" oninput="updateLink()" placeholder="Enter value here">
+            </div>
+          </td>
+        </tr>
+      </table>
+    </div>
+    <div class="tree">
+      <h2>Project Structure</h2>
+      <ul>
+        <li class="directory">src
+          <ul>
+            <li class="directory">controllers
+              <ul>
+                <li><span class="file-symbol">📄</span>DocumentsController.ts <span class="file-description">Handles routing for document operations.</span></li>
+              </ul>
+            </li>
+            <li class="directory">data
+              <ul>
+                <li><span class="file-symbol">📄</span>documents.json <span class="file-description">Stores document data in JSON format.</span></li>
+              </ul>
+            </li>
+            <li class="directory">models
+              <ul>
+                <li><span class="file-symbol">📄</span>Document.ts <span class="file-description">Defines the structure of the Document object.</span></li>
+              </ul>
+            </li>
+            <li class="directory">scripts
+              <ul>
+                <li><span class="file-symbol">📄</span>AddDocument.ts <span class="file-description">Script to add new documents to the system.</span></li>
+                <li><span class="file-symbol">📄</span>DeleteDocument.ts <span class="file-description">Script to delete documents from the system.</span></li>
+                <li><span class="file-symbol">📄</span>UpdateDocument.ts <span class="file-description">Script to update document information.</span></li>
+              </ul>
+            </li>
+            <li class="directory">services
+              <ul>
+                <li><span class="file-symbol">📄</span>DocumentsService.ts <span class="file-description">Handles business logic for documents.</span></li>
+              </ul>
+            </li>
+            <li class="directory">views
+              <ul>
+                <li><span class="file-symbol">📄</span>index.html <span class="file-description">File containing the code of the home page.</span></li>
+              </ul>
+            </li>
+          </ul>
+        </li>
+        <li><span class="file-symbol">📄</span>app.ts <span class="file-description">Main file for starting the server.</span></li>
+        <li><span class="file-symbol">📄</span>package-lock.json <span class="file-description">Lock file for project dependencies.</span></li>
+        <li><span class="file-symbol">📄</span>package.json <span class="file-description">Defines project metadata and dependencies.</span></li>
+        <li><span class="file-symbol">📄</span>tsconfig.json <span class="file-description">TypeScript compiler configuration file.</span></li>
+      </ul>
+    </div>
+  </main>
+  <footer>
+    <div class="info-box">
+      <span>Име</span>
+      <div class="info-content">Дилян Папанчев</div>
+    </div>
+    <div class="info-box">
+      <span>Факултетен номер</span>
+      <div class="info-content">121324047</div>
+    </div>
+  </footer>
+</body>
+</html>

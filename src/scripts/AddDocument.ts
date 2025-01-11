@@ -1,20 +1,29 @@
 import { DocumentsService } from "../services/DocumentsService";
 import { Document } from "../models/Document";
 
+const axios = require("axios");
 const documentsService = new DocumentsService();
 
-const documents = documentsService.getAllDocumentsByType("");
-const nextId = documents.length > 0 
-  ? Math.max(...documents.map(doc => parseInt(doc.id, 10))) + 1 
-  : 1;
+async function addNewDocument() {
+  try {
+    const allDocumentsResponse = await axios.get("http://localhost:3001/documents");
+    const documents: Document[] = allDocumentsResponse.data;
 
-const newDocument: Document = {
-  id: nextId.toString(),
-  name: "Sample Document",
-  type: "project",
-  description: "This is a sample document.",
-  publishDate: new Date("2025-01-01"),
-};
+    const nextId = documents.length > 0
+      ? (Math.max(...documents.map((doc) => parseInt(doc.id, 10))) + 1).toString()
+      : "1";
 
-documentsService.addDocument(newDocument);
-console.log("Document added:", newDocument);
+    const newDocument: Document = {
+      id: nextId,
+      name: "Mecko",
+      type: "pedal",
+      description: "debel",
+      publishDate: new Date("2025-01-01"),
+    };
+
+    const response = await axios.post("http://localhost:3001/documents", newDocument);
+    console.log("New document added:", response.data);
+  } catch (error) {}
+}
+
+addNewDocument();

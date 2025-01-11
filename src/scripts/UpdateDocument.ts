@@ -1,5 +1,7 @@
 import { DocumentsService } from "../services/DocumentsService";
+import { Document } from "../models/Document";
 
+const axios = require('axios');
 const documentId = process.argv[2];
 const fieldToUpdate = process.argv[3];
 const newValue = process.argv[4];
@@ -19,24 +21,17 @@ if (!newValue) {
   process.exit(1);
 }
 
-const documentsService = new DocumentsService();
-const documents = documentsService.getAllDocumentsByType("");
+async function updateDocument() {
+  try {
+    const response = await axios.patch(`http://localhost:3001/documents/${documentId}`, {
+      fieldToUpdate,
+      newValue: fieldToUpdate === "publishDate" ? new Date(newValue) : newValue,
+    });
 
-const document = documents.find(doc => doc.id === documentId);
-
-if (!document) {
-  console.error(`Error: Document with ID ${documentId} not found.`);
-  process.exit(1);
+    console.log(`Document with ID ${documentId} updated:`);
+    console.log(response.data);
+  } catch (error) {
+  }
 }
 
-if (document.hasOwnProperty(fieldToUpdate)) {
-  (document as any)[fieldToUpdate] = fieldToUpdate === "publishDate" 
-    ? new Date(newValue)
-    : newValue;
-
-  documentsService["saveDocuments"](documents);
-  console.log(`Document with ID ${documentId} updated:`);
-  console.log(document);
-} else {
-  console.error(`Error: Field '${fieldToUpdate}' does not exist on the document.`);
-}
+updateDocument();
