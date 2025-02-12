@@ -27,12 +27,14 @@ def filter_sar_output(file_path, date_for_file, start_time, end_time):
 
             time_part = parts[0] + " " + parts[1]  # Включваме AM/PM
             try:
-                # Конвертираме времето от 12-часов (AM/PM) към 24-часов формат
+                # Конвертираме времето от 12-часов формат в 24-часов
                 record_time = datetime.datetime.strptime(time_part, "%I:%M:%S %p").time()
                 full_record_time = datetime.datetime.combine(date_for_file, record_time)
 
                 if start_time <= full_record_time <= end_time:
-                    print(f"{file_path}: {line}")  # Принтираме само записите в интервала
+                    # Принтираме във формат 24 часа
+                    time_24 = full_record_time.strftime("%H:%M:%S")
+                    print(f"{file_path}: {time_24} {' '.join(parts[2:])}")
                     found_records = True
             except ValueError:
                 continue  # Пропускаме грешно форматирани редове
