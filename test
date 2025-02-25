@@ -9,7 +9,6 @@
             font-family: Arial, sans-serif;
             background-color: #f4f4f9;
             color: #333;
-            text-align: center;
             padding: 20px;
         }
 
@@ -22,7 +21,7 @@
             border-radius: 8px;
         }
 
-        h2 {
+        h2, h3 {
             color: #0056b3;
         }
 
@@ -41,6 +40,7 @@
             color: #0056b3;
             padding: 8px;
             text-align: center;
+            font-weight: bold;
         }
 
         td {
@@ -59,6 +59,17 @@
             padding: 10px;
             border-radius: 4px;
             margin-bottom: 10px;
+            text-align: center;
+        }
+
+        .success {
+            color: #008000;
+            font-weight: bold;
+        }
+
+        .error {
+            color: #ff0000;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -67,96 +78,121 @@
         <h2>TIME COB Report</h2>
         <p>Information for closing of 2025-02-23 at TPH_UPG2_TPHNONSLA</p>
 
-        <div class="section-title">COB Details</div>
+        <div class="section-title">COBS PROD HOSTNAME</div>
         <table>
             <tr>
-                <th>COB Date</th>
-                <th>Environment</th>
-                <th>Start time</th>
-                <th>Stop time</th>
+                <th>Hostname</th>
+            </tr>
+            <tr>
+                <td>sa0abo06.sk.srv.sys</td>
+            </tr>
+        </table>
+
+        <div class="section-title">COBS last 3 Elapsed Time & Transactions</div>
+        <table>
+            <tr>
+                <th>Date</th>
+                <th>Elapsed</th>
+                <th>Transactions</th>
+            </tr>
+            <tr>
+                <td>20250219</td>
+                <td>00:21:52</td>
+                <td>97857271</td>
+            </tr>
+            <tr>
+                <td>20250218</td>
+                <td>00:28:35</td>
+                <td>107389734</td>
+            </tr>
+        </table>
+
+        <div class="section-title">JBOSS restart during COB</div>
+        <table>
+            <tr>
+                <th>Server</th>
+                <th>If Restarted</th>
+            </tr>
+            <tr>
+                <td>sa0abo06.sk.srv.sys</td>
+                <td class="success">No</td>
+            </tr>
+        </table>
+
+        <div class="section-title">CPU Usage during COB</div>
+        <table>
+            <tr>
+                <th>TIMEFRAME (CET)</th>
+                <th>USER</th>
+                <th>SYSTEM</th>
+                <th>IDLE</th>
+            </tr>
+            <tr>
+                <td>23:30:00</td>
+                <td class="success">85.85%</td>
+                <td class="success">8.56%</td>
+                <td class="success">91.49%</td>
+            </tr>
+        </table>
+
+        <div class="section-title">Logged off COB Agents</div>
+        <table>
+            <tr>
+                <th>ENV/DOR</th>
+                <th>EM/ROD</th>
+                <th>BATCH</th>
                 <th>Duration</th>
             </tr>
             <tr>
-                <td>2025-02-23</td>
-                <td>TPH_UPG2_TPHNONSLA</td>
-                <td>2025-02-24 00:01:30</td>
-                <td>2025-02-24 00:07:56</td>
-                <td>00:06:26</td>
+                <td>AA22991182ZS</td>
+                <td>AA22991182ZS</td>
+                <td>DELETE.NAU.ACTIVITIES</td>
+                <td>00:00:34</td>
             </tr>
         </table>
 
-        <div class="section-title">COB Dates</div>
+        <div class="section-title">BATCHES 5 minutes slower than last COB</div>
         <table>
             <tr>
-                <th>Last Working Day</th>
-                <th>Today</th>
-                <th>Next Working Day</th>
+                <th>BATCH</th>
+                <th>Duration</th>
             </tr>
             <tr>
-                <td>20250224</td>
-                <td>20250225</td>
-                <td>20250226</td>
+                <td>No BATCHS ran over 5 minutes</td>
+                <td class="success">No</td>
             </tr>
         </table>
 
-        <div class="section-title">COB Stages Details</div>
+        <div class="section-title">Missing BATCHS for 20250219</div>
+        <table>
+            <tr>
+                <th>Date</th>
+                <th>Status</th>
+            </tr>
+            <tr>
+                <td>20250219</td>
+                <td class="success">No BATCHS missing</td>
+            </tr>
+        </table>
+
+        <div class="section-title">5 Longest Running BATCHS 20250219</div>
         <table>
             <tr>
                 <th>Stage</th>
-                <th>Start time</th>
-                <th>Stop time</th>
+                <th>BATCH</th>
                 <th>Duration</th>
-                <th>AVG</th>
-                <th>%DIF</th>
-                <th>Time DIF</th>
+                <th>Processed</th>
             </tr>
             <tr>
-                <td>Application stage</td>
-                <td>2025-02-24 00:01:30</td>
-                <td>2025-02-24 00:03:03</td>
-                <td>00:01:33</td>
-                <td>00:01:14</td>
-                <td>69</td>
-                <td>00:00:41</td>
-            </tr>
-            <tr>
-                <td>System Wide stage</td>
-                <td>2025-02-24 00:03:03</td>
-                <td>2025-02-24 00:04:00</td>
-                <td>00:00:57</td>
-                <td>00:00:40</td>
-                <td>66</td>
-                <td>00:02:02</td>
+                <td>SB500</td>
+                <td>AA.SERVICE.PROCESS</td>
+                <td>00:59:44</td>
+                <td>7968806</td>
             </tr>
         </table>
 
-        <div class="section-title">TOP 10 Long Running Jobs</div>
-        <table>
-            <tr>
-                <th>Stage</th>
-                <th>Batch name</th>
-                <th>Job name</th>
-                <th>Start time</th>
-                <th>End time</th>
-                <th>Duration</th>
-            </tr>
-            <tr>
-                <td>R899</td>
-                <td>BNK/CS.D.DW.FILE.EXTRACTION.KH.COB</td>
-                <td>CSD.B.PPT.BANKCODE.RE</td>
-                <td>00:03:43</td>
-                <td>00:05:11</td>
-                <td>00:01:28</td>
-            </tr>
-            <tr>
-                <td>R900</td>
-                <td>KH.DW.FILE.EXTRACTION</td>
-                <td>DFE.OUTWARD.FILE.EXTRACT</td>
-                <td>00:05:25</td>
-                <td>00:06:44</td>
-                <td>00:01:19</td>
-            </tr>
-        </table>
+        <br>
+        <p>Поздрави,<br>Дилян</p>
     </div>
 </body>
 </html>
