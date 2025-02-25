@@ -2,199 +2,135 @@
 <html lang="bg">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>COB Report</title>
+    <title>COB Analyser Report</title>
     <style>
         body {
             font-family: Arial, sans-serif;
             background-color: #f4f4f9;
-            color: #333;
-            padding: 20px;
-            display: flex;
-            justify-content: center;
-        }
-
-        .container {
-            width: 90%;
-            max-width: 1000px;
-            background: #fff;
-            padding: 20px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
-            border-radius: 8px;
-        }
-
-        h2, h3 {
-            color: #0056b3;
         }
 
         table {
-            width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
+            width: 80%;
+            margin: 20px auto;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
 
-        table, th, td {
-            border: 1px solid #d1d1d1;
+        th, td {
+            padding: 10px;
+            text-align: center;
+            border: 1px solid #dddddd;
         }
 
         th {
-            background-color: #e6f1f9;
-            color: #0056b3;
-            padding: 8px;
-            text-align: center;
-            font-weight: bold;
-        }
-
-        td {
-            padding: 8px;
-            text-align: center;
+            background-color: #b3e0ff;
+            color: black;
         }
 
         tr:nth-child(even) {
             background-color: #f9f9f9;
         }
 
-        .section-title {
-            background-color: #d6e9f9;
-            color: #0056b3;
-            font-weight: bold;
-            padding: 10px;
-            border-radius: 4px;
-            margin-bottom: 10px;
-            text-align: center;
+        tr:nth-child(odd) {
+            background-color: #ffffff;
+        }
+
+        .rounded {
+            border-radius: 10px;
         }
 
         .success {
-            color: #008000;
+            color: green;
             font-weight: bold;
         }
 
         .error {
-            color: #ff0000;
+            color: red;
             font-weight: bold;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h2>TIME COB Report</h2>
-        <p>Information for closing of 2025-02-23 at TPH_UPG2_TPHNONSLA</p>
+    <h2 style="text-align: center;">COB Analyser Report</h2>
 
-        <div class="section-title">COBS PROD HOSTNAME</div>
-        <table>
-            <tr>
-                <th>Hostname</th>
-            </tr>
-            <tr>
-                <td>sa0abo06.sk.srv.sys</td>
-            </tr>
-        </table>
+    <!-- Таблица за UBB PROD HOSTNAME -->
+    <table class="rounded">
+        <tr>
+            <th colspan="3">UBB PROD HOSTNAME</th>
+        </tr>
+        <tr>
+            <td>PRIMARY 1</td>
+            <td>saabpl2.bg.srv.sys</td>
+            <td>✓</td>
+        </tr>
+    </table>
 
-        <div class="section-title">COBS last 3 Elapsed Time & Transactions</div>
-        <table>
-            <tr>
-                <th>Date</th>
-                <th>Elapsed</th>
-                <th>Transactions</th>
-            </tr>
-            <tr>
-                <td>20250219</td>
-                <td>00:21:52</td>
-                <td>97857271</td>
-            </tr>
-            <tr>
-                <td>20250218</td>
-                <td>00:28:35</td>
-                <td>107389734</td>
-            </tr>
-        </table>
+    <!-- Таблица за Elapsed Time & Transactions -->
+    <table class="rounded">
+        <tr>
+            <th colspan="3">COBs last 3 Elapsed Time & Transactions</th>
+        </tr>
+        <tr>
+            <th>Date</th>
+            <th>Elapsed</th>
+            <th>Transactions</th>
+        </tr>
+        <tr>
+            <td>20250224</td>
+            <td>03:27:48</td>
+            <td>41123843</td>
+        </tr>
+        <tr>
+            <td>20250221</td>
+            <td>02:59:49</td>
+            <td>35695046</td>
+        </tr>
+        <tr>
+            <td>20250220</td>
+            <td>03:02:48</td>
+            <td>36195539</td>
+        </tr>
+    </table>
 
-        <div class="section-title">JBOSS restart during COB</div>
-        <table>
-            <tr>
-                <th>Server</th>
-                <th>If Restarted</th>
-            </tr>
-            <tr>
-                <td>sa0abo06.sk.srv.sys</td>
-                <td class="success">No</td>
-            </tr>
-        </table>
+    <!-- Таблица за JBOSS restart -->
+    <table class="rounded">
+        <tr>
+            <th colspan="3">JBOSS restart during COB</th>
+        </tr>
+        <tr>
+            <th>Server</th>
+            <th>Restarted?</th>
+            <th>Status</th>
+        </tr>
+        <tr>
+            <td>saabpl2.bg.srv.sys</td>
+            <td>No</td>
+            <td class="success">✓</td>
+        </tr>
+    </table>
 
-        <div class="section-title">CPU Usage during COB</div>
-        <table>
-            <tr>
-                <th>TIMEFRAME (CET)</th>
-                <th>USER</th>
-                <th>SYSTEM</th>
-                <th>IDLE</th>
-            </tr>
-            <tr>
-                <td>23:30:00</td>
-                <td class="success">85.85%</td>
-                <td class="success">8.56%</td>
-                <td class="success">91.49%</td>
-            </tr>
-        </table>
-
-        <div class="section-title">Logged off COB Agents</div>
-        <table>
-            <tr>
-                <th>ENV/DOR</th>
-                <th>EM/ROD</th>
-                <th>BATCH</th>
-                <th>Duration</th>
-            </tr>
-            <tr>
-                <td>AA22991182ZS</td>
-                <td>AA22991182ZS</td>
-                <td>DELETE.NAU.ACTIVITIES</td>
-                <td>00:00:34</td>
-            </tr>
-        </table>
-
-        <div class="section-title">BATCHES 5 minutes slower than last COB</div>
-        <table>
-            <tr>
-                <th>BATCH</th>
-                <th>Duration</th>
-            </tr>
-            <tr>
-                <td>No BATCHS ran over 5 minutes</td>
-                <td class="success">No</td>
-            </tr>
-        </table>
-
-        <div class="section-title">Missing BATCHS for 20250219</div>
-        <table>
-            <tr>
-                <th>Date</th>
-                <th>Status</th>
-            </tr>
-            <tr>
-                <td>20250219</td>
-                <td class="success">No BATCHS missing</td>
-            </tr>
-        </table>
-
-        <div class="section-title">5 Longest Running BATCHS 20250219</div>
-        <table>
-            <tr>
-                <th>Stage</th>
-                <th>BATCH</th>
-                <th>Duration</th>
-                <th>Processed</th>
-            </tr>
-            <tr>
-                <td>SB500</td>
-                <td>AA.SERVICE.PROCESS</td>
-                <td>00:59:44</td>
-                <td>7968806</td>
-            </tr>
-        </table>
-
-        <br>
-        <p>Поздрави,<br>Дилян</p>
-    </div>
+    <!-- Таблица за CPU Usage -->
+    <table class="rounded">
+        <tr>
+            <th colspan="3">CPU Usage during COB</th>
+        </tr>
+        <tr>
+            <th>Timeframe (CET)</th>
+            <th>System</th>
+            <th>Usage (%)</th>
+        </tr>
+        <tr>
+            <td>22:00:00</td>
+            <td>SYS01</td>
+            <td class="success">95.43%</td>
+        </tr>
+        <tr>
+            <td>22:10:00</td>
+            <td>SYS02</td>
+            <td class="success">94.59%</td>
+        </tr>
+    </table>
 </body>
 </html>
