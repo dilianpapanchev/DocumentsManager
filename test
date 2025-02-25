@@ -1,53 +1,162 @@
-#!/usr/bin/env python3.6
-import subprocess
-import datetime
-import os
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>COB Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f9;
+            color: #333;
+            text-align: center;
+            padding: 20px;
+        }
 
-start_time_str = "11/02/2025 21:46:54"
-end_time_str = "12/02/2025 01:57:18"
+        .container {
+            width: 80%;
+            margin: 0 auto;
+            background: #fff;
+            padding: 20px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+            border-radius: 8px;
+        }
 
-start_time = datetime.datetime.strptime(start_time_str, "%d/%m/%Y %H:%M:%S")
-end_time = datetime.datetime.strptime(end_time_str, "%d/%m/%Y %H:%M:%S")
+        h2 {
+            color: #0056b3;
+        }
 
-start_file = f"/var/log/sa/sa{start_time.day:02d}"
-end_file = f"/var/log/sa/sa{end_time.day:02d}"
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
 
-def filter_sar_output(file_path, date_for_file, start_time, end_time):
-    print(f"\n--- Обработваме файл: {file_path} за дата {date_for_file} ---")
+        table, th, td {
+            border: 1px solid #d1d1d1;
+        }
 
-    try:
-        result = subprocess.run(["sar", "-f", file_path], stdout=subprocess.PIPE, universal_newlines=True)
-        lines = result.stdout.split("\n")
+        th {
+            background-color: #e6f1f9;
+            color: #0056b3;
+            padding: 8px;
+            text-align: center;
+        }
 
-        found_records = False
-        for line in lines:
-            parts = line.split()
-            if len(parts) < 2 or ":" not in parts[0]:
-                continue  # Пропускаме редове без валидно време
+        td {
+            padding: 8px;
+            text-align: center;
+        }
 
-            time_part = parts[0] + " " + parts[1]  # Включваме AM/PM
-            try:
-                # Конвертираме времето от 12-часов формат в 24-часов
-                record_time = datetime.datetime.strptime(time_part, "%I:%M:%S %p").time()
-                full_record_time = datetime.datetime.combine(date_for_file, record_time)
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
 
-                if start_time <= full_record_time <= end_time:
-                    # Принтираме във формат 24 часа
-                    time_24 = full_record_time.strftime("%H:%M:%S")
-                    print(f"{file_path}: {time_24} {' '.join(parts[2:])}")
-                    found_records = True
-            except ValueError:
-                continue  # Пропускаме грешно форматирани редове
-        
-        if not found_records:
-            print(f"⚠️ Няма намерени записи в {file_path} за зададения времеви диапазон")
+        .section-title {
+            background-color: #d6e9f9;
+            color: #0056b3;
+            font-weight: bold;
+            padding: 10px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>TIME COB Report</h2>
+        <p>Information for closing of 2025-02-23 at TPH_UPG2_TPHNONSLA</p>
 
-    except Exception as e:
-        print(f"❌ Грешка при обработката на файла {file_path}: {e}")
+        <div class="section-title">COB Details</div>
+        <table>
+            <tr>
+                <th>COB Date</th>
+                <th>Environment</th>
+                <th>Start time</th>
+                <th>Stop time</th>
+                <th>Duration</th>
+            </tr>
+            <tr>
+                <td>2025-02-23</td>
+                <td>TPH_UPG2_TPHNONSLA</td>
+                <td>2025-02-24 00:01:30</td>
+                <td>2025-02-24 00:07:56</td>
+                <td>00:06:26</td>
+            </tr>
+        </table>
 
-# Обработваме първия файл с датата от start_time
-filter_sar_output(start_file, start_time.date(), start_time, end_time)
+        <div class="section-title">COB Dates</div>
+        <table>
+            <tr>
+                <th>Last Working Day</th>
+                <th>Today</th>
+                <th>Next Working Day</th>
+            </tr>
+            <tr>
+                <td>20250224</td>
+                <td>20250225</td>
+                <td>20250226</td>
+            </tr>
+        </table>
 
-# Ако вторият файл е различен, обработваме го с датата от end_time
-if start_file != end_file:
-    filter_sar_output(end_file, end_time.date(), start_time, end_time)
+        <div class="section-title">COB Stages Details</div>
+        <table>
+            <tr>
+                <th>Stage</th>
+                <th>Start time</th>
+                <th>Stop time</th>
+                <th>Duration</th>
+                <th>AVG</th>
+                <th>%DIF</th>
+                <th>Time DIF</th>
+            </tr>
+            <tr>
+                <td>Application stage</td>
+                <td>2025-02-24 00:01:30</td>
+                <td>2025-02-24 00:03:03</td>
+                <td>00:01:33</td>
+                <td>00:01:14</td>
+                <td>69</td>
+                <td>00:00:41</td>
+            </tr>
+            <tr>
+                <td>System Wide stage</td>
+                <td>2025-02-24 00:03:03</td>
+                <td>2025-02-24 00:04:00</td>
+                <td>00:00:57</td>
+                <td>00:00:40</td>
+                <td>66</td>
+                <td>00:02:02</td>
+            </tr>
+        </table>
+
+        <div class="section-title">TOP 10 Long Running Jobs</div>
+        <table>
+            <tr>
+                <th>Stage</th>
+                <th>Batch name</th>
+                <th>Job name</th>
+                <th>Start time</th>
+                <th>End time</th>
+                <th>Duration</th>
+            </tr>
+            <tr>
+                <td>R899</td>
+                <td>BNK/CS.D.DW.FILE.EXTRACTION.KH.COB</td>
+                <td>CSD.B.PPT.BANKCODE.RE</td>
+                <td>00:03:43</td>
+                <td>00:05:11</td>
+                <td>00:01:28</td>
+            </tr>
+            <tr>
+                <td>R900</td>
+                <td>KH.DW.FILE.EXTRACTION</td>
+                <td>DFE.OUTWARD.FILE.EXTRACT</td>
+                <td>00:05:25</td>
+                <td>00:06:44</td>
+                <td>00:01:19</td>
+            </tr>
+        </table>
+    </div>
+</body>
+</html>
