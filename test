@@ -1,136 +1,101 @@
-<!DOCTYPE html>
-<html lang="bg">
-<head>
-    <meta charset="UTF-8">
-    <title>COB Analyser Report</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f4f4f9;
-        }
+#!/usr/bin/env python3.6
+import csv
+import logging
+import sys
+import glob
+import os
+from datetime import timedelta
 
-        table {
-            border-collapse: collapse;
-            width: 80%;
-            margin: 20px auto;
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-        }
+if len(sys.argv) < 3:
+    print("Provide two dates as parameters.")
+    sys.exit(1)
 
-        th, td {
-            padding: 10px;
-            text-align: center;
-            border: 1px solid #dddddd;
-        }
+jt_directory = "/opt/t24/bnk/UD/bnk.interface/JT/out"
+log_dir = "/opt/t24/support_scripts/cob_analyser/log"
 
-        th {
-            background-color: #b3e0ff;
-            color: black;
-        }
+date_mask1 = sys.argv[1]
+date_mask2 = sys.argv[2]
 
-        tr:nth-child(even) {
-            background-color: #f9f9f9;
-        }
+file1 = glob.glob(os.path.join(jt_directory, f"JT.{date_mask1}*.CSV"))[0]
+file2 = glob.glob(os.path.join(jt_directory, f"JT.{date_mask2}*"))[0]
 
-        tr:nth-child(odd) {
-            background-color: #ffffff;
-        }
+log_file = os.path.join(log_dir, "jt_compare.log")
 
-        .rounded {
-            border-radius: 10px;
-        }
+logging.basicConfig(filename=log_file, level=logging.INFO,
+    format='%(asctime)s - %(levelname)s - %(message)s')
 
-        .success {
-            color: green;
-            font-weight: bold;
-        }
+def time_to_timedelta(time_str):
+    try:
+        hours, minutes, seconds = map(int, time_str.split(':'))
+        return timedelta(hours=hours, minutes=minutes, seconds=seconds)
+    except ValueError:
+        return None
 
-        .error {
-            color: red;
-            font-weight: bold;
-        }
-    </style>
-</head>
-<body>
-    <h2 style="text-align: center;">COB Analyser Report</h2>
+def time_to_seconds(time_str):
+    if isinstance(time_str, timedelta):
+        return time_str.total_seconds()
+    else:
+        h, m, s = map(int, time_str.split(':'))
+        return h * 3600 + m * 60 + s
 
-    <!-- Таблица за UBB PROD HOSTNAME -->
-    <table class="rounded">
-        <tr>
-            <th colspan="3">UBB PROD HOSTNAME</th>
-        </tr>
-        <tr>
-            <td>PRIMARY 1</td>
-            <td>saabpl2.bg.srv.sys</td>
-            <td>✓</td>
-        </tr>
-    </table>
+def combine_times(rows):
+    combined = {}
+    process_rows = {}
+    
+    for row in rows:
+        if len(row) < 28:
+            continue
 
-    <!-- Таблица за Elapsed Time & Transactions -->
-    <table class="rounded">
-        <tr>
-            <th colspan="3">COBs last 3 Elapsed Time & Transactions</th>
-        </tr>
-        <tr>
-            <th>Date</th>
-            <th>Elapsed</th>
-            <th>Transactions</th>
-        </tr>
-        <tr>
-            <td>20250224</td>
-            <td>03:27:48</td>
-            <td>41123843</td>
-        </tr>
-        <tr>
-            <td>20250221</td>
-            <td>02:59:49</td>
-            <td>35695046</td>
-        </tr>
-        <tr>
-            <td>20250220</td>
-            <td>03:02:48</td>
-            <td>36195539</td>
-        </tr>
-    </table>
+        key = (row[1], row[2])
+        time_value = time_to_timedelta(row[7])
 
-    <!-- Таблица за JBOSS restart -->
-    <table class="rounded">
-        <tr>
-            <th colspan="3">JBOSS restart during COB</th>
-        </tr>
-        <tr>
-            <th>Server</th>
-            <th>Restarted?</th>
-            <th>Status</th>
-        </tr>
-        <tr>
-            <td>saabpl2.bg.srv.sys</td>
-            <td>No</td>
-            <td class="success">✓</td>
-        </tr>
-    </table>
+        if time_value is None:
+            continue
 
-    <!-- Таблица за CPU Usage -->
-    <table class="rounded">
-        <tr>
-            <th colspan="3">CPU Usage during COB</th>
-        </tr>
-        <tr>
-            <th>Timeframe (CET)</th>
-            <th>System</th>
-            <th>Usage (%)</th>
-        </tr>
-        <tr>
-            <td>22:00:00</td>
-            <td>SYS01</td>
-            <td class="success">95.43%</td>
-        </tr>
-        <tr>
-            <td>22:10:00</td>
-            <td>SYS02</td>
-            <td class="success">94.59%</td>
-        </tr>
-    </table>
-</body>
-</html>
+        if key in process_rows:
+            if row[27].strip() == "SingleThread":
+                combined[key] += time_value
+            else:
+                combined[key] = combined[key]
+        else:
+            process_rows[key] = row
+            combined[key] = time_value
+
+    return combined
+
+with open(file1, "r") as f1, open(file2, "r") as f2:
+    reader1 = list(csv.reader(f1, delimiter=","))
+    reader2 = list(csv.reader(f2, delimiter=","))
+
+    combined_times1 = combine_times(reader1)
+    combined_times2 = combine_times(reader2)
+
+    difference_found = False
+
+    for key in combined_times1:
+        if len(key) < 2:
+            continue
+
+        if key in combined_times2:
+            time1 = combined_times1[key]
+            time2 = combined_times2[key]
+
+            if time1 is None or time2 is None:
+                continue
+
+            if time1 - time2 > timedelta(minutes=5):
+                for row in reader2:
+                    if row[1] == key[0] and row[2] == key[1]:
+                        processed_ids2 = row[9]
+                        break
+
+                per_time1 = time_to_seconds(time1)
+                per_time2 = time_to_seconds(time2)
+                diff = ((per_time1 - per_time2) / per_time2) * 100
+                difference_found = True
+
+                message = f"{date_mask1} {key[0]} {key[1]} took longer than 5 minutes from the last COB {time1 - time2} {date_mask1}: {time1} {date_mask2}: {time2} Diff in % is {diff:.2f} Processed IDs {date_mask1}: {processed_ids2}"
+                logging.info(message)
+
+    if not difference_found:
+        logging.info(f"{date_mask1} No BATCHs/JOBs ran over 5 minutes from last COB.")
