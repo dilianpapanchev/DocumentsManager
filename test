@@ -36,7 +36,7 @@
             background-color: #ffffff;
         }
         .chart-container {
-            width: 100%;
+            width: 90%;
             max-width: 1000px;
             height: 400px;
             margin: auto;
@@ -162,9 +162,9 @@
                 data: {
                     labels: labels,
                     datasets: [
-                        { label: 'USER%', data: userUsage, borderColor: 'red', borderWidth: 2 },
-                        { label: 'SYSTEM%', data: systemUsage, borderColor: 'blue', borderWidth: 2 },
-                        { label: 'IDLE%', data: idleUsage, borderColor: 'green', borderWidth: 2 }
+                        { label: 'USER%', data: userUsage, borderColor: 'red', backgroundColor: 'rgba(255,99,132,0.2)', borderWidth: 2, fill: true },
+                        { label: 'SYSTEM%', data: systemUsage, borderColor: 'blue', backgroundColor: 'rgba(54,162,235,0.2)', borderWidth: 2, fill: true },
+                        { label: 'IDLE%', data: idleUsage, borderColor: 'green', backgroundColor: 'rgba(75,192,192,0.2)', borderWidth: 2, fill: true }
                     ]
                 }
             });
@@ -179,8 +179,15 @@
                 data: {
                     labels: labels,
                     datasets: [
-                        { label: 'Records Per Minute', data: recordsPerMinute, backgroundColor: 'purple' }
+                        { label: 'Records Per Minute', data: recordsPerMinute, backgroundColor: ['purple', 'orange', 'blue'], borderWidth: 2 }
                     ]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        x: { stacked: true },
+                        y: { stacked: true }
+                    }
                 }
             });
         }
