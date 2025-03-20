@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>COB Analyser Report</title>
+    <title>COB Analyser Report - CSOB PROD</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -53,7 +53,7 @@
 </head>
 <body>
 
-    <h2>COB Analyser Report</h2>
+    <h2>COB Analyser Report - 20250319</h2>
 
     <!-- Таблица за CPU Usage -->
     <table class="rounded" id="cpuTable">
