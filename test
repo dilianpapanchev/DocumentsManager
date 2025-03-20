@@ -3,19 +3,50 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>CPU Usage during COB</title>
+    <title>COB Analyser Report</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
-            font-family: Arial, sans-serif;
+            font-family: "Century Gothic", sans-serif;
+            background-color: #f4f4f9;
             text-align: center;
             margin: 20px;
         }
+        table {
+            border-collapse: collapse;
+            width: 80%;
+            margin: 20px auto;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        th, td {
+            padding: 10px;
+            text-align: center;
+            border: 1px solid #3b8eff;
+        }
+        th {
+            background-color: #3b8eff;
+            color: black;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:nth-child(odd) {
+            background-color: #ffffff;
+        }
+        .rounded {
+            border-radius: 10px;
+        }
         .chart-container {
             width: 90%;
-            max-width: 1200px; /* Увеличен максимален размер */
-            height: 600px; /* Увеличена височина */
+            max-width: 1200px;
+            height: 600px;
             margin: auto;
+            background: #fff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
         canvas {
             width: 100% !important;
@@ -25,19 +56,35 @@
 </head>
 <body>
 
-    <h2>CPU Usage during COB</h2>
+    <h2>COB Analyser Report - 20250318</h2>
+
+    <!-- Оставям съществуващата таблица -->
+    <table class="rounded">
+        <tr><th colspan="2">SP24 PROD HOSTNAME</th></tr>
+        <tr><th>PRIMARY</th><td>soab01nhu.hu.srv.sys</td></tr>
+    </table>
+
+    <table class="rounded">
+        <tr><th colspan="2">COB last 2 Elapsed Time & Transactions</th></tr>
+        <tr><th>Elapsed</th><th>Transactions</th></tr>
+        <tr><td>02:50:17</td><td>132498266</td></tr>
+        <tr><td>02:48:31</td><td>132449266</td></tr>
+    </table>
+
+    <!-- Добавена секция за графиката -->
     <div class="chart-container">
+        <h3>CPU Usage during COB</h3>
         <canvas id="cpuChart"></canvas>
     </div>
 
     <script>
-        // Данни от таблицата
+        // Данни за CPU Usage
         const labels = ["20:30", "20:40", "20:50", "21:00", "21:10", "21:20", "21:30", "21:40", "21:50", "22:00"];
         const userUsage = [8.03, 34.07, 73.51, 46.88, 75.34, 15.39, 9.60, 21.78, 15.96, 34.39];
         const systemUsage = [1.62, 3.54, 4.46, 4.78, 4.40, 3.44, 2.82, 3.57, 2.76, 5.27];
         const idleUsage = [90.19, 62.24, 21.92, 48.17, 19.63, 81.02, 87.40, 74.37, 79.42, 59.57];
 
-        // Рендиране на по-голяма графика с Chart.js
+        // Рендиране на графиката
         const ctx = document.getElementById('cpuChart').getContext('2d');
         new Chart(ctx, {
             type: 'line',
@@ -75,7 +122,7 @@
             },
             options: {
                 responsive: true,
-                maintainAspectRatio: false, // Позволява динамично разширяване
+                maintainAspectRatio: false,
                 scales: {
                     y: {
                         beginAtZero: true,
@@ -86,7 +133,7 @@
                     legend: {
                         labels: {
                             font: {
-                                size: 16 // По-голям шрифт за легендата
+                                size: 16
                             }
                         }
                     }
