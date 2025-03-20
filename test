@@ -1,50 +1,52 @@
 <!DOCTYPE html>
-<html lang="bg">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>COB Analyser Report - CSOB PROD</title>
+    <link rel="icon" href="https://cdn.jsdelivr.net/npm/@mdi/font@5.x/css/materialdesignicons.min.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
             font-family: "Century Gothic", sans-serif;
             background-color: #f4f4f9;
-            text-align: center;
-            margin: 20px;
         }
+
         table {
             border-collapse: collapse;
-            width: 80%;
-            margin: 20px auto;
+            width: 100%;
+            margin: 10px auto;
             border-radius: 10px;
             overflow: hidden;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            box-shadow: 4px 4px 8px rgba(0, 0, 0, 0.2);
         }
+
         th, td {
+            text-align: left;
             padding: 10px;
-            text-align: center;
-            border: 1px solid #3b8eff;
+            border: 1px solid #ddd;
         }
+
         th {
-            background-color: #3b8eff;
-            color: black;
+            background-color: #007bff;
+            color: white;
         }
+
         tr:nth-child(even) {
-            background-color: #f9f9f9;
+            background-color: #f2f2f2;
         }
+
         tr:nth-child(odd) {
             background-color: #ffffff;
         }
-        .chart-container {
-            width: 90%;
-            max-width: 1000px;
-            height: 400px;
-            margin: auto;
-            background: #fff;
-            padding: 20px;
+
+        .rounded {
             border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
+
+        .chart-container {
+            width: 80%;
+            margin: 20px auto;
+        }
+
         canvas {
             width: 100% !important;
             height: 100% !important;
@@ -52,151 +54,198 @@
     </style>
 </head>
 <body>
+    <img src="https://rmcdn.2hub.ru/s/files/full/file/2019/12/1/1/kbc-logo-wob-svg-png.svg" alt="KBC Logo" style="display: block; margin: 20px auto; width: 200px;">
+    <h2 style="text-align: center;">COB Analyser Report - 28250319</h2>
 
-    <h2>COB Analyser Report - 20250319</h2>
-
-    <!-- Таблица за CPU Usage -->
-    <table class="rounded" id="cpuTable">
-        <tr><th colspan="4">⚡ CPU Usage during COB</th></tr>
+    <table class="rounded">
         <tr>
-            <th>TIMEFRAME (CET)</th>
-            <th>USER%</th>
-            <th>SYSTEM%</th>
-            <th>IDLE%</th>
+            <th colspan="2">CSOB PROD HOSTNAME</th>
         </tr>
-        <tr><td>20:30</td><td>8.03</td><td>1.62</td><td>90.19</td></tr>
-        <tr><td>20:40</td><td>34.07</td><td>3.54</td><td>62.24</td></tr>
-        <tr><td>20:50</td><td>73.51</td><td>4.46</td><td>21.92</td></tr>
         <tr>
-            <td colspan="4">
-                <div class="chart-container">
-                    <canvas id="cpuChart"></canvas>
-                </div>
-            </td>
+            <td>JBOSS restart during com</td>
+            <td>30055 restart</td>
         </tr>
     </table>
 
-    <!-- Таблица за Records Per Minute -->
-    <table class="rounded" id="recordsTable">
-        <tr><th colspan="3">📊 COB last 3 Elapsed Time & Transactions</th></tr>
+    <table class="rounded">
         <tr>
-            <th>Date</th>
-            <th>Elapsed Time (hh:mm:ss)</th>
-            <th>Transactions</th>
+            <th colspan="2">START JBOSS TABLE</th>
         </tr>
-        <tr><td>20250317</td><td>05:18:01</td><td>15720935</td></tr>
-        <tr><td>20250318</td><td>03:42:15</td><td>14323460</td></tr>
         <tr>
-            <td colspan="3">
-                <div class="chart-container">
-                    <canvas id="recordsChart"></canvas>
-                </div>
-            </td>
+            <td>30055 restart during com</td>
+            <td>30055 restart</td>
         </tr>
     </table>
 
-    <script>
-        function parseTimeToMinutes(timeString) {
-            const parts = timeString.split(":");
-            if (parts.length === 3) {
-                const hours = parseInt(parts[0], 10);
-                const minutes = parseInt(parts[1], 10);
-                const seconds = parseInt(parts[2], 10);
-                return hours * 60 + minutes + seconds / 60;
-            }
-            return 0;
-        }
+    <div class="chart-container">
+        <canvas id="recordChart"></canvas>
+    </div>
 
-        function getRecordsData() {
-            const table = document.getElementById("recordsTable");
-            const rows = table.getElementsByTagName("tr");
-            
-            let labels = [];
-            let recordsPerMinute = [];
+    <div class="chart-container">
+        <canvas id="cpuChart"></canvas>
+    </div>
 
-            for (let i = 2; i < rows.length - 1; i++) {
-                const cells = rows[i].getElementsByTagName("td");
-                if (cells.length === 3) {
-                    const date = cells[0].innerText;
-                    const elapsedTime = parseTimeToMinutes(cells[1].innerText);
-                    const transactions = parseInt(cells[2].innerText, 10);
-                    
-                    if (elapsedTime > 0) {
-                        labels.push(date);
-                        recordsPerMinute.push(transactions / elapsedTime);
-                    }
-                }
-            }
+    <table class="rounded">
+        <tr>
+            <th colspan="5">Logged of COB Agents</th>
+        </tr>
+        <tr>
+            <th>KEYWORD</th>
+            <th>COMO</th>
+            <th>BATCH</th>
+            <th>JOB</th>
+            <th>ID</th>
+        </tr>
+        <tr>
+            <td>Timed out waiting for lock</td>
+            <td>LSA_314_20250319_21-45-26</td>
+            <td>AA.EOD.PROCESS</td>
+            <td>AA.DELETE.NAU.ACTIVITIES</td>
+            <td>AA22091L28Z5</td>
+        </tr>
+        <tr>
+            <td>Timed out waiting for lock</td>
+            <td>tSA_622_20250319_21-45-53</td>
+            <td>AA.EOD.PROCESS</td>
+            <td>AA.DELETE.NAU.ACTIVITIES</td>
+            <td>AA242366K32B</td>
+        </tr>
+        <tr>
+            <td>Timed out waiting for lock</td>
+            <td>tSA_635_20250319_21-45-55</td>
+            <td>FT.START.OF.DAY</td>
+            <td>FT.STO.PAY</td>
+            <td>0000004030520611</td>
+        </tr>
+        <tr>
+            <td>Timed out waiting for lock</td>
+            <td>tSA_651_20250319_21-46-02</td>
+            <td>RC.CYCLER.SERVICE.SOD</td>
+            <td>RC.CYCLER</td>
+            <td>2000020001854382</td>
+        </tr>
+        <tr>
+            <td>Timed out waiting for lock</td>
+            <td>tSA_672_20250319_21-46-11</td>
+            <td>FT.START.OF.DAY</td>
+            <td>FT.STO.PAY</td>
+            <td>0000004003022018</td>
+        </tr>
+    </table>
 
-            return { labels, recordsPerMinute };
-        }
+    <table class="rounded">
+        <tr>
+            <th colspan="9">BATCHS 5 minutes slower than last COB</th>
+        </tr>
+        <tr>
+            <th>STAGE</th>
+            <th>BATCH</th>
+            <th>308</th>
+            <th>5lower by</th>
+            <th>Runtime today_cob_date</th>
+            <th>Runtime last cob date</th>
+            <th>Diff. %</th>
+            <th>Processed today_cob_date</th>
+            <th>Processed last_cob_date</th>
+        </tr>
+        <tr>
+            <td>0888</td>
+            <td>RC.CYCLER.SERVICE.SOD</td>
+            <td>RC.CYCLER</td>
+            <td>0:17:16</td>
+            <td>0:18:45</td>
+            <td>0:01:29</td>
+            <td>1164.04</td>
+            <td>75019</td>
+            <td>15179</td>
+        </tr>
+    </table>
 
-        function getCPUData() {
-            const table = document.getElementById("cpuTable");
-            const rows = table.getElementsByTagName("tr");
-            
-            let labels = [];
-            let userUsage = [];
-            let systemUsage = [];
-            let idleUsage = [];
+    <table class="rounded">
+        <tr>
+            <th colspan="4">X Missing BATCHS for 20250319 that run in 20258318</th>
+        </tr>
+        <tr>
+            <td>NO BATCHS missing</td>
+        </tr>
+    </table>
 
-            for (let i = 2; i < rows.length - 1; i++) {
-                const cells = rows[i].getElementsByTagName("td");
-                if (cells.length === 4) {
-                    labels.push(cells[0].innerText);
-                    userUsage.push(parseFloat(cells[1].innerText));
-                    systemUsage.push(parseFloat(cells[2].innerText));
-                    idleUsage.push(parseFloat(cells[3].innerText));
-                }
-            }
+    <table class="rounded">
+        <tr>
+            <th colspan="4">Missing BATCHS for 20250318 that run in 20250319</th>
+        </tr>
+        <tr>
+            <td>NO BATCHS missing</td>
+        </tr>
+    </table>
 
-            return { labels, userUsage, systemUsage, idleUsage };
-        }
+    <table class="rounded">
+        <tr>
+            <th colspan="5">5 Longest running BATCHS 20250319</th>
+        </tr>
+        <tr>
+            <th>STAGE</th>
+            <th>BATCH</th>
+            <th>300</th>
+            <th>Duration</th>
+            <th>Processed</th>
+        </tr>
+        <tr>
+            <td>5508</td>
+            <td>AA.EOD.PROCESS</td>
+            <td>AA.SERVICE.PROCESS</td>
+            <td>0:46:31</td>
+            <td>806707</td>
+        </tr>
+        <tr>
+            <td>0888</td>
+            <td>RC.CYCLER.SERVICE.SOD</td>
+            <td>RC.CYCLER</td>
+            <td>0:18:45</td>
+            <td>75819</td>
+        </tr>
+        <tr>
+            <td>0788</td>
+            <td>AA.SOD.PROCESS</td>
+            <td>AA.SERVICE.PROCESS</td>
+            <td>0:08:38</td>
+            <td>806622</td>
+        </tr>
+        <tr>
+            <td>Dee1</td>
+            <td>BNK/CSOB.INT.NFRI.011</td>
+            <td>DFE.OUTWARD.FILE.EXTRACT.POST</td>
+            <td>0:07:52</td>
+            <td>975020</td>
+        </tr>
+        <tr>
+            <td>01060</td>
+            <td>PI.PURGE.PAYMENT ORDER</td>
+            <td>PAYMENT ORDER.MOVE.TO.HES</td>
+            <td>0:06:25</td>
+            <td>67270</td>
+        </tr>
+    </table>
 
-        function renderCPUChart() {
-            const { labels, userUsage, systemUsage, idleUsage } = getCPUData();
-            const ctx = document.getElementById('cpuChart').getContext('2d');
-
-            new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        { label: 'USER%', data: userUsage, borderColor: 'red', backgroundColor: 'rgba(255,99,132,0.2)', borderWidth: 2, fill: true },
-                        { label: 'SYSTEM%', data: systemUsage, borderColor: 'blue', backgroundColor: 'rgba(54,162,235,0.2)', borderWidth: 2, fill: true },
-                        { label: 'IDLE%', data: idleUsage, borderColor: 'green', backgroundColor: 'rgba(75,192,192,0.2)', borderWidth: 2, fill: true }
-                    ]
-                }
-            });
-        }
-
-        function renderRecordsChart() {
-            const { labels, recordsPerMinute } = getRecordsData();
-            const ctx = document.getElementById('recordsChart').getContext('2d');
-
-            new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: labels,
-                    datasets: [
-                        { label: 'Records Per Minute', data: recordsPerMinute, backgroundColor: ['purple', 'orange', 'blue'], borderWidth: 2 }
-                    ]
-                },
-                options: {
-                    responsive: true,
-                    scales: {
-                        x: { stacked: true },
-                        y: { stacked: true }
-                    }
-                }
-            });
-        }
-
-        window.addEventListener("load", function() {
-            renderCPUChart();
-            renderRecordsChart();
-        });
-    </script>
-
-</body>
-</html>
+    <table class="rounded">
+        <tr>
+            <th colspan="5">5 Longest running BATCHS 20250318</th>
+        </tr>
+        <tr>
+            <th>STAGE</th>
+            <th>BATCH</th>
+            <th>308</th>
+            <th>Duration</th>
+            <th>Processed</th>
+        </tr>
+        <tr>
+            <td>Ssee</td>
+            <td>AA.EOD.PROCESS</td>
+            <td>AA.SERVICE.PROCESS</td>
+            <td>0:47:01</td>
+            <td>1100885</td>
+        </tr>
+        <tr>
+            <td>D766</td>
+            <td>AA.SOD.PROCESS</td>
+            <td>AA.SERVICE.
