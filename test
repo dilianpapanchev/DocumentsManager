@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>COB Analyser Report - Records Per Minute</title>
+    <title>COB Analyser Report</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -38,7 +38,7 @@
         .chart-container {
             width: 100%;
             max-width: 1000px;
-            height: 500px;
+            height: 400px;
             margin: auto;
             background: #fff;
             padding: 20px;
@@ -53,9 +53,30 @@
 </head>
 <body>
 
-    <h2>COB Analyser Report - Records Per Minute</h2>
+    <h2>COB Analyser Report</h2>
 
-    <!-- Таблица за COB Elapsed Time & Transactions -->
+    <!-- Таблица за CPU Usage -->
+    <table class="rounded" id="cpuTable">
+        <tr><th colspan="4">⚡ CPU Usage during COB</th></tr>
+        <tr>
+            <th>TIMEFRAME (CET)</th>
+            <th>USER%</th>
+            <th>SYSTEM%</th>
+            <th>IDLE%</th>
+        </tr>
+        <tr><td>20:30</td><td>8.03</td><td>1.62</td><td>90.19</td></tr>
+        <tr><td>20:40</td><td>34.07</td><td>3.54</td><td>62.24</td></tr>
+        <tr><td>20:50</td><td>73.51</td><td>4.46</td><td>21.92</td></tr>
+        <tr>
+            <td colspan="4">
+                <div class="chart-container">
+                    <canvas id="cpuChart"></canvas>
+                </div>
+            </td>
+        </tr>
+    </table>
+
+    <!-- Таблица за Records Per Minute -->
     <table class="rounded" id="recordsTable">
         <tr><th colspan="3">📊 COB last 3 Elapsed Time & Transactions</th></tr>
         <tr>
@@ -65,9 +86,6 @@
         </tr>
         <tr><td>20250317</td><td>05:18:01</td><td>15720935</td></tr>
         <tr><td>20250318</td><td>03:42:15</td><td>14323460</td></tr>
-        <tr><td>20250319</td><td>01:36:48</td><td>13249666</td></tr>
-
-        <!-- Графиката ще бъде тук -->
         <tr>
             <td colspan="3">
                 <div class="chart-container">
@@ -79,7 +97,6 @@
 
     <script>
         function parseTimeToMinutes(timeString) {
-            // Очакван формат hh:mm:ss
             const parts = timeString.split(":");
             if (parts.length === 3) {
                 const hours = parseInt(parts[0], 10);
@@ -114,7 +131,46 @@
             return { labels, recordsPerMinute };
         }
 
-        function renderChart() {
+        function getCPUData() {
+            const table = document.getElementById("cpuTable");
+            const rows = table.getElementsByTagName("tr");
+            
+            let labels = [];
+            let userUsage = [];
+            let systemUsage = [];
+            let idleUsage = [];
+
+            for (let i = 2; i < rows.length - 1; i++) {
+                const cells = rows[i].getElementsByTagName("td");
+                if (cells.length === 4) {
+                    labels.push(cells[0].innerText);
+                    userUsage.push(parseFloat(cells[1].innerText));
+                    systemUsage.push(parseFloat(cells[2].innerText));
+                    idleUsage.push(parseFloat(cells[3].innerText));
+                }
+            }
+
+            return { labels, userUsage, systemUsage, idleUsage };
+        }
+
+        function renderCPUChart() {
+            const { labels, userUsage, systemUsage, idleUsage } = getCPUData();
+            const ctx = document.getElementById('cpuChart').getContext('2d');
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        { label: 'USER%', data: userUsage, borderColor: 'red', borderWidth: 2 },
+                        { label: 'SYSTEM%', data: systemUsage, borderColor: 'blue', borderWidth: 2 },
+                        { label: 'IDLE%', data: idleUsage, borderColor: 'green', borderWidth: 2 }
+                    ]
+                }
+            });
+        }
+
+        function renderRecordsChart() {
             const { labels, recordsPerMinute } = getRecordsData();
             const ctx = document.getElementById('recordsChart').getContext('2d');
 
@@ -123,62 +179,16 @@
                 data: {
                     labels: labels,
                     datasets: [
-                        {
-                            label: 'Records Per Minute',
-                            data: recordsPerMinute,
-                            backgroundColor: ['rgba(255, 99, 132, 0.6)', 'rgba(54, 162, 235, 0.6)', 'rgba(75, 192, 192, 0.6)'],
-                            borderColor: ['rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(75, 192, 192, 1)'],
-                            borderWidth: 2,
-                            borderRadius: 5,
-                            hoverBorderWidth: 3
-                        }
+                        { label: 'Records Per Minute', data: recordsPerMinute, backgroundColor: 'purple' }
                     ]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    scales: {
-                        x: {
-                            stacked: true,
-                            ticks: {
-                                font: { size: 14 },
-                                color: "#333"
-                            }
-                        },
-                        y: {
-                            stacked: true,
-                            beginAtZero: true,
-                            ticks: {
-                                font: { size: 14 },
-                                color: "#333"
-                            }
-                        }
-                    },
-                    plugins: {
-                        legend: {
-                            display: true,
-                            labels: {
-                                font: { size: 16, weight: 'bold' },
-                                color: "#444"
-                            }
-                        },
-                        title: {
-                            display: true,
-                            text: 'Comparison of Records Processed Per Minute',
-                            font: { size: 18, weight: 'bold' },
-                            color: "#222"
-                        }
-                    },
-                    animation: {
-                        duration: 1500,
-                        easing: 'easeOutBounce'
-                    }
                 }
             });
         }
 
-        // Изчаква зареждането на страницата, след което рисува графиката
-        window.onload = renderChart;
+        window.addEventListener("load", function() {
+            renderCPUChart();
+            renderRecordsChart();
+        });
     </script>
 
 </body>
