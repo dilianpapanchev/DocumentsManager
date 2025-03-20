@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>COB Analyser Report</title>
+    <title>COB Analyser Report - CPU Usage</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         body {
@@ -35,9 +35,6 @@
         tr:nth-child(odd) {
             background-color: #ffffff;
         }
-        .rounded {
-            border-radius: 10px;
-        }
         .chart-container {
             width: 100%;
             max-width: 1000px;
@@ -56,116 +53,124 @@
 </head>
 <body>
 
-    <h2>COB Analyser Report - 20250319</h2>
+    <h2>COB Analyser Report - CPU Usage</h2>
 
-    <!-- Таблица за COB Elapsed Time & Transactions -->
-    <table class="rounded">
-        <tr><th colspan="4">📊 COB last 3 Elapsed Time & Transactions</th></tr>
+    <!-- Таблица за CPU Usage -->
+    <table class="rounded" id="cpuTable">
+        <tr><th colspan="4">⚡ CPU Usage during COB</th></tr>
         <tr>
-            <th>Date</th>
-            <th>Elapsed</th>
-            <th>Transactions</th>
-            <th>Records Per Minute</th>
+            <th>TIMEFRAME (CET)</th>
+            <th>USER%</th>
+            <th>SYSTEM%</th>
+            <th>IDLE%</th>
         </tr>
-        <tr><td>20250317</td><td>05:18:01</td><td>15720935</td><td>49438</td></tr>
-        <tr><td>20250318</td><td>03:42:15</td><td>14323460</td><td>64511</td></tr>
-        <tr><td>20250319</td><td>01:36:48</td><td>13249666</td><td>136589</td></tr>
+        <tr><td>20:30</td><td>8.03</td><td>1.62</td><td>90.19</td></tr>
+        <tr><td>20:40</td><td>34.07</td><td>3.54</td><td>62.24</td></tr>
+        <tr><td>20:50</td><td>73.51</td><td>4.46</td><td>21.92</td></tr>
+        <tr><td>21:00</td><td>46.88</td><td>4.78</td><td>48.17</td></tr>
+        <tr><td>21:10</td><td>75.34</td><td>4.40</td><td>19.63</td></tr>
+        <tr><td>21:20</td><td>15.39</td><td>3.44</td><td>81.02</td></tr>
+        <tr><td>21:30</td><td>9.60</td><td>2.82</td><td>87.40</td></tr>
+        <tr><td>21:40</td><td>21.78</td><td>3.57</td><td>74.37</td></tr>
+        <tr><td>21:50</td><td>15.96</td><td>2.76</td><td>79.42</td></tr>
+        <tr><td>22:00</td><td>34.39</td><td>5.27</td><td>59.57</td></tr>
 
-        <!-- Добавен ред за графиката -->
+        <!-- Графиката ще бъде тук -->
         <tr>
             <td colspan="4">
                 <div class="chart-container">
-                    <canvas id="recordsChart"></canvas>
+                    <canvas id="cpuChart"></canvas>
                 </div>
             </td>
         </tr>
     </table>
 
     <script>
-        // Данни за записи на минута
-        const labels = ["20250317", "20250318", "20250319"];
-        const recordsPerMinute = [49438, 64511, 136589];
+        function getCPUData() {
+            const table = document.getElementById("cpuTable");
+            const rows = table.getElementsByTagName("tr");
+            
+            let labels = [];
+            let userUsage = [];
+            let systemUsage = [];
+            let idleUsage = [];
 
-        // Достъп до canvas
-        const ctx = document.getElementById('recordsChart').getContext('2d');
-
-        // Градиент за колоните
-        const gradient1 = ctx.createLinearGradient(0, 0, 0, 400);
-        gradient1.addColorStop(0, 'rgba(255, 99, 132, 1)');
-        gradient1.addColorStop(1, 'rgba(255, 99, 132, 0.3)');
-
-        const gradient2 = ctx.createLinearGradient(0, 0, 0, 400);
-        gradient2.addColorStop(0, 'rgba(54, 162, 235, 1)');
-        gradient2.addColorStop(1, 'rgba(54, 162, 235, 0.3)');
-
-        const gradient3 = ctx.createLinearGradient(0, 0, 0, 400);
-        gradient3.addColorStop(0, 'rgba(75, 192, 192, 1)');
-        gradient3.addColorStop(1, 'rgba(75, 192, 192, 0.3)');
-
-        // Рендиране на графиката
-        new Chart(ctx, {
-            type: 'bar',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Records Per Minute',
-                    data: recordsPerMinute,
-                    backgroundColor: [gradient1, gradient2, gradient3],
-                    borderColor: ['rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(75, 192, 192, 1)'],
-                    borderWidth: 2,
-                    borderRadius: 10,  // Закръглени ръбове
-                    hoverBorderWidth: 3
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                scales: {
-                    y: {
-                        beginAtZero: true,
-                        ticks: {
-                            font: {
-                                size: 14
-                            },
-                            color: "#333"
-                        }
-                    },
-                    x: {
-                        ticks: {
-                            font: {
-                                size: 14
-                            },
-                            color: "#333"
-                        }
-                    }
-                },
-                plugins: {
-                    legend: {
-                        display: true,
-                        labels: {
-                            font: {
-                                size: 16,
-                                weight: 'bold'
-                            },
-                            color: "#444"
-                        }
-                    },
-                    title: {
-                        display: true,
-                        text: 'Comparison of Records Processed Per Minute',
-                        font: {
-                            size: 18,
-                            weight: 'bold'
-                        },
-                        color: "#222"
-                    }
-                },
-                animation: {
-                    duration: 1500,
-                    easing: 'easeOutBounce'
+            // Четене на таблицата (пропускаме първите два реда - заглавията)
+            for (let i = 2; i < rows.length - 1; i++) {
+                const cells = rows[i].getElementsByTagName("td");
+                if (cells.length === 4) {
+                    labels.push(cells[0].innerText);
+                    userUsage.push(parseFloat(cells[1].innerText));
+                    systemUsage.push(parseFloat(cells[2].innerText));
+                    idleUsage.push(parseFloat(cells[3].innerText));
                 }
             }
-        });
+
+            return { labels, userUsage, systemUsage, idleUsage };
+        }
+
+        function renderChart() {
+            const { labels, userUsage, systemUsage, idleUsage } = getCPUData();
+            const ctx = document.getElementById('cpuChart').getContext('2d');
+
+            new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [
+                        {
+                            label: 'USER%',
+                            data: userUsage,
+                            borderColor: 'rgba(255, 99, 132, 1)',
+                            backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                            borderWidth: 3,
+                            pointRadius: 5,
+                            fill: true
+                        },
+                        {
+                            label: 'SYSTEM%',
+                            data: systemUsage,
+                            borderColor: 'rgba(54, 162, 235, 1)',
+                            backgroundColor: 'rgba(54, 162, 235, 0.2)',
+                            borderWidth: 3,
+                            pointRadius: 5,
+                            fill: true
+                        },
+                        {
+                            label: 'IDLE%',
+                            data: idleUsage,
+                            borderColor: 'rgba(75, 192, 192, 1)',
+                            backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                            borderWidth: 3,
+                            pointRadius: 5,
+                            fill: true
+                        }
+                    ]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            max: 100
+                        }
+                    },
+                    plugins: {
+                        legend: {
+                            labels: {
+                                font: {
+                                    size: 16
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Изчаква зареждането на страницата, след което рисува графиката
+        window.onload = renderChart;
     </script>
 
 </body>
