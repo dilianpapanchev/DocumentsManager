@@ -56,90 +56,48 @@
 
     <h2>COB Analyser Report - 20250319</h2>
 
-    <!-- Запазване на предишните таблици -->
+    <!-- Таблица за COB Elapsed Time & Transactions -->
     <table class="rounded">
-        <tr><th colspan="2">SP24 PROD HOSTNAME</th></tr>
-        <tr><th>PRIMARY</th><td>soab01nhu.hu.srv.sys</td></tr>
-    </table>
-
-    <table class="rounded">
-        <tr><th colspan="2">COB last 3 Elapsed Time & Transactions</th></tr>
-        <tr><th>Elapsed</th><th>Transactions</th></tr>
-        <tr><td>02:50:17</td><td>132498266</td></tr>
-        <tr><td>02:48:31</td><td>132449266</td></tr>
-        <tr><td>02:36:48</td><td>132496666</td></tr>
-    </table>
-
-    <!-- Таблица за CPU Usage, с добавена графика вътре -->
-    <table class="rounded">
-        <tr><th colspan="4">⚡ CPU Usage during COB</th></tr>
+        <tr><th colspan="4">📊 COB last 3 Elapsed Time & Transactions</th></tr>
         <tr>
-            <th>TIMEFRAME (CET)</th>
-            <th>USER%</th>
-            <th>SYSTEM%</th>
-            <th>IDLE%</th>
+            <th>Date</th>
+            <th>Elapsed</th>
+            <th>Transactions</th>
+            <th>Records Per Minute</th>
         </tr>
-        <tr><td>20:30</td><td>8.03</td><td>1.62</td><td>90.19</td></tr>
-        <tr><td>20:40</td><td>34.07</td><td>3.54</td><td>62.24</td></tr>
-        <tr><td>20:50</td><td>73.51</td><td>4.46</td><td>21.92</td></tr>
-        <tr><td>21:00</td><td>46.88</td><td>4.78</td><td>48.17</td></tr>
-        <tr><td>21:10</td><td>75.34</td><td>4.40</td><td>19.63</td></tr>
-        <tr><td>21:20</td><td>15.39</td><td>3.44</td><td>81.02</td></tr>
-        <tr><td>21:30</td><td>9.60</td><td>2.82</td><td>87.40</td></tr>
-        <tr><td>21:40</td><td>21.78</td><td>3.57</td><td>74.37</td></tr>
-        <tr><td>21:50</td><td>15.96</td><td>2.76</td><td>79.42</td></tr>
-        <tr><td>22:00</td><td>34.39</td><td>5.27</td><td>59.57</td></tr>
-        
+        <tr><td>20250317</td><td>05:18:01</td><td>15720935</td><td>49438</td></tr>
+        <tr><td>20250318</td><td>03:42:15</td><td>14323460</td><td>64511</td></tr>
+        <tr><td>20250319</td><td>01:36:48</td><td>13249666</td><td>136589</td></tr>
+
         <!-- Добавен ред за графиката -->
         <tr>
             <td colspan="4">
                 <div class="chart-container">
-                    <canvas id="cpuChart"></canvas>
+                    <canvas id="recordsChart"></canvas>
                 </div>
             </td>
         </tr>
     </table>
 
     <script>
-        // Данни за CPU Usage
-        const labels = ["20:30", "20:40", "20:50", "21:00", "21:10", "21:20", "21:30", "21:40", "21:50", "22:00"];
-        const userUsage = [8.03, 34.07, 73.51, 46.88, 75.34, 15.39, 9.60, 21.78, 15.96, 34.39];
-        const systemUsage = [1.62, 3.54, 4.46, 4.78, 4.40, 3.44, 2.82, 3.57, 2.76, 5.27];
-        const idleUsage = [90.19, 62.24, 21.92, 48.17, 19.63, 81.02, 87.40, 74.37, 79.42, 59.57];
+        // Данни за записи на минута
+        const labels = ["20250317", "20250318", "20250319"];
+        const recordsPerMinute = [49438, 64511, 136589];
 
         // Рендиране на графиката
-        const ctx = document.getElementById('cpuChart').getContext('2d');
+        const ctx = document.getElementById('recordsChart').getContext('2d');
         new Chart(ctx, {
-            type: 'line',
+            type: 'bar',
             data: {
                 labels: labels,
                 datasets: [
                     {
-                        label: 'USER%',
-                        data: userUsage,
-                        borderColor: 'rgba(255, 99, 132, 1)',
-                        backgroundColor: 'rgba(255, 99, 132, 0.2)',
-                        borderWidth: 3,
-                        pointRadius: 5,
-                        fill: true
-                    },
-                    {
-                        label: 'SYSTEM%',
-                        data: systemUsage,
-                        borderColor: 'rgba(54, 162, 235, 1)',
-                        backgroundColor: 'rgba(54, 162, 235, 0.2)',
-                        borderWidth: 3,
-                        pointRadius: 5,
-                        fill: true
-                    },
-                    {
-                        label: 'IDLE%',
-                        data: idleUsage,
-                        borderColor: 'rgba(75, 192, 192, 1)',
-                        backgroundColor: 'rgba(75, 192, 192, 0.2)',
-                        borderWidth: 3,
-                        pointRadius: 5,
-                        fill: true
+                        label: 'Records Per Minute',
+                        data: recordsPerMinute,
+                        backgroundColor: ['rgba(255, 99, 132, 0.6)', 'rgba(54, 162, 235, 0.6)', 'rgba(75, 192, 192, 0.6)'],
+                        borderColor: ['
+rgba(255, 99, 132, 1)', 'rgba(54, 162, 235, 1)', 'rgba(75, 192, 192, 1)'],
+                        borderWidth: 2
                     }
                 ]
             },
@@ -148,8 +106,7 @@
                 maintainAspectRatio: false,
                 scales: {
                     y: {
-                        beginAtZero: true,
-                        max: 100
+                        beginAtZero: true
                     }
                 },
                 plugins: {
