@@ -39,14 +39,12 @@
             border-radius: 10px;
         }
         .chart-container {
-            width: 90%;
-            max-width: 1200px;
-            height: 600px;
+            width: 100%;
+            max-width: 1000px;
+            height: 400px;
             margin: auto;
             background: #fff;
             padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
         }
         canvas {
             width: 100% !important;
@@ -56,26 +54,51 @@
 </head>
 <body>
 
-    <h2>COB Analyser Report - 20250318</h2>
+    <h2>COB Analyser Report - 20250319</h2>
 
-    <!-- Оставям съществуващата таблица -->
+    <!-- Запазване на предишните таблици -->
     <table class="rounded">
         <tr><th colspan="2">SP24 PROD HOSTNAME</th></tr>
         <tr><th>PRIMARY</th><td>soab01nhu.hu.srv.sys</td></tr>
     </table>
 
     <table class="rounded">
-        <tr><th colspan="2">COB last 2 Elapsed Time & Transactions</th></tr>
+        <tr><th colspan="2">COB last 3 Elapsed Time & Transactions</th></tr>
         <tr><th>Elapsed</th><th>Transactions</th></tr>
         <tr><td>02:50:17</td><td>132498266</td></tr>
         <tr><td>02:48:31</td><td>132449266</td></tr>
+        <tr><td>02:36:48</td><td>132496666</td></tr>
     </table>
 
-    <!-- Добавена секция за графиката -->
-    <div class="chart-container">
-        <h3>CPU Usage during COB</h3>
-        <canvas id="cpuChart"></canvas>
-    </div>
+    <!-- Таблица за CPU Usage, с добавена графика вътре -->
+    <table class="rounded">
+        <tr><th colspan="4">⚡ CPU Usage during COB</th></tr>
+        <tr>
+            <th>TIMEFRAME (CET)</th>
+            <th>USER%</th>
+            <th>SYSTEM%</th>
+            <th>IDLE%</th>
+        </tr>
+        <tr><td>20:30</td><td>8.03</td><td>1.62</td><td>90.19</td></tr>
+        <tr><td>20:40</td><td>34.07</td><td>3.54</td><td>62.24</td></tr>
+        <tr><td>20:50</td><td>73.51</td><td>4.46</td><td>21.92</td></tr>
+        <tr><td>21:00</td><td>46.88</td><td>4.78</td><td>48.17</td></tr>
+        <tr><td>21:10</td><td>75.34</td><td>4.40</td><td>19.63</td></tr>
+        <tr><td>21:20</td><td>15.39</td><td>3.44</td><td>81.02</td></tr>
+        <tr><td>21:30</td><td>9.60</td><td>2.82</td><td>87.40</td></tr>
+        <tr><td>21:40</td><td>21.78</td><td>3.57</td><td>74.37</td></tr>
+        <tr><td>21:50</td><td>15.96</td><td>2.76</td><td>79.42</td></tr>
+        <tr><td>22:00</td><td>34.39</td><td>5.27</td><td>59.57</td></tr>
+        
+        <!-- Добавен ред за графиката -->
+        <tr>
+            <td colspan="4">
+                <div class="chart-container">
+                    <canvas id="cpuChart"></canvas>
+                </div>
+            </td>
+        </tr>
+    </table>
 
     <script>
         // Данни за CPU Usage
