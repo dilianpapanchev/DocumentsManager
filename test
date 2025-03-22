@@ -1,251 +1,115 @@
-<!DOCTYPE html>
-<html>
-<head>
-    <title>COB Analyser Report - CSOB PROD</title>
-    <link rel="icon" href="https://cdn.jsdelivr.net/npm/@mdi/font@5.x/css/materialdesignicons.min.css">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <style>
-        body {
-            font-family: "Century Gothic", sans-serif;
-            background-color: #f4f4f9;
+<script>
+function parseTimeToMinutes(timeString) {
+    const parts = timeString.split(":");
+    if (parts.length === 3) {
+        return parseInt(parts[0], 10) * 60 + parseInt(parts[1], 10) + parseInt(parts[2], 10) / 60;
+    }
+    return 0;
+}
+
+function getTimingChartData() {
+    const table = document.getElementById("recordsTable");
+    const rows = table.getElementsByTagName("tr");
+
+    const dates = [];
+    const cobStart = [], cobStop = [], rrStop = [];
+
+    for (let i = 1; i < rows.length; i++) {
+        const cells = rows[i].getElementsByTagName("td");
+        if (cells.length === 8) {
+            dates.push(cells[0].innerText);
+            cobStart.push(parseTimeToMinutes(cells[1].innerText));
+            cobStop.push(parseTimeToMinutes(cells[2].innerText));
+            rrStop.push(parseTimeToMinutes(cells[6].innerText));
         }
+    }
 
-        table {
-            border-collapse: collapse;
-            width: 100%;
-            margin: 10px auto;
-            border-radius: 10px;
-            overflow: hidden;
-            box-shadow: 4px 4px 8px rgba(0, 0, 0, 0.2);
+    return { dates, cobStart, cobStop, rrStop };
+}
+
+function renderTimingChart() {
+    const ctx = document.getElementById("timingChart").getContext("2d");
+    const { dates, cobStart, cobStop, rrStop } = getTimingChartData();
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: dates,
+            datasets: [
+                {
+                    label: 'COB Start Time',
+                    data: cobStart,
+                    borderColor: 'green',
+                    tension: 0.3
+                },
+                {
+                    label: 'COB End Time',
+                    data: cobStop,
+                    borderColor: 'orange',
+                    tension: 0.3
+                },
+                {
+                    label: 'RR Stop Time',
+                    data: rrStop,
+                    borderColor: 'blue',
+                    tension: 0.3
+                },
+                {
+                    label: 'RR Cutoff (01:30)',
+                    data: Array(dates.length).fill(90),
+                    borderColor: 'red',
+                    borderDash: [10, 5],
+                    pointRadius: 0,
+                    borderWidth: 2,
+                    label: 'RR Cutoff',
+                },
+                {
+                    label: 'ILC03 Cutoff (22:30)',
+                    data: Array(dates.length).fill(1350),
+                    borderColor: 'red',
+                    borderDash: [10, 5],
+                    pointRadius: 0,
+                    borderWidth: 2,
+                    label: 'ILC03 Cutoff',
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    min: 0,
+                    max: 1500,
+                    ticks: {
+                        callback: function(value) {
+                            const h = Math.floor(value / 60);
+                            const m = Math.floor(value % 60);
+                            return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Time (HH:mm)'
+                    }
+                }
+            },
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'COB & RR Times vs Cutoff Thresholds',
+                    font: {
+                        size: 18,
+                        weight: 'bold'
+                    }
+                }
+            }
         }
+    });
+}
 
-        th, td {
-            text-align: left;
-            padding: 10px;
-            border: 1px solid #ddd;
-        }
-
-        th {
-            background-color: #007bff;
-            color: white;
-        }
-
-        tr:nth-child(even) {
-            background-color: #f2f2f2;
-        }
-
-        tr:nth-child(odd) {
-            background-color: #ffffff;
-        }
-
-        .rounded {
-            border-radius: 10px;
-        }
-
-        .chart-container {
-            width: 80%;
-            margin: 20px auto;
-        }
-
-        canvas {
-            width: 100% !important;
-            height: 100% !important;
-        }
-    </style>
-</head>
-<body>
-    <img src="https://rmcdn.2hub.ru/s/files/full/file/2019/12/1/1/kbc-logo-wob-svg-png.svg" alt="KBC Logo" style="display: block; margin: 20px auto; width: 200px;">
-    <h2 style="text-align: center;">COB Analyser Report - 28250319</h2>
-
-    <table class="rounded">
-        <tr>
-            <th colspan="2">CSOB PROD HOSTNAME</th>
-        </tr>
-        <tr>
-            <td>JBOSS restart during com</td>
-            <td>30055 restart</td>
-        </tr>
-    </table>
-
-    <table class="rounded">
-        <tr>
-            <th colspan="2">START JBOSS TABLE</th>
-        </tr>
-        <tr>
-            <td>30055 restart during com</td>
-            <td>30055 restart</td>
-        </tr>
-    </table>
-
-    <div class="chart-container">
-        <canvas id="recordChart"></canvas>
-    </div>
-
-    <div class="chart-container">
-        <canvas id="cpuChart"></canvas>
-    </div>
-
-    <table class="rounded">
-        <tr>
-            <th colspan="5">Logged of COB Agents</th>
-        </tr>
-        <tr>
-            <th>KEYWORD</th>
-            <th>COMO</th>
-            <th>BATCH</th>
-            <th>JOB</th>
-            <th>ID</th>
-        </tr>
-        <tr>
-            <td>Timed out waiting for lock</td>
-            <td>LSA_314_20250319_21-45-26</td>
-            <td>AA.EOD.PROCESS</td>
-            <td>AA.DELETE.NAU.ACTIVITIES</td>
-            <td>AA22091L28Z5</td>
-        </tr>
-        <tr>
-            <td>Timed out waiting for lock</td>
-            <td>tSA_622_20250319_21-45-53</td>
-            <td>AA.EOD.PROCESS</td>
-            <td>AA.DELETE.NAU.ACTIVITIES</td>
-            <td>AA242366K32B</td>
-        </tr>
-        <tr>
-            <td>Timed out waiting for lock</td>
-            <td>tSA_635_20250319_21-45-55</td>
-            <td>FT.START.OF.DAY</td>
-            <td>FT.STO.PAY</td>
-            <td>0000004030520611</td>
-        </tr>
-        <tr>
-            <td>Timed out waiting for lock</td>
-            <td>tSA_651_20250319_21-46-02</td>
-            <td>RC.CYCLER.SERVICE.SOD</td>
-            <td>RC.CYCLER</td>
-            <td>2000020001854382</td>
-        </tr>
-        <tr>
-            <td>Timed out waiting for lock</td>
-            <td>tSA_672_20250319_21-46-11</td>
-            <td>FT.START.OF.DAY</td>
-            <td>FT.STO.PAY</td>
-            <td>0000004003022018</td>
-        </tr>
-    </table>
-
-    <table class="rounded">
-        <tr>
-            <th colspan="9">BATCHS 5 minutes slower than last COB</th>
-        </tr>
-        <tr>
-            <th>STAGE</th>
-            <th>BATCH</th>
-            <th>308</th>
-            <th>5lower by</th>
-            <th>Runtime today_cob_date</th>
-            <th>Runtime last cob date</th>
-            <th>Diff. %</th>
-            <th>Processed today_cob_date</th>
-            <th>Processed last_cob_date</th>
-        </tr>
-        <tr>
-            <td>0888</td>
-            <td>RC.CYCLER.SERVICE.SOD</td>
-            <td>RC.CYCLER</td>
-            <td>0:17:16</td>
-            <td>0:18:45</td>
-            <td>0:01:29</td>
-            <td>1164.04</td>
-            <td>75019</td>
-            <td>15179</td>
-        </tr>
-    </table>
-
-    <table class="rounded">
-        <tr>
-            <th colspan="4">X Missing BATCHS for 20250319 that run in 20258318</th>
-        </tr>
-        <tr>
-            <td>NO BATCHS missing</td>
-        </tr>
-    </table>
-
-    <table class="rounded">
-        <tr>
-            <th colspan="4">Missing BATCHS for 20250318 that run in 20250319</th>
-        </tr>
-        <tr>
-            <td>NO BATCHS missing</td>
-        </tr>
-    </table>
-
-    <table class="rounded">
-        <tr>
-            <th colspan="5">5 Longest running BATCHS 20250319</th>
-        </tr>
-        <tr>
-            <th>STAGE</th>
-            <th>BATCH</th>
-            <th>300</th>
-            <th>Duration</th>
-            <th>Processed</th>
-        </tr>
-        <tr>
-            <td>5508</td>
-            <td>AA.EOD.PROCESS</td>
-            <td>AA.SERVICE.PROCESS</td>
-            <td>0:46:31</td>
-            <td>806707</td>
-        </tr>
-        <tr>
-            <td>0888</td>
-            <td>RC.CYCLER.SERVICE.SOD</td>
-            <td>RC.CYCLER</td>
-            <td>0:18:45</td>
-            <td>75819</td>
-        </tr>
-        <tr>
-            <td>0788</td>
-            <td>AA.SOD.PROCESS</td>
-            <td>AA.SERVICE.PROCESS</td>
-            <td>0:08:38</td>
-            <td>806622</td>
-        </tr>
-        <tr>
-            <td>Dee1</td>
-            <td>BNK/CSOB.INT.NFRI.011</td>
-            <td>DFE.OUTWARD.FILE.EXTRACT.POST</td>
-            <td>0:07:52</td>
-            <td>975020</td>
-        </tr>
-        <tr>
-            <td>01060</td>
-            <td>PI.PURGE.PAYMENT ORDER</td>
-            <td>PAYMENT ORDER.MOVE.TO.HES</td>
-            <td>0:06:25</td>
-            <td>67270</td>
-        </tr>
-    </table>
-
-    <table class="rounded">
-        <tr>
-            <th colspan="5">5 Longest running BATCHS 20250318</th>
-        </tr>
-        <tr>
-            <th>STAGE</th>
-            <th>BATCH</th>
-            <th>308</th>
-            <th>Duration</th>
-            <th>Processed</th>
-        </tr>
-        <tr>
-            <td>Ssee</td>
-            <td>AA.EOD.PROCESS</td>
-            <td>AA.SERVICE.PROCESS</td>
-            <td>0:47:01</td>
-            <td>1100885</td>
-        </tr>
-        <tr>
-            <td>D766</td>
-            <td>AA.SOD.PROCESS</td>
-            <td>AA.SERVICE.
+window.onload = function() {
+    renderIDsChart(); // съществуващата графика
+    renderTimingChart(); // новата графика
+};
+</script>
