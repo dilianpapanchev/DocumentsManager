@@ -1,4 +1,6 @@
 <script>
+Chart.register(ChartDataLabels);
+
 function parseElapsedToHours(timeStr) {
     const parts = timeStr.split(':');
     if (parts.length === 3) {
@@ -61,38 +63,29 @@ function renderElapsedChart() {
                     borderColor: 'red',
                     borderDash: [6, 4],
                     pointRadius: 0,
-                    borderWidth: 2
+                    borderWidth: 2,
+                    order: 999
                 }
             ]
         },
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    max: 7,
-                    ticks: {
-                        callback: function(value) {
-                            const h = Math.floor(value);
-                            const m = Math.round((value - h) * 60);
-                            return `${h}:${m.toString().padStart(2, '0')}`;
-                        }
-                    },
-                    title: {
-                        display: true,
-                        text: 'Duration (HH:mm)'
-                    },
-                    stacked: true
-                },
-                x: {
-                    stacked: true
-                }
-            },
             plugins: {
+                datalabels: {
+                    color: 'black',
+                    font: { weight: 'bold' },
+                    formatter: function (value) {
+                        const h = Math.floor(value);
+                        const m = Math.round((value - h) * 60);
+                        return `${h}:${m.toString().padStart(2, '0')}`;
+                    },
+                    anchor: 'center',
+                    align: 'center'
+                },
                 tooltip: {
                     callbacks: {
-                        label: function(context) {
+                        label: function (context) {
                             const value = context.raw;
                             const h = Math.floor(value);
                             const m = Math.round((value - h) * 60);
@@ -110,15 +103,64 @@ function renderElapsedChart() {
                 },
                 legend: {
                     display: true
+                },
+                // Custom plugin for total above bars
+                afterDatasetsDraw: function(chart) {
+                    const {ctx, scales: {x, y}} = chart;
+
+                    chart.data.labels.forEach((label, i) => {
+                        const cob = chart.data.datasets[0].data[i];
+                        const rr = chart.data.datasets[1].data[i];
+                        const total = cob + rr;
+                        const h = Math.floor(total);
+                        const m = Math.round((total - h) * 60);
+                        const text = `${h}:${m.toString().padStart(2, '0')}`;
+
+                        const barX = x.getPixelForValue(i);
+                        const barY = y.getPixelForValue(total);
+
+                        ctx.save();
+                        ctx.font = 'bold 12px sans-serif';
+                        ctx.fillStyle = 'black';
+                        ctx.textAlign = 'center';
+                        ctx.fillText(text, barX, barY - 6);
+                        ctx.restore();
+                    });
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 7,
+                    ticks: {
+                        callback: function (value) {
+                            const h = Math.floor(value);
+                            const m = Math.round((value - h) * 60);
+                            return `${h}:${m.toString().padStart(2, '0')}`;
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Duration (HH:mm)'
+                    },
+                    stacked: true
+                },
+                x: {
+                    stacked: true
                 }
             }
-        }
+        },
+        plugins: [{
+            id: 'afterDatasetsDraw',
+            afterDatasetsDraw(chart) {
+                chart.options.plugins.afterDatasetsDraw(chart);
+            }
+        }]
     });
 }
 
+// Извикване
 window.onload = function () {
-    renderIDsChart();        // съществуваща графика
-    renderTimingChart();     // съществуваща графика
-    renderElapsedChart();    // новата stacked графика
+    renderElapsedChart();
 };
 </script>
