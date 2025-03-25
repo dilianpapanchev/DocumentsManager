@@ -1,43 +1,124 @@
 <script>
-function parseDurationToMinutes(durationStr) {
-    const parts = durationStr.split(":");
+function parseElapsedToHours(timeStr) {
+    const parts = timeStr.split(':');
     if (parts.length === 3) {
         const h = parseInt(parts[0], 10);
         const m = parseInt(parts[1], 10);
         const s = parseInt(parts[2], 10);
-        return h * 60 + m + s / 60;
+        return h + m / 60 + s / 3600;
     }
     return 0;
 }
 
-function addThroughputToTable(tableId) {
-    const table = document.getElementById(tableId);
-    if (!table) return;
-
+function getElapsedChartData() {
+    const table = document.getElementById("recordsTable");
     const rows = table.getElementsByTagName("tr");
 
-    // Add new header
-    const header = rows[0].getElementsByTagName("th");
-    const newHeader = document.createElement("th");
-    newHeader.innerText = "Throughput (ID/min)";
-    header[header.length - 1].after(newHeader);
+    const dates = [];
+    const cobElapsed = [], rrElapsed = [];
 
-    // Go through data rows
     for (let i = 1; i < rows.length; i++) {
         const cells = rows[i].getElementsByTagName("td");
-        if (cells.length >= 5) {
-            const durationStr = cells[3].innerText;
-            const processed = parseInt(cells[4].innerText, 10);
-            const durationMin = parseDurationToMinutes(durationStr);
-            const throughput = durationMin > 0 ? (processed / durationMin).toFixed(2) : "N/A";
+        if (cells.length === 8) {
+            const date = cells[0].innerText;
+            const cob = parseElapsedToHours(cells[3].innerText);
+            const rr = parseElapsedToHours(cells[7].innerText);
 
-            const newCell = document.createElement("td");
-            newCell.innerText = throughput;
-            cells[4].after(newCell);
+            dates.push(date);
+            cobElapsed.push(cob);
+            rrElapsed.push(rr);
         }
     }
+
+    return { dates, cobElapsed, rrElapsed };
 }
 
-addThroughputToTable("START_TOP_BATCH_TABLE");
-addThroughputToTable("START_LAST_COB_TABLE");
+function renderElapsedChart() {
+    const ctx = document.getElementById("elapsedChart").getContext("2d");
+    const { dates, cobElapsed, rrElapsed } = getElapsedChartData();
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: dates,
+            datasets: [
+                {
+                    label: 'COB Elapsed',
+                    data: cobElapsed,
+                    backgroundColor: 'orange',
+                    stack: 'stack1'
+                },
+                {
+                    label: 'RR Elapsed',
+                    data: rrElapsed,
+                    backgroundColor: 'gray',
+                    stack: 'stack1'
+                },
+                {
+                    label: 'Duration Limit (2:30)',
+                    data: Array(dates.length).fill(2.5),
+                    type: 'line',
+                    borderColor: 'red',
+                    borderDash: [6, 4],
+                    pointRadius: 0,
+                    borderWidth: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 7,
+                    ticks: {
+                        callback: function(value) {
+                            const h = Math.floor(value);
+                            const m = Math.round((value - h) * 60);
+                            return `${h}:${m.toString().padStart(2, '0')}`;
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Duration (HH:mm)'
+                    },
+                    stacked: true
+                },
+                x: {
+                    stacked: true
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            const value = context.raw;
+                            const h = Math.floor(value);
+                            const m = Math.round((value - h) * 60);
+                            return `${context.dataset.label}: ${h}:${m.toString().padStart(2, '0')}`;
+                        }
+                    }
+                },
+                title: {
+                    display: true,
+                    text: 'COB & RR Elapsed Times vs Duration Limit',
+                    font: {
+                        size: 18,
+                        weight: 'bold'
+                    }
+                },
+                legend: {
+                    display: true
+                }
+            }
+        }
+    });
+}
+
+window.onload = function () {
+    renderIDsChart();        // съществуваща графика
+    renderTimingChart();     // съществуваща графика
+    renderElapsedChart();    // новата stacked графика
+};
 </script>
