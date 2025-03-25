@@ -1,134 +1,149 @@
-<script>
-function parseElapsedToMinutes(timeStr) {
-    const parts = timeStr.split(':');
-    if (parts.length === 3) {
-        const h = parseInt(parts[0], 10);
-        const m = parseInt(parts[1], 10);
-        const s = parseInt(parts[2], 10);
-        return h * 60 + m + s / 60;
-    }
-    return 0;
+// Функция за форматиране на секунди във формат "HH:mm:ss"
+function formatSecondsToHMS(totalSeconds) {
+    const sec = totalSeconds % 60;
+    const min = Math.floor(totalSeconds / 60) % 60;
+    const hrs = Math.floor(totalSeconds / 3600);
+    // Форматиране с водещи нули
+    return hrs.toString().padStart(2, '0') + ':' +
+           min.toString().padStart(2, '0') + ':' +
+           sec.toString().padStart(2, '0');
 }
 
-function formatHHMMSS(minutes) {
-    const totalSec = Math.round(minutes * 60);
-    const h = Math.floor(totalSec / 3600);
-    const m = Math.floor((totalSec % 3600) / 60);
-    const s = totalSec % 60;
-    if (h > 0) return `${h}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-    return `${m}:${s.toString().padStart(2, '0')}`;
-}
+// Изчакване DOM-ът да се зареди, за да започне изпълнението
+window.addEventListener('DOMContentLoaded', function () {
+    // 1. Извличане на таблицата и инициализация на масиви за данните
+    const table = document.getElementById('recordsTable');
+    const labels = [];
+    const elapsedSeconds = [];
 
-function getCOBElapsedData() {
-    const table = document.getElementById("recordsTable");
-    const rows = table.getElementsByTagName("tr");
-
-    const dates = [];
-    const elapsed = [];
-
-    for (let i = 1; i < rows.length; i++) {
-        const cells = rows[i].getElementsByTagName("td");
-        if (cells.length >= 5) {
-            const date = cells[0].innerText;
-            const time = cells[3].innerText;
-            const elapsedMin = parseElapsedToMinutes(time);
-
-            dates.push(date);
-            elapsed.push(elapsedMin);
+    // 2. Обхождане на редовете на таблицата (пропускане на първия ред, ако е заглавен)
+    for (let i = 1; i < table.rows.length; i++) {
+        const cells = table.rows[i].cells;
+        if (!cells[3]) continue;  // пропускане ако няма четвърта колона
+        const timeText = cells[3].textContent.trim();  // например "02:15:30"
+        if (timeText === "") continue;
+        // Парсване на HH:mm:ss в общ брой секунди
+        const parts = timeText.split(':');
+        if (parts.length === 3) {
+            const hours = parseInt(parts[0], 10) || 0;
+            const minutes = parseInt(parts[1], 10) || 0;
+            const seconds = parseInt(parts[2], 10) || 0;
+            const totalSec = hours * 3600 + minutes * 60 + seconds;
+            elapsedSeconds.push(totalSec);
+        } else {
+            // Ако форматът не е точно HH:mm:ss, пропусни този запис
+            continue;
         }
+        // Използване на първата колона като етикет (ако съществува), иначе номер на реда
+        labels.push(cells[0] ? cells[0].textContent.trim() || `Record ${i}` : `Record ${i}`);
     }
 
-    const average = elapsed.reduce((a, b) => a + b, 0) / elapsed.length;
-    return { dates, elapsed, average };
-}
+    // 3. Изчисляване на линейна регресия (наклон и пресечна точка)
+    const N = elapsedSeconds.length;
+    if (N === 0) {
+        console.warn("No data points found in the table.");
+        return;
+    }
+    let sumX = 0, sumY = 0, sumXY = 0, sumX2 = 0;
+    // Приемаме x като последователност 0,1,2,... за всяка точка
+    for (let x = 0; x < N; x++) {
+        const y = elapsedSeconds[x];
+        sumX += x;
+        sumY += y;
+        sumXY += x * y;
+        sumX2 += x * x;
+    }
+    const slope = (N * sumXY - sumX * sumY) / (N * sumX2 - sumX * sumX) || 0;
+    const intercept = (sumY - slope * sumX) / N;
+    // Генериране на прогнозни стойности за тренд линията
+    const trendData = [];
+    for (let x = 0; x < N; x++) {
+        trendData.push(intercept + slope * x);
+    }
 
-function renderCOBElapsedChart() {
-    const ctx = document.getElementById("cobElapsedChart").getContext("2d");
-    const { dates, elapsed, average } = getCOBElapsedData();
-
-    new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: dates,
-            datasets: [
-                {
-                    label: 'COB Elapsed',
-                    data: elapsed,
-                    backgroundColor: 'orange'
-                },
-                {
-                    label: 'Average Elapsed',
-                    data: Array(dates.length).fill(average),
-                    type: 'line',
-                    borderColor: 'red',
-                    borderDash: [5, 5],
-                    pointRadius: 0,
-                    borderWidth: 2,
-                    order: 999
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            maintainAspectRatio: false,
-            plugins: {
-                tooltip: {
-                    callbacks: {
-                        label: function (context) {
-                            return `${context.dataset.label}: ${formatHHMMSS(context.raw)}`;
-                        }
-                    }
-                },
-                legend: {
-                    display: false
-                },
-                title: {
-                    display: true,
-                    text: `K&H TPH Production Close of Business / Average duration - ${formatHHMMSS(average)}`,
-                    font: {
-                        size: 18,
-                        weight: 'bold'
-                    }
-                }
+    // 4. Подготовка на datasets за Chart.js (стълбовидна диаграма + линейна тренд линия)
+    const chartData = {
+        labels: labels,
+        datasets: [
+            {
+                type: 'bar',
+                label: 'COB Elapsed',
+                data: elapsedSeconds,
+                backgroundColor: 'rgba(54, 162, 235, 0.6)',   // синьо с известна прозрачност
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
             },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    max: 100, // you can dynamically set this
-                    ticks: {
-                        callback: function (value) {
-                            return formatHHMMSS(value);
-                        }
-                    },
-                    title: {
-                        display: true,
-                        text: 'Elapsed Time (HH:mm:ss)'
+            {
+                type: 'line',
+                label: 'Trend Line',
+                data: trendData,
+                backgroundColor: 'rgba(255, 99, 132, 0.2)',   // червено (прозрачно, без запълване)
+                borderColor: 'rgba(255, 99, 132, 1)',
+                borderWidth: 2,
+                fill: false,    // без запълване под линията
+                tension: 0,     // без изглаждане на линията (линейни сегменти)
+                pointRadius: 0, // скриване на точките на тренда
+                borderDash: [5, 5]  // начертана с тирета за отличаване
+            }
+        ]
+    };
+
+    // 5. Настройки на опциите за диаграмата (форматиране на оста Y и tooltips)
+    const chartOptions = {
+        responsive: true,
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    // Форматиране на стойностите по оста Y като време HH:mm:ss
+                    callback: function (value) {
+                        return formatSecondsToHMS(value);
                     }
                 }
             }
         },
-        plugins: [{
-            id: 'barLabels',
-            afterDatasetsDraw(chart) {
-                const { ctx, data, scales: { y } } = chart;
-                ctx.save();
-                ctx.font = 'bold 11px sans-serif';
-                ctx.fillStyle = 'black';
-                ctx.textAlign = 'center';
-
-                chart.data.datasets[0].data.forEach((value, index) => {
-                    const x = chart.getDatasetMeta(0).data[index].x;
-                    const yPos = y.getPixelForValue(value);
-                    ctx.fillText(formatHHMMSS(value), x, yPos - 6);
-                });
-
-                ctx.restore();
+        plugins: {
+            tooltip: {
+                callbacks: {
+                    // Форматиране на текста в tooltip за всяка стойност
+                    label: function(context) {
+                        const datasetLabel = context.dataset.label || '';
+                        const value = context.parsed.y || 0;
+                        return datasetLabel + ': ' + formatSecondsToHMS(value);
+                    }
+                }
             }
-        }]
-    });
-}
+        }
+    };
 
-window.onload = function () {
-    renderCOBElapsedChart();
-};
-</script>
+    // 6. Създаване на самата диаграма в canvas елемента с id="cobChart"
+    const ctx = document.getElementById('cobChart').getContext('2d');
+    const cobChart = new Chart(ctx, {
+        data: chartData,
+        options: chartOptions
+    });
+
+    // 7. Добавяне на етикети над всяка колона със стойността (форматирана)
+    //   Използва се персонализиран plugin на Chart.js, който се изпълнява след изчертаване на dataset-ите
+    cobChart.options.plugins.customCanvasLabels = false;  // помощна флаг (не се използва външна библиотека)
+    Chart.register({
+        id: 'valueLabels',
+        afterDatasetsDraw(chart) {
+            const {ctx, chartArea: {top} } = chart;
+            ctx.save();
+            ctx.fillStyle = '#000';              // черен цвят за текста
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'bottom';
+            ctx.font = '12px sans-serif';
+            // Обхождане само на първия dataset (колоните)
+            chart.getDatasetMeta(0).data.forEach((bar, index) => {
+                const value = chart.data.datasets[0].data[index];
+                const formattedValue = formatSecondsToHMS(value);
+                // Позициониране на текста над всяка колона
+                ctx.fillText(formattedValue, bar.x, bar.y - 5);
+            });
+            ctx.restore();
+        }
+    });
+    cobChart.update();  // Обновяване на диаграмата, за да се покажат етикетите
+});
