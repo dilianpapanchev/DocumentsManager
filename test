@@ -1,226 +1,167 @@
-<!DOCTYPE html>
-<html lang="bg">
-<head>
-  <meta charset="UTF-8">
-  <title>Stacked Bar Chart</title>
-  <!-- Включване на Chart.js (версия 3+) от CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/chart.js@3.9.1/dist/chart.min.js"></script>
-  <style>
-    /* Стил за размера на графиката (по желание) */
-    #myChart {
-      max-width: 600px;
-      max-height: 400px;
+<script>
+function parseElapsedToHours(timeStr) {
+    const parts = timeStr.split(':');
+    if (parts.length === 3) {
+        const h = parseInt(parts[0], 10);
+        const m = parseInt(parts[1], 10);
+        const s = parseInt(parts[2], 10);
+        return h + m / 60 + s / 3600;
     }
-  </style>
-</head>
-<body>
-  <!-- Таблица с данни (примерни стойности) -->
-  <table id="recordsTable" border="1" cellpadding="4" cellspacing="0">
-    <thead>
-      <tr>
-        <th>Record</th>
-        <th>Data2</th>
-        <th>Data3</th>
-        <th>COB Elapsed</th>
-        <th>Data5</th>
-        <th>Data6</th>
-        <th>RR Elapsed</th>
-      </tr>
-    </thead>
-    <tbody>
-      <tr>
-        <td>Record 1</td><td>xyz</td><td>abc</td><td>01:48:00</td><td>n/a</td><td>n/a</td><td>00:42:30</td>
-      </tr>
-      <tr>
-        <td>Record 2</td><td>xyz</td><td>abc</td><td>02:15:45</td><td>n/a</td><td>n/a</td><td>01:05:15</td>
-      </tr>
-      <tr>
-        <td>Record 3</td><td>xyz</td><td>abc</td><td>00:30:00</td><td>n/a</td><td>n/a</td><td>01:45:00</td>
-      </tr>
-    </tbody>
-  </table>
+    return 0;
+}
 
-  <!-- Canvas елемент за графиката -->
-  <canvas id="myChart" width="600" height="400"></canvas>
+function getElapsedChartData() {
+    const table = document.getElementById("recordsTable");
+    const rows = table.getElementsByTagName("tr");
 
-  <script>
-    // Функция за конвертиране на "HH:mm:ss" в общ брой секунди
-    function parseTimeToSeconds(timeStr) {
-      const parts = timeStr.split(':').map(Number);
-      if (parts.length !== 3 || parts.some(isNaN)) return NaN;
-      const [hours, minutes, seconds] = parts;
-      return hours * 3600 + minutes * 60 + seconds;
-    }
+    const dates = [];
+    const cobElapsed = [], rrElapsed = [];
 
-    // Извличане на данните от таблицата
-    const table = document.getElementById('recordsTable');
-    const labels = [];
-    const cobData = [];
-    const rrData = [];
+    for (let i = 1; i < rows.length; i++) {
+        const cells = rows[i].getElementsByTagName("td");
+        if (cells.length === 8) {
+            const date = cells[0].innerText;
+            const cob = parseElapsedToHours(cells[3].innerText);
+            const rr = parseElapsedToHours(cells[7].innerText);
 
-    let rows = table.querySelectorAll('tbody tr');
-    if (rows.length === 0) {
-      rows = table.querySelectorAll('tr'); // ако няма <tbody>
-    }
-    rows.forEach((row, index) => {
-      const cells = row.querySelectorAll('td');
-      if (cells.length >= 7) {
-        const cobStr = cells[3].textContent.trim();
-        const rrStr = cells[6].textContent.trim();
-        const cobSec = parseTimeToSeconds(cobStr);
-        const rrSec = parseTimeToSeconds(rrStr);
-        if (!isNaN(cobSec) && !isNaN(rrSec)) {
-          // Първата клетка се използва за етикет (име) на записа
-          labels.push(cells[0].textContent.trim() || 'Record ' + (index + 1));
-          cobData.push(cobSec);
-          rrData.push(rrSec);
+            dates.push(date);
+            cobElapsed.push(cob);
+            rrElapsed.push(rr);
         }
-      }
+    }
+
+    return { dates, cobElapsed, rrElapsed };
+}
+
+function formatHHMM(hoursFloat) {
+    const h = Math.floor(hoursFloat);
+    const m = Math.round((hoursFloat - h) * 60);
+    return `${h}:${m.toString().padStart(2, '0')}`;
+}
+
+function renderElapsedChart() {
+    const ctx = document.getElementById("elapsedChart").getContext("2d");
+    const { dates, cobElapsed, rrElapsed } = getElapsedChartData();
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: dates,
+            datasets: [
+                {
+                    label: 'COB Elapsed',
+                    data: cobElapsed,
+                    backgroundColor: 'orange',
+                    stack: 'stack1'
+                },
+                {
+                    label: 'RR Elapsed',
+                    data: rrElapsed,
+                    backgroundColor: 'gray',
+                    stack: 'stack1'
+                },
+                {
+                    label: 'Duration Limit (2:30)',
+                    data: Array(dates.length).fill(2.5),
+                    type: 'line',
+                    borderColor: 'red',
+                    borderDash: [6, 4],
+                    pointRadius: 0,
+                    borderWidth: 2,
+                    order: 999
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    max: 7,
+                    ticks: {
+                        callback: function(value) {
+                            return formatHHMM(value);
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: 'Duration (HH:mm)'
+                    },
+                    stacked: true
+                },
+                x: {
+                    stacked: true
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: function(context) {
+                            return `${context.dataset.label}: ${formatHHMM(context.raw)}`;
+                        }
+                    }
+                },
+                title: {
+                    display: true,
+                    text: 'COB & RR Elapsed Times vs Duration Limit',
+                    font: {
+                        size: 18,
+                        weight: 'bold'
+                    }
+                },
+                legend: {
+                    display: true
+                }
+            }
+        },
+        plugins: [{
+            id: 'customLabels',
+            afterDatasetsDraw(chart) {
+                const { ctx, chartArea, data, scales } = chart;
+                const cobMeta = chart.getDatasetMeta(0);
+                const rrMeta = chart.getDatasetMeta(1);
+                const y = scales.y;
+
+                ctx.save();
+                ctx.font = 'bold 11px sans-serif';
+                ctx.textAlign = 'center';
+                ctx.fillStyle = 'black';
+
+                data.labels.forEach((label, i) => {
+                    const cob = data.datasets[0].data[i];
+                    const rr = data.datasets[1].data[i];
+                    const total = cob + rr;
+
+                    const x = cobMeta.data[i].x;
+                    const cobTop = y.getPixelForValue(cob);
+                    const rrTop = y.getPixelForValue(total);
+
+                    // COB label (вътре)
+                    if (cob > 0) {
+                        const cobCenterY = (y.getPixelForValue(0) + cobTop) / 2;
+                        ctx.fillText(formatHHMM(cob), x, cobCenterY);
+                    }
+
+                    // RR label (вътре)
+                    if (rr > 0) {
+                        const rrCenterY = (cobTop + rrTop) / 2;
+                        ctx.fillText(formatHHMM(rr), x, rrCenterY);
+                    }
+
+                    // Total label (над бара)
+                    if (total > 0) {
+                        ctx.fillText(formatHHMM(total), x, rrTop - 6);
+                    }
+                });
+
+                ctx.restore();
+            }
+        }]
     });
+}
 
-    // Подготовка на datasets за Chart.js
-    const data = {
-      labels: labels,
-      datasets: [
-        {
-          label: 'COB Elapsed',
-          data: cobData,
-          backgroundColor: '#2e59d9'  // син цвят за COB секцията
-        },
-        {
-          label: 'RR Elapsed',
-          data: rrData,
-          backgroundColor: '#17a673'  // зелен цвят за RR секцията
-        }
-      ]
-    };
-
-    // Изчисляване на максимума за Y оста, така че да включва линията 2:30 часа
-    const thresholdSeconds = 2.5 * 3600;  // 2.5 часа (2:30:00) в секунди
-    const totalTimes = cobData.map((c, i) => c + rrData[i]);
-    const maxDataSeconds = totalTimes.length ? Math.max(...totalTimes) : 0;
-    const upperBound = Math.max(maxDataSeconds, thresholdSeconds);
-    const stepSize = 1800;  // стъпка 1800 секунди = 30 минути
-    let maxSec = Math.ceil(upperBound / stepSize) * stepSize;
-    if (upperBound === thresholdSeconds) {
-      // Ако лимитът 2:30ч е най-голямата стойност, добавяме още една стъпка за видимост
-      maxSec += stepSize;
-    }
-
-    // Конфигурация на графиката
-    const config = {
-      type: 'bar',
-      data: data,
-      options: {
-        responsive: false, // по избор: фиксиран размер на canvas (изкл. responsive)
-        scales: {
-          x: {
-            stacked: true  // активиране на стека по хоризонталната ос (групиране на баровете)
-          },
-          y: {
-            stacked: true, 
-            beginAtZero: true,
-            max: maxSec,
-            ticks: {
-              stepSize: stepSize,
-              // Форматиране на деленията по Y като HH:mm
-              callback: function(value) {
-                const hours = Math.floor(value / 3600);
-                const minutes = Math.floor((value % 3600) / 60);
-                return hours + ':' + (minutes < 10 ? '0' : '') + minutes;
-              }
-            }
-          }
-        },
-        plugins: {
-          tooltip: {
-            mode: 'index',
-            intersect: false,
-            callbacks: {
-              // Форматиране на tooltip: "Име: HH:mm"
-              label: function(context) {
-                const datasetLabel = context.dataset.label || '';
-                const value = context.parsed.y;
-                const hours = Math.floor(value / 3600);
-                const minutes = Math.floor((value % 3600) / 60);
-                const formatted = hours + ':' + (minutes < 10 ? '0' : '') + minutes;
-                return datasetLabel + ': ' + formatted;
-              }
-            }
-          }
-        }
-      },
-      plugins: [{
-        id: 'stackedBarLabels',
-        afterDatasetsDraw(chart, args, options) {
-          const ctx = chart.ctx;
-          const yScale = chart.scales.y;
-          ctx.save();
-          ctx.textAlign = 'center';
-          ctx.textBaseline = 'middle';
-          ctx.font = '12px sans-serif';
-          ctx.fillStyle = '#fff';  // бял текст за вътрешните надписи
-
-          // Обхождане на всяка лента (запис)
-          chart.data.labels.forEach((label, i) => {
-            const cobVal = chart.data.datasets[0].data[i];   // секуни за COB
-            const rrVal = chart.data.datasets[1].data[i];    // секунди за RR
-            const total = cobVal + rrVal;
-            const x = chart.getDatasetMeta(0).data[i].x;     // x-координата на центъра на бара
-
-            // Надпис в средата на COB секцията (ако стойността > 0)
-            if (cobVal > 0) {
-              const cobCenterY = (yScale.getPixelForValue(0) + yScale.getPixelForValue(cobVal)) / 2;
-              const hours = Math.floor(cobVal / 3600);
-              const minutes = Math.floor((cobVal % 3600) / 60);
-              const labelText = hours + ':' + (minutes < 10 ? '0' : '') + minutes;
-              ctx.fillText(labelText, x, cobCenterY);
-            }
-
-            // Надпис в средата на RR секцията (ако стойността > 0)
-            if (rrVal > 0) {
-              const rrCenterY = (yScale.getPixelForValue(cobVal) + yScale.getPixelForValue(total)) / 2;
-              const hours = Math.floor(rrVal / 3600);
-              const minutes = Math.floor((rrVal % 3600) / 60);
-              const labelText = hours + ':' + (minutes < 10 ? '0' : '') + minutes;
-              ctx.fillText(labelText, x, rrCenterY);
-            }
-
-            // Надпис над целия стак (тотал COB+RR) – общо време
-            if (total > 0) {
-              ctx.fillStyle = '#000';  // черен текст за общото време (над бара)
-              ctx.textBaseline = 'bottom';
-              ctx.font = 'bold 12px sans-serif';
-              const hours = Math.floor(total / 3600);
-              const minutes = Math.floor((total % 3600) / 60);
-              const totalText = hours + ':' + (minutes < 10 ? '0' : '') + minutes;
-              // малко отместване (2px) над върха на бара
-              ctx.fillText(totalText, x, yScale.getPixelForValue(total) - 2);
-              // Възстановяване на стила за следващата итерация (вътрешни надписи)
-              ctx.fillStyle = '#fff';
-              ctx.textBaseline = 'middle';
-              ctx.font = '12px sans-serif';
-            }
-          });
-
-          // Червена хоризонтална линия за лимита (Duration Limit = 2:30 часа)
-          ctx.beginPath();
-          ctx.lineWidth = 2;
-          ctx.strokeStyle = 'red';
-          const yPos = yScale.getPixelForValue(thresholdSeconds);
-          ctx.moveTo(chart.chartArea.left, yPos);
-          ctx.lineTo(chart.chartArea.right, yPos);
-          ctx.stroke();
-          ctx.restore();
-        }
-      }]
-    };
-
-    // Рендиране на графиката
-    const myChart = new Chart(
-      document.getElementById('myChart').getContext('2d'),
-      config
-    );
-  </script>
-</body>
-</html>
+window.onload = function () {
+    renderElapsedChart();
+};
+</script>
