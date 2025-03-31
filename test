@@ -1,143 +1,19 @@
+<button onclick="exportToPDF()" style="margin: 20px;">Export Full Page to PDF</button>
+
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+
+
 <script>
-function formatSecondsToHMS(seconds) {
-    const h = Math.floor(seconds / 3600);
-    const m = Math.floor((seconds % 3600) / 60);
-    const s = Math.floor(seconds % 60);
-    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+function exportToPDF() {
+    const element = document.body; // Цялото съдържание
+    const opt = {
+        margin:       0.3,
+        filename:     'full-page-report.pdf',
+        image:        { type: 'jpeg', quality: 0.98 },
+        html2canvas:  { scale: 2, useCORS: true },
+        jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' }
+    };
+    html2pdf().set(opt).from(element).save();
 }
-
-function parseElapsedToSeconds(timeStr) {
-    const parts = timeStr.split(':');
-    if (parts.length === 3) {
-        const h = parseInt(parts[0], 10);
-        const m = parseInt(parts[1], 10);
-        const s = parseInt(parts[2], 10);
-        return h * 3600 + m * 60 + s;
-    }
-    return 0;
-}
-
-function getCOBDataFromTable() {
-    const table = document.getElementById('recordsTable');
-    const labels = [];
-    const values = [];
-
-    for (let i = 1; i < table.rows.length; i++) {
-        const cells = table.rows[i].getElementsByTagName("td");
-        if (cells.length >= 4) {
-            const date = cells[0].innerText.trim();
-            const elapsedStr = cells[3].innerText.trim();
-            const elapsedSec = parseElapsedToSeconds(elapsedStr);
-            if (!isNaN(elapsedSec)) {
-                labels.push(date);
-                values.push(elapsedSec);
-            }
-        }
-    }
-    return { labels, values };
-}
-
-function calculateTrendLine(values) {
-    const N = values.length;
-    const x = Array.from({ length: N }, (_, i) => i);
-    const sumX = x.reduce((a, b) => a + b, 0);
-    const sumY = values.reduce((a, b) => a + b, 0);
-    const sumXY = x.reduce((acc, xi, i) => acc + xi * values[i], 0);
-    const sumX2 = x.reduce((acc, xi) => acc + xi * xi, 0);
-
-    const slope = (N * sumXY - sumX * sumY) / (N * sumX2 - sumX * sumX);
-    const intercept = (sumY - slope * sumX) / N;
-
-    return x.map(xi => intercept + slope * xi);
-}
-
-function renderCOBChart() {
-    const { labels, values } = getCOBDataFromTable();
-    const trend = calculateTrendLine(values);
-
-    const ctx = document.getElementById('cobChart').getContext('2d');
-    new Chart(ctx, {
-        type: 'bar',
-        data: {
-            labels: labels,
-            datasets: [
-                {
-                    label: 'COB Elapsed',
-                    data: values,
-                    backgroundColor: 'rgba(54, 162, 235, 0.7)',
-                    borderColor: 'rgba(54, 162, 235, 1)',
-                    borderWidth: 1
-                },
-                {
-                    label: 'Trend Line',
-                    data: trend,
-                    type: 'line',
-                    borderColor: 'red',
-                    borderDash: [5, 5],
-                    borderWidth: 2,
-                    fill: false,
-                    pointRadius: 0,
-                    tension: 0
-                }
-            ]
-        },
-        options: {
-            responsive: true,
-            plugins: {
-                legend: {
-                    display: true
-                },
-                tooltip: {
-                    callbacks: {
-                        label: function (context) {
-                            const val = context.raw;
-                            return `${context.dataset.label}: ${formatSecondsToHMS(val)}`;
-                        }
-                    }
-                },
-                title: {
-                    display: true,
-                    text: 'COB Elapsed Time & Trend',
-                    font: {
-                        size: 18,
-                        weight: 'bold'
-                    }
-                }
-            },
-            scales: {
-                y: {
-                    beginAtZero: true,
-                    ticks: {
-                        callback: function (value) {
-                            return formatSecondsToHMS(value);
-                        }
-                    },
-                    title: {
-                        display: true,
-                        text: 'Elapsed Time (HH:mm:ss)'
-                    }
-                }
-            }
-        },
-        plugins: [{
-            id: 'barLabelsOnly',
-            afterDatasetsDraw(chart) {
-                const { ctx } = chart;
-                const datasetMeta = chart.getDatasetMeta(0); // bars only
-                ctx.save();
-                ctx.font = 'bold 12px sans-serif';
-                ctx.fillStyle = 'black';
-                ctx.textAlign = 'center';
-                datasetMeta.data.forEach((bar, i) => {
-                    const val = chart.data.datasets[0].data[i];
-                    const label = formatSecondsToHMS(val);
-                    ctx.fillText(label, bar.x, bar.y - 6);
-                });
-                ctx.restore();
-            }
-        }]
-    });
-}
-
-window.onload = renderCOBChart;
 </script>
