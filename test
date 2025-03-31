@@ -1,28 +1,102 @@
-<style>
-@media print {
-  body {
-    -webkit-print-color-adjust: exact;
-  }
-  .pagebreak {
-    page-break-before: always;
-  }
-}
-</style>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PDF Export Example</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+  <style>
+    body { font-family: Arial; padding: 20px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 30px;
+    }
+    th, td {
+      border: 1px solid #333;
+      padding: 6px 10px;
+      font-size: 12px;
+    }
+    canvas {
+      max-width: 100%;
+      margin-bottom: 40px;
+    }
+    @media print {
+      .pagebreak {
+        page-break-before: always;
+      }
+    }
+  </style>
+</head>
+<body>
 
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<button onclick="exportToPDF()" style="margin-bottom: 20px;">Export Full Page to PDF</button>
+
+<div id="exportArea">
+  <h2>Sample Report</h2>
+
+  <!-- Table -->
+  <table>
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>COB Elapsed</th>
+        <th>RR Elapsed</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td>2025-03-01</td><td>01:30:00</td><td>00:45:00</td></tr>
+      <tr><td>2025-03-02</td><td>01:45:00</td><td>01:15:00</td></tr>
+      <tr><td>2025-03-03</td><td>02:00:00</td><td>00:50:00</td></tr>
+    </tbody>
+  </table>
+
+  <!-- Chart -->
+  <canvas id="sampleChart" width="800" height="300"></canvas>
+
+  <div class="pagebreak"></div>
+
+  <!-- More content if needed -->
+  <h3>Summary</h3>
+  <p>This report was generated to show performance across multiple days...</p>
+</div>
+
 <script>
 function exportToPDF() {
-    const element = document.getElementById('exportArea');
-    const opt = {
-        margin:       [0.5, 0.5, 0.5, 0.5], // от всички страни
-        filename:     'full-page-report.pdf',
-        image:        { type: 'jpeg', quality: 1 },
-        html2canvas:  { scale: 3, useCORS: true, scrollX: 0, scrollY: 0 },
-        jsPDF:        { unit: 'in', format: 'a4', orientation: 'portrait' },
-        pagebreak:    { mode: ['css', 'legacy'] } // уважава .pagebreak
-    };
-    html2pdf().set(opt).from(element).save();
+  const element = document.getElementById('exportArea');
+  const opt = {
+    margin: [0.5, 0.5, 0.5, 0.5],
+    filename: 'report-export.pdf',
+    image: { type: 'jpeg', quality: 1 },
+    html2canvas: { scale: 3, useCORS: true, scrollX: 0, scrollY: 0 },
+    jsPDF: { unit: 'in', format: 'a4', orientation: 'portrait' },
+    pagebreak: { mode: ['css', 'legacy'] }
+  };
+  html2pdf().set(opt).from(element).save();
 }
+
+// Simple bar chart
+window.onload = function () {
+  const ctx = document.getElementById('sampleChart').getContext('2d');
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: ['2025-03-01', '2025-03-02', '2025-03-03'],
+      datasets: [{
+        label: 'COB Elapsed (min)',
+        data: [90, 105, 120],
+        backgroundColor: 'orange'
+      }]
+    },
+    options: {
+      responsive: false,
+      scales: {
+        y: { beginAtZero: true }
+      }
+    }
+  });
+};
 </script>
 
-
+</body>
+</html>
