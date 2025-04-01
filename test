@@ -1,3 +1,15 @@
+awk -v limit="$(date -d '7 days ago' +%Y-%m-%dT%H:%M:%S)" '
+$0 ~ /^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/ && 
+/ERROR/ && 
+length($0) <= 100 {
+    gsub(",", "", $2); # премахва ,111 от часа
+    ts = $1 "T" $2;
+    if (ts >= limit) print
+}' файл.log
+
+
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
