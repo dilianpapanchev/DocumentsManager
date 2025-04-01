@@ -1,3 +1,13 @@
+for f in *.log; do
+  awk -v limit="$(date -d '7 days ago' +%Y-%m-%d)" '
+  /\[ERROR\]/ && length($0) <= 100 {
+      date_str = $2
+      if (date_str >= limit) print FILENAME ": " $0
+  }' "$f"
+done
+
+
+
 awk -v limit="$(date -d '7 days ago' +%Y-%m-%dT%H:%M:%S)" '
 $0 ~ /^[0-9]{4}-[0-9]{2}-[0-9]{2} [0-9]{2}:[0-9]{2}:[0-9]{2}/ && 
 /ERROR/ && 
