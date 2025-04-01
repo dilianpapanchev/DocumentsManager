@@ -83,12 +83,18 @@ window.onload = function () {
     data: {
       labels: ['2025-03-01', '2025-03-02', '2025-03-03'],
       datasets: [{
-        label: 'COB Elapsed (min)',
+        label: 'COB Elapsed (
+min)',
         data: [90, 105, 120],
         backgroundColor: 'orange'
       }]
     },
     options: {
+
+
+
+
+awk -v limit="$(date -d '7 days ago' +%Y-%m-%d)" '/ERROR/ && $0 ~ /^[0-9]{4}-[0-9]{2}-[0-9]{2}/ && substr($0, 1, 10) >= limit && length($0) <= 100' файл.log
       responsive: false,
       scales: {
         y: { beginAtZero: true }
