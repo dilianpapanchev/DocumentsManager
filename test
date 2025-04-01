@@ -1,3 +1,26 @@
+#!/bin/bash
+
+LIMIT_DATE=$(date -d '7 days ago' +%Y-%m-%d)
+
+for f in *.log; do
+  awk -v limit="$LIMIT_DATE" -v file="$f" '
+  /\[ERROR\]/ && length($0) <= 100 {
+      log_date = $2
+      if (log_date >= limit) {
+          if ($0 ~ /DATABASE|RUNTIME|EJB|MDB/) {
+              match($0, /\} *(.*)/, arr)
+              if (arr[1] != "") {
+                  key = arr[1]
+                  print key "|||___LINE___|||[" file "] " $0
+              }
+          }
+      }
+  }' "$f"
+done | sort -u -t'|||___LINE___|||' -k1,1 | cut -d'|||___LINE___|||' -f2
+
+
+
+
 for f in *.log; do
   awk -v limit="$(date -d '7 days ago' +%Y-%m-%d)" '
   /\[ERROR\]/ && length($0) <= 100 {
