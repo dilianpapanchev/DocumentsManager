@@ -6,6 +6,40 @@ LOG_DIR="/opt/t24/tafjbatch/log"
 for server in $(cat hosts); do
   ssh -q "$server" bash <<EOF
     for f in ${LOG_DIR}/*.log; do
+      awk -v limit="${LIMIT_DATE}" -v file="\$f" -v host="${server}" '
+        /\[ERROR\]/ && length(\$0) <= 600 {
+          log_date = \$2
+          if (log_date >= limit) {
+            if (\$0 ~ /DATABASE|RUNTIME|EJB|MDB/) {
+              match(\$0, /\\} *(.*)/, arr)
+              if (arr[1] != "" && arr[1] != "\\"") {
+                key = arr[1]
+                print key "|" "[" host "] [" file "] " \$0
+              }
+            }
+          }
+        }
+      ' "\$f"
+    done
+EOF
+done | sort -t'|' -k1,1 -u | cut -d'|' -f2-
+
+
+
+
+
+
+
+
+
+#!/bin/bash
+
+LIMIT_DATE=$(date -d '1 days ago' +%Y-%m-%d)
+LOG_DIR="/opt/t24/tafjbatch/log"
+
+for server in $(cat hosts); do
+  ssh -q "$server" bash <<EOF
+    for f in ${LOG_DIR}/*.log; do
       awk -v limit="${LIMIT_DATE}" -v file="\$f" '
         /\[ERROR\]/ && length(\$0) <= 600 {
           log_date = \$2
