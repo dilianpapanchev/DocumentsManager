@@ -1,3 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Responsive Chart & Table</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    html {
+      font-size: 16px;
+    }
+
+    body {
+      font-family: Arial, sans-serif;
+      margin: 2rem;
+      background: #f9f9f9;
+    }
+
+    .container {
+      max-width: 90vw;
+      margin: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-bottom: 2rem;
+    }
+
+    th, td {
+      border: 1px solid #aaa;
+      padding: 0.5rem;
+      font-size: 0.9rem;
+    }
+
+    canvas {
+      width: 100%;
+      height: auto;
+      display: block;
+      background: #fff;
+    }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <h2>Sample Table</h2>
+  <table>
+    <tr>
+      <th>Date</th>
+      <th>COB Elapsed</th>
+    </tr>
+    <tr>
+      <td>2025-04-01</td>
+      <td>01:23:00</td>
+    </tr>
+    <tr>
+      <td>2025-04-02</td>
+      <td>00:45:00</td>
+    </tr>
+    <tr>
+      <td>2025-04-03</td>
+      <td>01:10:00</td>
+    </tr>
+  </table>
+
+  <h2>Responsive Chart</h2>
+  <canvas id="cobChart"></canvas>
+</div>
+
+<script>
+function parseHMS(str) {
+  const [h, m, s] = str.split(':').map(Number);
+  return h * 3600 + m * 60 + s;
+}
+
+function formatSecondsToHMS(totalSec) {
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+function fixCanvasResolution(canvas) {
+  const dpr = window.devicePixelRatio || 1;
+  const rect = canvas.getBoundingClientRect();
+  canvas.width = rect.width * dpr;
+  canvas.height = rect.height * dpr;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(dpr, dpr);
+  return ctx;
+}
+
+window.onload = function () {
+  const canvas = document.getElementById("cobChart");
+  const ctx = fixCanvasResolution(canvas);
+
+  const labels = ['2025-04-01', '2025-04-02', '2025-04-03'];
+  const rawTimes = ['01:23:00', '00:45:00', '01:10:00'];
+  const values = rawTimes.map(parseHMS);
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'COB Elapsed',
+        data: values,
+        backgroundColor: 'rgba(54, 162, 235, 0.7)',
+        borderColor: 'rgba(54, 162, 235, 1)',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: ${formatSecondsToHMS(ctx.raw)}`
+          }
+        },
+        legend: {
+          display: true
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: value => formatSecondsToHMS(value)
+          },
+          title: {
+            display: true,
+            text: 'Elapsed Time (HH:mm:ss)'
+          }
+        }
+      }
+    }
+  });
+};
+</script>
+
+</body>
+</html>
+
+
+
+
+
+
+
 #!/bin/bash
 
 LIMIT_DATE=$(date -d '1 days ago' +%Y-%m-%d)
