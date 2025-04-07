@@ -1,3 +1,22 @@
+if ($0 ~ /DATABASE|RUNTIME|EJB|MDB/) {
+  match($0, /No such file or directory/, nsf)
+  if (nsf[0] != "") {
+    key = "No such file or directory"
+  } else {
+    match($0, /\} *(.*)/, arr)
+    key = arr[1]
+  }
+  if (key != "" && key != "\"") {
+    print key "|" "[" host "] [" file "] " $0
+  }
+}
+
+
+
+
+
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
