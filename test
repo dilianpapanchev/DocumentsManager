@@ -10,6 +10,45 @@ for server in $(cat hosts); do
       if [ -f "\$f" ]; then
         awk -v limit="$LIMIT_DATE" -v file="\$f" -v host="$server" -v maxlen=$CHAR_LIMIT '
         {
+          if (\$0 ~ /\[ERROR\]/ && length(\$0) <= maxlen) {
+            log_date = \$2
+            if (log_date >= limit) {
+              if (\$0 ~ /DATABASE|RUNTIME|EJB|MDB/) {
+
+                # Хващане на "No such file or directory" като ключ
+                if (\$0 ~ /No such file or directory/) {
+                  key = "No such file or directory"
+                } else {
+                  match(\$0, /\} *(.*)/, arr)
+                  key = arr[1]
+                }
+
+                if (key != "" && key != "\\\"") {
+                  print key \"|\" \"[\" host \"] [\" file \"] \" \$0
+                }
+              }
+            }
+          }
+        }' "\$f"
+      fi
+    done
+EOF
+done | sort -t'|' -k1,1 -u | cut -d'|' -f2-
+
+
+
+#!/bin/bash
+
+CHAR_LIMIT=1000
+LIMIT_DATE=$(date -d '7 days ago' +%Y-%m-%d)
+LOG_DIR="/opt/t24/tafjbatch/log"
+
+for server in $(cat hosts); do
+  ssh -q "$server" bash <<EOF
+    for f in ${LOG_DIR}/*mdb.log ${LOG_DIR}/*runtime.log ${LOG_DIR}/*database.log ${LOG_DIR}/*ejb.log; do
+      if [ -f "\$f" ]; then
+        awk -v limit="$LIMIT_DATE" -v file="\$f" -v host="$server" -v maxlen=$CHAR_LIMIT '
+        {
           # Проверка за [ERROR] и дължина
           if (\$0 ~ /\[ERROR\]/ && length(\$0) <= maxlen) {
             log_date = \$2
