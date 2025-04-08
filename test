@@ -8,6 +8,68 @@ dateLogs=$(date +%Y%m%d)
 base_path="/cygdrive/c/Users/j18959/OneDrive - KBC Group/24x7 Operations/PROD Logs"
 full_path="${base_path}/${dateLogs}"
 
+clear
+
+# Създай основна и поддиректории
+mkdir -p "$full_path"
+for env in "${envs[@]}"; do
+  mkdir -p "${full_path}/${env}"
+done
+
+# Анимация: въртящ се спинър
+spin() {
+  local pid=$1
+  local env_name=$2
+  local spinstr='|/-\'
+  echo ""
+  echo -e "\n==============================="
+  echo -e "  Downloading logs from $env_name"
+  echo -e "===============================\n"
+
+  while kill -0 $pid 2>/dev/null; do
+    for i in $(seq 0 3); do
+      printf "\r[%c] Please wait..." "${spinstr:$i:1}"
+      sleep 0.2
+    done
+  done
+  printf "\rDone downloading logs from %s\n" "$env_name"
+  echo ""
+}
+
+# Основен цикъл
+for i in "${!servers[@]}"; do
+  host=${servers[$i]}
+  host_user=${users[$i]}
+  env_name=${envs[$i]}
+  log_file="${full_path}/${env_name}/${env_name}_${dateLogs}_unique.log"
+
+  # Стартирай SSH във фон
+  ssh -q "JF200069@$host" bash <<EOF > "$log_file" 2>/dev/null &
+    cd /opt/t24/support_scripts/log_search
+    sudo su $host_user
+    ./unique_logs.sh
+EOF
+
+  pid=$!
+  spin "$pid" "$env_name"
+  wait "$pid"
+done
+
+echo -e "\nAll logs downloaded to: $full_path"
+
+
+
+
+#!/bin/bash
+
+servers=("s0ab0ol6.sk.srv.sys" "s0ab0nhq.hu.srv.sys" "s0ab0nh9.hu.srv.sys" "s0ab0pl2.bg.srv.sys")
+users=("je5273" "je4466" "je3696" "je7681")
+envs=("CSOB" "TPH" "SP24" "UBB")
+dateLogs=$(date +%Y%m%d)
+
+base_path="/cygdrive/c/Users/j18959/OneDrive - KBC Group/24x7 Operations/PROD Logs"
+full_path="${base_path}/${dateLogs}"
+
 # Създаване на директория и подпапки
 mkdir -p "$full_path"
 for env in "${envs[@]}"; do
