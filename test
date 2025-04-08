@@ -24,6 +24,69 @@ show_header() {
 }
 
 spin() {
+  local pid=$1
+  local spinstr='|/-\'
+  while kill -0 "$pid" 2>/dev/null; do
+    for i in $(seq 0 3); do
+      printf "\r[%c] Processing..." "${spinstr:$i:1}"
+      sleep 0.2
+    done
+  done
+  printf "\r✓ Logs ready.                  \n"
+}
+
+for i in "${!servers[@]}"; do
+  host=${servers[$i]}
+  host_user=${users[$i]}
+  env_name=${envs[$i]}
+  log_file="${full_path}/${env_name}/${env_name}_${dateLogs}_unique.log"
+
+  show_header "$env_name"
+  echo "(You'll be prompted for password if needed)"
+
+  # Стартираме SSH във фон и пазим PID
+  ssh -q "JF200069@$host" bash <<EOF > "$log_file" 2>/dev/null &
+    cd /opt/t24/support_scripts/log_search
+    sudo su $host_user
+    ./unique_logs.sh
+EOF
+
+  ssh_pid=$!
+  spin "$ssh_pid"
+  wait "$ssh_pid"
+done
+
+echo -e "\nAll logs downloaded to: $full_path"
+
+
+
+
+#!/bin/bash
+
+servers=("s0ab0ol6.sk.srv.sys" "s0ab0nhq.hu.srv.sys" "s0ab0nh9.hu.srv.sys" "s0ab0pl2.bg.srv.sys")
+users=("je5273" "je4466" "je3696" "je7681")
+envs=("CSOB" "TPH" "SP24" "UBB")
+dateLogs=$(date +%Y%m%d)
+
+base_path="/cygdrive/c/Users/j18959/OneDrive - KBC Group/24x7 Operations/PROD Logs"
+full_path="${base_path}/${dateLogs}"
+
+clear
+
+mkdir -p "$full_path"
+for env in "${envs[@]}"; do
+  mkdir -p "${full_path}/${env}"
+done
+
+show_header() {
+  local env_name=$1
+  echo ""
+  echo "==============================="
+  echo "  Downloading logs from $env_name"
+  echo "==============================="
+}
+
+spin() {
   local spinstr='|/-\'
   for i in $(seq 1 10); do
     for j in $(seq 0 3); do
