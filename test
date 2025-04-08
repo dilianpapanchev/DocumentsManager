@@ -8,6 +8,63 @@ dateLogs=$(date +%Y%m%d)
 base_path="/cygdrive/c/Users/j18959/OneDrive - KBC Group/24x7 Operations/PROD Logs"
 full_path="${base_path}/${dateLogs}"
 
+# Създаване на директория и подпапки
+mkdir -p "$full_path"
+for env in "${envs[@]}"; do
+  mkdir -p "${full_path}/${env}"
+done
+
+# ✅ Въвеждане на пароли (без echo)
+declare -A passwords
+echo "Въведи SSH паролите за средите:"
+for env in "${envs[@]}"; do
+  read -s -p "Парола за $env: " pass
+  echo ""
+  passwords["$env"]="$pass"
+done
+
+# ✅ Цикъл с expect логика вътре
+for i in "${!servers[@]}"; do
+  host=${servers[$i]}
+  host_user=${users[$i]}
+  env_name=${envs[$i]}
+  pass="${passwords[$env_name]}"
+  log_file="${full_path}/${env_name}/${env_name}_${dateLogs}_unique.log"
+
+  echo "▶ Downloading logs from $env_name..."
+
+  expect <<EOF
+  spawn ssh $host
+  expect "assword:"
+  send "$pass\r"
+  expect "\$ "
+  send "sudo su - $host_user\r"
+  expect "# "
+  send "cd /opt/t24/support_scripts/log_search\r"
+  expect "# "
+  send "./unique_logs.sh > $log_file\r"
+  expect "# "
+  send "exit\r"
+  expect "\$ "
+  send "exit\r"
+EOF
+
+  echo "✔ Завършено за $env_name → ${env_name}/${env_name}_${dateLogs}_unique.log"
+done
+
+
+
+
+#!/bin/bash
+
+servers=("s0ab0ol6.sk.srv.sys" "s0ab0nhq.hu.srv.sys" "s0ab0nh9.hu.srv.sys" "s0ab0pl2.bg.srv.sys")
+users=("je5273" "je4466" "je3696" "je7681")
+envs=("CSOB" "TPH" "SP24" "UBB")
+dateLogs=$(date +%Y%m%d)
+
+base_path="/cygdrive/c/Users/j18959/OneDrive - KBC Group/24x7 Operations/PROD Logs"
+full_path="${base_path}/${dateLogs}"
+
 # Създаване на директория за дата ако не съществува
 if [ ! -d "$full_path" ]; then
   mkdir -p "$full_path"
