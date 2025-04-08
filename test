@@ -9,6 +9,38 @@ def insert_jboss_table_in_html(html_content, jboss_entries):
         return html_content
 
     new_table_content = ""
+    restarted_found = False
+
+    # Заглавен ред
+    new_table_content += "<tr><th>Server</th><th>If Restarted</th></tr>\n"
+
+    for server, status in jboss_entries:
+        if status.strip().upper() != "NO":
+            new_table_content += f"<tr><td>{server}</td><td style='color: red;'><b>{status}</b></td></tr>\n"
+            restarted_found = True
+
+    # Ако няма рестартирани — специален ред
+    if not restarted_found:
+        new_table_content = "<tr><th>No JBOSS Restart during COB</th></tr>\n"
+
+    return html_content[:start_index + len(start_marker)] + "\n" + new_table_content + html_content[end_index:]
+
+
+
+
+
+
+def insert_jboss_table_in_html(html_content, jboss_entries):
+    start_marker = "<!-- START_JBOSS_TABLE -->"
+    end_marker = "<!-- END_JBOSS_TABLE -->"
+
+    start_index = html_content.find(start_marker)
+    end_index = html_content.find(end_marker, start_index)
+
+    if start_index == -1 or end_index == -1:
+        return html_content
+
+    new_table_content = ""
     jboss_marker = "FALSE"
 
     # Добавяме header реда (винаги в началото)
