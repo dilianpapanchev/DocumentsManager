@@ -5,6 +5,47 @@ users=("je5273" "je4466" "je3696" "je7681")
 envs=("CSOB" "TPH" "SP24" "UBB")
 dateLogs=$(date +%Y%m%d)
 
+base_path="/cygdrive/c/Users/j18959/OneDrive - KBC Group/24x7 Operations/PROD Logs"
+full_path="${base_path}/${dateLogs}"
+
+# Създаване на директория за дата ако не съществува
+if [ ! -d "$full_path" ]; then
+  mkdir -p "$full_path"
+fi
+
+# Създаване на поддиректории по среди
+for env in "${envs[@]}"; do
+  mkdir -p "${full_path}/${env}"
+done
+
+# Обхождане на сървърите
+for i in "${!servers[@]}"; do
+  host=${servers[$i]}
+  host_user=${users[$i]}
+  env_name=${envs[$i]}
+
+  echo ">> $env_name on $host"
+
+  ssh -q "$host" bash <<EOF > "${full_path}/${env_name}/${env_name}_${dateLogs}_unique.log"
+    sudo su - $host_user
+    cd /opt/t24/support_scripts/log_search
+    ./unique_logs.sh
+EOF
+
+done
+
+
+
+
+
+
+#!/bin/bash
+
+servers=("s0ab0ol6.sk.srv.sys" "s0ab0nhq.hu.srv.sys" "s0ab0nh9.hu.srv.sys" "s0ab0pl2.bg.srv.sys")
+users=("je5273" "je4466" "je3696" "je7681")
+envs=("CSOB" "TPH" "SP24" "UBB")
+dateLogs=$(date +%Y%m%d)
+
 cd "/cygdrive/c/Users/j18959/OneDrive - KBC Group/24x7 Operations/PROD Logs"
 
 for i in "${!servers[@]}"; do
