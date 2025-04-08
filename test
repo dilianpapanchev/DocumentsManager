@@ -1,3 +1,36 @@
+def insert_jboss_table_in_html(html_content, jboss_entries):
+    start_marker = "<!-- START_JBOSS_TABLE -->"
+    end_marker = "<!-- END_JBOSS_TABLE -->"
+
+    start_index = html_content.find(start_marker)
+    end_index = html_content.find(end_marker, start_index)
+
+    if start_index == -1 or end_index == -1:
+        return html_content
+
+    new_table_content = ""
+    jboss_marker = "FALSE"
+
+    # Добавяме header реда (винаги в началото)
+    new_table_content += "<tr><th>Server</th><th>If Restarted</th></tr>\n"
+
+    for server, status in jboss_entries:
+        if status.strip().upper() == "NO":
+            new_table_content += f"<tr><td>{server}</td><td style='color: green;'><b>{status}</b></td></tr>\n"
+        else:
+            new_table_content += f"<tr><td>{server}</td><td style='color: red;'><b>{status}</b></td></tr>\n"
+            jboss_marker = "TRUE"
+
+    # Ако никой не е рестартирал — пишем само един ред
+    if jboss_marker == "FALSE":
+        new_table_content = "<tr><th>No JBOSS Restart during COB</th></tr>\n"
+
+    # Заменяме вътрешността на таблицата
+    return html_content[:start_index + len(start_marker)] + "\n" + new_table_content + html_content[end_index:]
+
+
+
+
 #!/bin/bash
 
 CHAR_LIMIT=1000
