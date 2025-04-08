@@ -1,3 +1,30 @@
+#!/bin/bash
+
+servers=("s0ab0ol6.sk.srv.sys" "s0ab0nhq.hu.srv.sys" "s0ab0nh9.hu.srv.sys" "s0ab0pl2.bg.srv.sys")
+users=("je5273" "je4466" "je3696" "je7681")
+envs=("CSOB" "TPH" "SP24" "UBB")
+dateLogs=$(date +%Y%m%d)
+
+cd "/cygdrive/c/Users/j18959/OneDrive - KBC Group/24x7 Operations/PROD Logs"
+
+for i in "${!servers[@]}"; do
+  host=${servers[$i]}
+  host_user=${users[$i]}
+  env_name=${envs[$i]}
+
+  echo "Running on $host for $env_name with user $host_user..."
+
+  ssh -q "$host" bash <<EOF > "${env_name}_${dateLogs}_unique.log"
+    sudo su - $host_user
+    cd /opt/t24/support_scripts/log_search
+    ./unique_logs.sh
+EOF
+
+done
+
+
+
+
 def insert_jboss_table_in_html(html_content, jboss_entries):
     start_marker = "<!-- START_JBOSS_TABLE -->"
     end_marker = "<!-- END_JBOSS_TABLE -->"
