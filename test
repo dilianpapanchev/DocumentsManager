@@ -1,5 +1,152 @@
 #!/bin/bash
 
+# === ИНИЦИАЛИЗАЦИЯ ===
+script_dir="$(cd "$(dirname "$0")" && pwd)"
+script_name="$(basename "$0")"
+script_path="$script_dir/$script_name"
+conf_path="$script_dir/${script_name%.*}.conf"
+SCP_ERR_LOG="/tmp/${script_name}_scp_error.log"
+
+# === ЗАРЕЖДАНЕ НА КОНФИГУРАЦИЯ ===
+if [[ ! -f "$conf_path" ]]; then
+  dialog --title "Error" --msgbox "Missing config: ${conf_path}" 6 50
+  exit 1
+fi
+. "$conf_path"
+
+# === AUTO-UPDATE ===
+if [[ -f "$UPDATE_SOURCE" ]]; then
+  remote_conf="${UPDATE_SOURCE%.*}.conf"
+  remote_version="$(grep VERSION "$remote_conf" 2>/dev/null | cut -d= -f2 | tr -d '"')"
+  local_version="$(echo "$VERSION" | tr -d '"')"
+
+  if [[ "$remote_version" > "$local_version" ]]; then
+    dialog --infobox "Updating to version $remote_version..." 3 40
+    sleep 1
+    cp "$UPDATE_SOURCE" "$script_path.tmp" && chmod +x "$script_path.tmp"
+    cp "$remote_conf" "$conf_path.tmp"
+    cat > "$script_dir/update_runner.sh" <<EOF
+#!/bin/bash
+mv "$script_path.tmp" "$script_path"
+mv "$conf_path.tmp" "$conf_path"
+rm -- "\$0"
+exec "$script_path"
+EOF
+    chmod +x "$script_dir/update_runner.sh"
+    exec "$script_dir/update_runner.sh"
+    exit
+  fi
+fi
+
+# === ДАТА + ПАПКИ ===
+date_check=$(date +%Y%m%d)
+year_check=$(date +%Y)
+base_path="/cygdrive/c/Users/$USER/OneDrive/file_transfer_${year_check}/${date_check}"
+
+mkdir -p "$base_path" 2>/dev/null
+
+# === ПРОМПТ ЗА HOST ===
+ask_host() {
+  host=$(dialog --stdout --title "Enter hostname" --inputbox "Enter SSH hostname (user@host):" 8 50)
+  if [[ -z "$host" ]]; then return 1; fi
+  return 0
+}
+
+# === DOWNLOAD ===
+download_file() {
+  ask_host || return
+  remote_file=$(dialog --stdout --inputbox "Enter full remote file path:" 8 50)
+  [ -z "$remote_file" ] && return
+  filename=$(basename "$remote_file")
+  local_path="$base_path/$filename"
+
+  dialog --infobox "Downloading..." 3 30
+  scp "$host:$remote_file" "$local_path" 2> "$SCP_ERR_LOG"
+  if [[ $? -eq 0 ]]; then
+    dialog --msgbox "Downloaded to:\n$local_path" 6 50
+  else
+    dialog --msgbox "Download failed:\n$(<"$SCP_ERR_LOG")" 8 60
+  fi
+}
+
+# === UPLOAD ===
+upload_file() {
+  ask_host || return
+  local_file=$(dialog --stdout --fselect "/cygdrive/c/" 14 60)
+  [ -z "$local_file" ] && return
+  dest_path=$(dialog --stdout --inputbox "Remote destination path:" 8 50 "~")
+  [ -z "$dest_path" ] && return
+
+  dialog --infobox "Uploading..." 3 30
+  scp "$local_file" "$host:$dest_path" 2> "$SCP_ERR_LOG"
+  if [[ $? -eq 0 ]]; then
+    dialog --msgbox "Uploaded to:\n$host:$dest_path" 6 50
+  else
+    dialog --msgbox "Upload failed:\n$(<"$SCP_ERR_LOG")" 8 60
+  fi
+}
+
+# === PSCP (от Windows) ===
+pscp_download() {
+  remote_file=$(dialog --stdout --inputbox "Enter remote path (PSCP):" 8 50)
+  [ -z "$remote_file" ] && return
+  file_name=$(basename "$remote_file")
+  local_dest="$base_path/$file_name"
+
+  dialog --infobox "Downloading via PSCP..." 3 40
+  pscp "$remote_file" "$local_dest" 2> "$SCP_ERR_LOG"
+  if [[ $? -eq 0 ]]; then
+    dialog --msgbox "Saved to $local_dest" 6 50
+  else
+    dialog --msgbox "PSCP failed:\n$(<"$SCP_ERR_LOG")" 8 60
+  fi
+}
+
+# === UPDATE CHECK ===
+check_update() {
+  if [[ -f "$UPDATE_SOURCE" ]]; then
+    remote_conf="${UPDATE_SOURCE%.*}.conf"
+    remote_version="$(grep VERSION "$remote_conf" | cut -d= -f2 | tr -d '"')"
+    if [[ "$remote_version" > "$VERSION" ]]; then
+      dialog --msgbox "Update available: $remote_version (you have $VERSION)" 6 50
+    else
+      dialog --msgbox "You're on the latest version: $VERSION" 5 40
+    fi
+  else
+    dialog --msgbox "Cannot reach update source." 5 40
+  fi
+}
+
+# === МЕНЮ ===
+while true; do
+  choice=$(dialog --clear --menu "File Transfer Utility (v$VERSION)" 15 50 6 \
+    1 "Download File" \
+    2 "Upload File" \
+    3 "PSCP Download" \
+    4 "Check for Update" \
+    5 "Exit" \
+    --stdout)
+
+  case "$choice" in
+    1) download_file ;;
+    2) upload_file ;;
+    3) pscp_download ;;
+    4) check_update ;;
+    5|*) clear; exit 0 ;;
+  esac
+done
+
+
+
+
+
+
+
+
+
+
+#!/bin/bash
+
 # -------- Load configuration --------
 script_dir="$(dirname "$0")"
 script_name="$(basename "$0")"
