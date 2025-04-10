@@ -1,5 +1,257 @@
 #!/bin/bash
 
+# -------- Load configuration --------
+script_dir="$(dirname "$0")"
+script_name="$(basename "$0")"
+# Convert script_dir to absolute path
+script_dir="$(cd "$script_dir" && pwd)"
+script_path="$script_dir/$script_name"
+conf_file="${script_name%.*}.conf"
+conf_path="$script_dir/$conf_file"
+
+if [ ! -f "$conf_path" ]; then
+    dialog --title "Error" --msgbox "Configuration file '$conf_file' not found!" 6 50
+    clear
+    exit 1
+fi
+
+# Source config file (expected to define VERSION, UPDATE_SOURCE, LOG_DIR, DEFAULT_HOST, etc.)
+. "$conf_path"
+
+# Temporary file for capturing SCP/PSCP error messages
+SCP_ERR_LOG="/tmp/${script_name}_scp_error.log"
+
+# -------- Convert Windows path to Cygwin path for UPDATE_SOURCE if needed --------
+if [[ -n "$UPDATE_SOURCE" && "$UPDATE_SOURCE" =~ ^[A-Za-z]: ]]; then
+    drive_letter="${UPDATE_SOURCE:0:1}"
+    drive_lower="$(echo "$drive_letter" | tr '[:upper:]' '[:lower:]')"
+    win_path="${UPDATE_SOURCE:2}"    # drop "C:" (drive letter and colon)
+    # Replace backslashes with forward slashes
+    win_path=$(printf "%s" "$win_path" | tr '\\' '/')
+    # Remove leading slash to avoid double slashes
+    clean_path="${win_path#/}"
+    UPDATE_SOURCE="/cygdrive/${drive_lower}/${clean_path}"
+fi
+
+# -------- Auto-update check at startup --------
+if [ -n "$UPDATE_SOURCE" ] && [ -f "$UPDATE_SOURCE" ]; then
+    remote_conf="${UPDATE_SOURCE%.*}.conf"
+    remote_version=""
+    if [ -f "$remote_conf" ]; then
+        remote_version=$(grep -E '^VERSION=' "$remote_conf" | cut -d= -f2 | tr -d '"')
+    else
+        remote_version=$(grep -E '^VERSION=' "$UPDATE_SOURCE" | cut -d= -f2 | tr -d '"')
+    fi
+    local_version="$(echo "$VERSION" | tr -d '"')"
+    if [ -n "$remote_version" ] && [ -n "$local_version" ]; then
+        # Compare versions
+        newest=$(printf "%s\n%s" "$local_version" "$remote_version" | sort -V | tail -n1)
+        if [ "$newest" != "$local_version" ]; then
+            # Newer version available, perform self-update
+            dialog --infobox "New version $remote_version is available. Updating now..." 4 50
+            sleep 1
+            dialog --clear
+
+            # Copy new script and config from update source
+            cp -f "$UPDATE_SOURCE" "$script_path.tmp"
+            if [ -f "$remote_conf" ]; then
+                cp -f "$remote_conf" "$conf_path.tmp"
+            fi
+            chmod +x "$script_path.tmp"
+
+            # Create an update script to replace the running script safely
+            updater="$script_dir/update_temp.sh"
+            cat > "$updater" <<EOF
+#!/bin/bash
+mv -f "$script_path.tmp" "$script_path"
+if [ -f "$conf_path.tmp" ]; then
+    mv -f "$conf_path.tmp" "$conf_path"
+fi
+rm -f "\$0"
+exec "$script_path" "$@"
+EOF
+            chmod +x "$updater"
+            # Run the update script (this will replace the current process)
+            exec "$updater" "$@"
+            # If exec fails, exit to avoid continuing old code
+            exit 1
+        fi
+    fi
+fi
+
+# -------- Dialog main menu loop --------
+while true; do
+    CHOICE=$(dialog --clear --title "Main Menu" \
+            --menu "Choose an option:" 15 50 5 \
+            1 "Download File" \
+            2 "Upload File" \
+            3 "PSCP Download" \
+            4 "Check for Updates" \
+            5 "Exit" \
+            --stdout)
+    STATUS=$?
+    if [ $STATUS -ne 0 ]; then
+        # User pressed Cancel/ESC
+        break
+    fi
+
+    case $CHOICE in
+        1)  # Download File
+            # Prompt for remote file path
+            remote_path=$(dialog --title "Download File" --inputbox "Enter remote file path on $DEFAULT_HOST:" 8 60 --stdout)
+            if [ $? -ne 0 ] || [ -z "$remote_path" ]; then
+                continue  # back to menu if canceled or empty
+            fi
+            file_name="$(basename "$remote_path")"
+            default_local="./$file_name"
+            local_path=$(dialog --title "Download File" --inputbox "Enter local destination path:" 8 60 "$default_local" --stdout)
+            if [ $? -ne 0 ] || [ -z "$local_path" ]; then
+                continue
+            fi
+            # If destination is a directory (ends with /), append file name
+            if [[ "$local_path" == */ ]]; then
+                local_path="${local_path}${file_name}"
+            fi
+
+            dialog --infobox "Downloading file, please wait..." 3 50
+            scp -q "$DEFAULT_HOST:$remote_path" "$local_path" 2> "$SCP_ERR_LOG"
+            scp_status=$?
+            dialog --clear
+
+            if [ $scp_status -eq 0 ]; then
+                dialog --title "Success" --msgbox "File downloaded successfully to:\n$local_path" 6 60
+                # Log the transfer
+                if [ -n "$LOG_DIR" ]; then
+                    mkdir -p "$LOG_DIR" 2>/dev/null
+                    echo "$(date '+%Y-%m-%d %H:%M:%S') - Downloaded $remote_path from $DEFAULT_HOST to $local_path" >> "$LOG_DIR/transfer.log"
+                fi
+            else
+                error_msg=$(<"$SCP_ERR_LOG")
+                dialog --title "Error" --msgbox "Download failed:\n$error_msg" 8 60
+                if [ -n "$LOG_DIR" ]; then
+                    mkdir -p "$LOG_DIR" 2>/dev/null
+                    echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR downloading $remote_path from $DEFAULT_HOST. $error_msg" >> "$LOG_DIR/transfer.log"
+                fi
+            fi
+            ;;
+        2)  # Upload File
+            # File selector for local file to upload
+            initial_dir="/"
+            if [ -d "/cygdrive" ]; then
+                initial_dir="/cygdrive/"
+            fi
+            local_file=$(dialog --title "Upload File" --fselect "$initial_dir" 15 60 --stdout)
+            if [ $? -ne 0 ] || [ -z "$local_file" ]; then
+                continue
+            fi
+            # Prompt for remote destination path
+            remote_dest=$(dialog --title "Upload File" --inputbox "Enter remote destination path on $DEFAULT_HOST:\n(directory or filename)" 8 60 "~/" --stdout)
+            if [ $? -ne 0 ] || [ -z "$remote_dest" ]; then
+                continue
+            fi
+
+            dialog --infobox "Uploading file, please wait..." 3 50
+            scp -q "$local_file" "$DEFAULT_HOST:$remote_dest" 2> "$SCP_ERR_LOG"
+            scp_status=$?
+            dialog --clear
+
+            if [ $scp_status -eq 0 ]; then
+                dialog --title "Success" --msgbox "File uploaded successfully to:\n$DEFAULT_HOST:$remote_dest" 6 60
+                if [ -n "$LOG_DIR" ]; then
+                    mkdir -p "$LOG_DIR" 2>/dev/null
+                    echo "$(date '+%Y-%m-%d %H:%M:%S') - Uploaded $local_file to $DEFAULT_HOST:$remote_dest" >> "$LOG_DIR/transfer.log"
+                fi
+            else
+                error_msg=$(<"$SCP_ERR_LOG")
+                dialog --title "Error" --msgbox "Upload failed:\n$error_msg" 8 60
+                if [ -n "$LOG_DIR" ]; then
+                    mkdir -p "$LOG_DIR" 2>/dev/null
+                    echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR uploading $local_file to $DEFAULT_HOST:$remote_dest. $error_msg" >> "$LOG_DIR/transfer.log"
+                fi
+            fi
+            ;;
+        3)  # PSCP Download
+            if ! command -v pscp >/dev/null 2>&1; then
+                dialog --title "Error" --msgbox "PSCP not found. Please ensure PuTTY's pscp is installed and in PATH." 7 60
+                continue
+            fi
+            remote_path=$(dialog --title "PSCP Download" --inputbox "Enter remote file path on $DEFAULT_HOST:" 8 60 --stdout)
+            if [ $? -ne 0 ] || [ -z "$remote_path" ]; then
+                continue
+            fi
+            file_name="$(basename "$remote_path")"
+            default_local="./$file_name"
+            local_path=$(dialog --title "PSCP Download" --inputbox "Enter local destination path:" 8 60 "$default_local" --stdout)
+            if [ $? -ne 0 ] || [ -z "$local_path" ]; then
+                continue
+            fi
+            if [[ "$local_path" == */ ]]; then
+                local_path="${local_path}${file_name}"
+            fi
+
+            dialog --infobox "Downloading file (using PSCP), please wait..." 3 60
+            pscp -q "$DEFAULT_HOST:$remote_path" "$local_path" 2> "$SCP_ERR_LOG"
+            pscp_status=$?
+            dialog --clear
+
+            if [ $pscp_status -eq 0 ]; then
+                dialog --title "Success" --msgbox "File downloaded successfully to:\n$local_path" 6 60
+                if [ -n "$LOG_DIR" ]; then
+                    mkdir -p "$LOG_DIR" 2>/dev/null
+                    echo "$(date '+%Y-%m-%d %H:%M:%S') - [PSCP] Downloaded $remote_path from $DEFAULT_HOST to $local_path" >> "$LOG_DIR/transfer.log"
+                fi
+            else
+                error_msg=$(<"$SCP_ERR_LOG")
+                dialog --title "Error" --msgbox "PSCP download failed:\n$error_msg" 8 60
+                if [ -n "$LOG_DIR" ]; then
+                    mkdir -p "$LOG_DIR" 2>/dev/null
+                    echo "$(date '+%Y-%m-%d %H:%M:%S') - ERROR [PSCP] downloading $remote_path from $DEFAULT_HOST. $error_msg" >> "$LOG_DIR/transfer.log"
+                fi
+            fi
+            ;;
+        4)  # Check for Updates
+            if [ -n "$UPDATE_SOURCE" ] && [ -f "$UPDATE_SOURCE" ]; then
+                remote_conf="${UPDATE_SOURCE%.*}.conf"
+                remote_version=""
+                if [ -f "$remote_conf" ]; then
+                    remote_version=$(grep -E '^VERSION=' "$remote_conf" | cut -d= -f2 | tr -d '"')
+                else
+                    remote_version=$(grep -E '^VERSION=' "$UPDATE_SOURCE" | cut -d= -f2 | tr -d '"')
+                fi
+                local_version="$(echo "$VERSION" | tr -d '"')"
+                if [ -n "$remote_version" ] && [ -n "$local_version" ]; then
+                    newest=$(printf "%s\n%s" "$local_version" "$remote_version" | sort -V | tail -n1)
+                    if [ "$newest" != "$local_version" ]; then
+                        dialog --title "Update Available" --msgbox "A newer version ($remote_version) is available.\n(Current version: $local_version)\nIt will be downloaded on next script start." 8 60
+                    else
+                        dialog --title "No Update" --msgbox "You have the latest version ($local_version)." 6 50
+                    fi
+                else
+                    dialog --title "Check Failed" --msgbox "Could not check for updates (source not accessible or version info missing)." 7 60
+                fi
+            else
+                dialog --title "Check for Updates" --msgbox "Update source is not configured or accessible." 6 50
+            fi
+            ;;
+        5)  # Exit
+            break
+            ;;
+    esac
+done
+
+# Clean up and exit
+dialog --clear
+clear
+exit 0
+
+
+
+
+
+
+
+#!/bin/bash
+
 servers=("s0ab0ol6.sk.srv.sys" "s0ab0nhq.hu.srv.sys" "s0ab0nh9.hu.srv.sys" "s0ab0pl2.bg.srv.sys")
 users=("je5273" "je4466" "je3696" "je7681")
 envs=("CSOB" "TPH" "SP24" "UBB")
