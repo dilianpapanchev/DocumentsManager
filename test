@@ -1,3 +1,21 @@
+# ~/.mydialogrc
+
+# Черен фон и зелен текст
+use_shadow = NO
+screen_color = BLACK
+title_color = GREEN
+border_color = GREEN
+dialog_color = BLACK
+inputbox_color = GREEN
+textbox_color = GREEN
+button_active_color = GREEN
+button_inactive_color = GREEN
+
+
+
+
+
+
 dialog --colors --title "Error" --msgbox "You have entered GLOW J*******: \Zb\Z1${curr_user}\Zn" 6 50
 
 
