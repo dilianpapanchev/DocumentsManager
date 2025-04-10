@@ -1,3 +1,9 @@
+dialog --colors --title "Error" --msgbox "You have entered GLOW J*******: \Zb\Z1${curr_user}\Zn" 6 50
+
+
+
+
+
 import os
 import shutil
 import datetime
