@@ -1,3 +1,101 @@
+import os
+import shutil
+import datetime
+import Tkinter as tk
+import tkMessageBox
+import tkFileDialog
+
+CONFIG_FILE = "transfer_tool.conf"
+
+def read_config(path):
+    config = {}
+    if not os.path.exists(path):
+        return config
+    for line in open(path):
+        if "=" in line:
+            k, v = line.strip().split("=", 1)
+            config[k.strip()] = v.strip().strip('"')
+    return config
+
+config = read_config(CONFIG_FILE)
+VERSION = config.get("VERSION", "1.0")
+USER = config.get("USER", "defaultuser")
+UPDATE_SOURCE = config.get("UPDATE_SOURCE", "")
+LOG_DIR = config.get("LOG_DIR", "C:/Users/{}/OneDrive/Logs".format(USER))
+
+def get_transfer_dir():
+    now = datetime.datetime.now()
+    folder = "C:/Users/{}/OneDrive/file_transfer_{}/{}".format(USER, now.year, now.strftime("%Y%m%d"))
+    if not os.path.exists(folder):
+        os.makedirs(folder)
+    return folder
+
+def run_scp_download():
+    host = host_entry.get()
+    remote = remote_entry.get()
+    if not host or not remote:
+        tkMessageBox.showerror("Error", "Enter host and remote path.")
+        return
+    filename = os.path.basename(remote)
+    local_path = os.path.join(get_transfer_dir(), filename)
+    result = os.system('scp {}:"{}" "{}"'.format(host, remote, local_path))
+    if result == 0:
+        tkMessageBox.showinfo("Downloaded", "Saved to:\n{}".format(local_path))
+    else:
+        tkMessageBox.showerror("Error", "Download failed.")
+
+def run_scp_upload():
+    host = host_entry.get()
+    if not host:
+        tkMessageBox.showerror("Error", "Enter host.")
+        return
+    local = tkFileDialog.askopenfilename()
+    if not local:
+        return
+    remote = remote_entry.get() or "~/"
+    result = os.system('scp "{}" {}:"{}"'.format(local, host, remote))
+    if result == 0:
+        tkMessageBox.showinfo("Uploaded", "File uploaded to:\n{}:{}".format(host, remote))
+    else:
+        tkMessageBox.showerror("Error", "Upload failed.")
+
+def check_update():
+    if not os.path.exists(UPDATE_SOURCE):
+        tkMessageBox.showerror("Update", "Source not found.")
+        return
+    remote_version = None
+    for line in open(UPDATE_SOURCE):
+        if line.startswith("VERSION="):
+            remote_version = line.split("=")[1].strip().strip('"')
+            break
+    if remote_version and remote_version > VERSION:
+        if tkMessageBox.askyesno("Update", "New version {} available.\nUpdate?".format(remote_version)):
+            shutil.copy(UPDATE_SOURCE, os.path.realpath(__file__))
+            tkMessageBox.showinfo("Updated", "Script updated. Restart now.")
+    else:
+        tkMessageBox.showinfo("No Update", "You have the latest version.")
+
+root = tk.Tk()
+root.title("File Transfer Tool v{}".format(VERSION))
+
+tk.Label(root, text="Host (user@host):").grid(row=0, column=0, sticky="e")
+host_entry = tk.Entry(root, width=40)
+host_entry.grid(row=0, column=1)
+
+tk.Label(root, text="Remote Path:").grid(row=1, column=0, sticky="e")
+remote_entry = tk.Entry(root, width=40)
+remote_entry.grid(row=1, column=1)
+
+tk.Button(root, text="Download", command=run_scp_download).grid(row=2, column=0, pady=10)
+tk.Button(root, text="Upload", command=run_scp_upload).grid(row=2, column=1, pady=10)
+tk.Button(root, text="Check for Update", command=check_update).grid(row=3, column=0, columnspan=2, pady=5)
+tk.Button(root, text="Exit", command=root.quit).grid(row=4, column=0, columnspan=2, pady=10)
+
+root.mainloop()
+
+
+
+
 #!/bin/bash
 
 # === ИНИЦИАЛИЗАЦИЯ ===
