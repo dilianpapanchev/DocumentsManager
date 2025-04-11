@@ -1,5 +1,13 @@
 awk -F '|' '
   /Package/ && $1 ~ /^Package / && NF >= 2 {
+    printf "\\Z1%s\\Zn\\Z2 is installed on \\Zn\\Z1%s\\Zn\n", $1, $2
+  }
+'
+
+
+
+awk -F '|' '
+  /Package/ && $1 ~ /^Package / && NF >= 2 {
     printf "\Z1%s \Zn\Z2%s\Zn\n", $1, $2
   }
 '
