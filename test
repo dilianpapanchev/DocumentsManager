@@ -1,5 +1,70 @@
 #!/bin/bash
 
+CONF_DIR="./conf"
+LOG_DIR="./log"
+mkdir -p "$LOG_DIR"
+
+LOG_FILE="${LOG_DIR}/log_$(date +%Y%m%d_%H%M%S).log"
+touch "$LOG_FILE"
+
+log() {
+    echo "$(date +'%Y-%m-%d %H:%M:%S') - $1" >> "$LOG_FILE"
+}
+
+get_input() {
+    local prompt=$1
+    local result_var=$2
+    while true; do
+        exec 3>&1
+        value=$(dialog --clear --backtitle "Host Configuration" \
+            --inputbox "$prompt" 8 50 2>&1 1>&3)
+        exec 3>&-
+        if [[ -z "$value" ]]; then
+            dialog --msgbox "Value cannot be empty." 6 40
+        else
+            eval "$result_var=\"$value\""
+            log "$prompt: $value"
+            break
+        fi
+    done
+}
+
+select_environment() {
+    exec 3>&1
+    env_choice=$(dialog --clear --backtitle "Environment Choice" \
+        --menu "Hostname matches .hu.srv.dev. Choose environment:" 10 50 2 \
+        1 "SP24" \
+        2 "TPH" \
+        2>&1 1>&3)
+    exec 3>&-
+
+    case $env_choice in
+        1) ENV_NAME="SP24";;
+        2) ENV_NAME="TPH";;
+        *) ENV_NAME="UNKNOWN";;
+    esac
+
+    log "Selected ENV: $ENV_NAME"
+}
+
+# Main
+get_input "Enter Hostname:" HOSTNAME
+
+if [[ "$HOSTNAME" == *".hu.srv.dev"* ]]; then
+    select_environment
+else
+    ENV_NAME="Unknown"
+    log "Hostname does not match .hu.srv.dev. Skipping ENV selection."
+fi
+
+dialog --msgbox "Hostname: $HOSTNAME\nEnvironment: $ENV_NAME\nLog saved to $LOG_FILE" 10 60
+clear
+
+
+
+
+#!/bin/bash
+
 CONFIG_FILE="./conf/config.conf"
 source "$CONFIG_FILE"
 
