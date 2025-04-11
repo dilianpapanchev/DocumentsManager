@@ -1,3 +1,15 @@
+output=$(ssh user@host '
+  SQL="SELECT RECID, SAVED_DATE FROM V_F_T24_MODEL_PACKAGES WHERE RECID LIKE '\''R20_KHP%'\'' ORDER BY SAVED_DATE"
+  echo "$SQL" | /path/to/sqlcli | grep -v "RECID\|rows selected\|Transaction committed" | awk -F"|" '\''{
+    printf "\\Zb\\Z2Package %s\\Zn is installed on \\Zb\\Z4%s\\Zn\n", $1, $2
+  }'\'
+')
+
+dialog --colors --title "Installed Packages" --msgbox "$output" 20 70
+
+
+
+
 awk -F"|" '!/RECID|rows selected|Transaction committed/ && NF >= 2 {
     print "\\Zb\\Z1" $1 "\\Zn"
     print "\\Zb\\Z2" $2 "\\Zn"
