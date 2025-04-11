@@ -1,3 +1,38 @@
+#!/bin/bash
+
+CONFIG_FILE="./conf/config.conf"
+source "$CONFIG_FILE"
+
+# Проверка за наличен dialog
+if ! command -v dialog &>/dev/null; then
+    echo "dialog is not installed!"
+    exit 1
+fi
+
+# Избор на хост
+dialog --inputbox "Enter Hostname:" 10 60 2>temp_hostname
+HOSTNAME=$(<temp_hostname)
+rm -f temp_hostname
+
+# Проверка за .hu.srv.dev или .hu.srv.acc
+if [[ "$HOSTNAME" == *".hu.srv.dev"* || "$HOSTNAME" == *".hu.srv.acc"* ]]; then
+    dialog --menu "Environment Detected. Select:" 10 50 2 \
+        "SP24" "Service Pack 24" \
+        "TPH" "TPH Environment" 2>temp_env
+    ENV_SELECTED=$(<temp_env)
+    rm -f temp_env
+else
+    ENV_SELECTED="UNKNOWN"
+fi
+
+# Потвърждение
+dialog --msgbox "Hostname: $HOSTNAME\nDetected Env: $ENV_SELECTED" 10 50
+clear
+
+
+
+
+
 use_shadow = OFF
 use_colors = ON
 
