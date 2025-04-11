@@ -1,3 +1,25 @@
+# Създаваме временен файл за изхода
+TMP_OUT=$(mktemp)
+
+# SSH с dzdo + вътрешни команди
+ssh "$HOSTNAME" bash <<EOF > "$TMP_OUT" 2>&1
+echo "[CONNECTED as \$(whoami)]"
+dzdo su user <<INNER
+echo "[SWITCHED to user]"
+echo "Searching for $SEARCH_TYPE with mask: $MASK"
+# Тук може да добавиш реална команда по-късно
+echo "Result for: $MASK"
+exit
+INNER
+EOF
+
+# Показване на резултата в диалог
+dialog --title "SSH Output ($SEARCH_TYPE)" --textbox "$TMP_OUT" 20 80
+rm -f "$TMP_OUT"
+
+
+
+
 #!/bin/bash
 
 CONFIG_FILE="./conf/dev.conf"
