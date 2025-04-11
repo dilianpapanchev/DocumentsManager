@@ -1,3 +1,37 @@
+# 1. Въвеждане на маска след избора на Package/Update
+while true; do
+    exec 3>&1
+    MASK=$(dialog --nocancel --inputbox "Enter search mask for $SEARCH_TYPE:" 8 50 2>&1 1>&3)
+    exec 3>&-
+    [[ -n "$MASK" ]] && break
+    dialog --msgbox "Mask cannot be empty!" 6 40
+done
+logger "INFO" "Mask entered: $MASK"
+
+# 2. Създаваме временно файлче за резултата
+TMP_OUT=$(mktemp)
+
+# 3. SSH с dzdo + вътрешна логика
+ssh "$HOSTNAME" bash <<EOF > "$TMP_OUT" 2>&1
+echo "[Connected to \$(hostname)]"
+dzdo su user <<INNER
+echo "[Switched to user]"
+echo "You selected: $SEARCH_TYPE"
+echo "Searching for: $MASK"
+# Примерна симулация:
+echo "Found entry matching mask: $MASK"
+exit
+INNER
+EOF
+
+# 4. Показване на изхода от SSH в dialog
+dialog --title "Results for '$MASK'" --textbox "$TMP_OUT" 20 70
+rm -f "$TMP_OUT"
+logger "INFO" "SSH execution complete"
+
+
+
+
 # Създаваме временен файл за изхода
 TMP_OUT=$(mktemp)
 
