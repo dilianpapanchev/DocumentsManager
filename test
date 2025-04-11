@@ -1,3 +1,10 @@
+awk -F"|" '!/RECID|rows selected|Transaction committed/ && NF >= 2 {
+    printf "\\\\Zb\\\\Z1%s\\\\Zn\\\\n\\\\Zb\\\\Z2%s\\\\Zn", $1, $2
+}'
+
+
+
+
 # 1. Въвеждане на маска след избора на Package/Update
 while true; do
     exec 3>&1
