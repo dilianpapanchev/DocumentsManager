@@ -1,3 +1,49 @@
+function parseTimeToMinutes(timeStr) {
+  const parts = timeStr.split(":");
+  if (parts.length === 3) {
+    let hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    const seconds = parseInt(parts[2], 10);
+    return hours * 60 + minutes + seconds / 60;
+  }
+  return null;
+}
+
+function getTimingChartData() {
+  const table = document.getElementById("recordsTable");
+  const rows = table.getElementsByTagName("tr");
+
+  const dates = [];
+  const ilc03time = [], cobStart = [], cobStop = [], rrStart = [], rrStop = [], a77time = [];
+
+  for (let i = 1; i < rows.length; i++) {
+    const cells = rows[i].getElementsByTagName("td");
+    if (cells.length !== 10) continue;
+
+    const date = cells[0].innerText;
+    const baseDay = parseInt(date.slice(-2), 10); // банков ден
+
+    const baseTime = parseTimeToMinutes("12:00:00");
+
+    function adjustTime(timeStr) {
+      const t = parseTimeToMinutes(timeStr);
+      return (t < baseTime) ? t + 1440 : t; // ако е след полунощ – добави 24 часа
+    }
+
+    dates.push(date);
+    ilc03time.push(adjustTime(cells[1].innerText));
+    cobStart.push(adjustTime(cells[2].innerText));
+    cobStop.push(adjustTime(cells[3].innerText));
+    rrStart.push(adjustTime(cells[6].innerText));
+    rrStop.push(adjustTime(cells[7].innerText));
+    a77time.push(adjustTime(cells[9].innerText));
+  }
+
+  return { dates, ilc03time, cobStart, cobStop, rrStart, rrStop, a77time };
+}
+
+
+
 <script>
 function parseTimeToMinutes(timeStr, reference = null) {
     const parts = timeStr.split(":");
