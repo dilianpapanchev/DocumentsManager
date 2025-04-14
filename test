@@ -1,3 +1,32 @@
+function getTimingChartData() {
+    const table = document.getElementById("recordsTable");
+    const rows = table.getElementsByTagName("tr");
+
+    const dates = [];
+    const ilc03time = [], cobStart = [], cobStop = [], rrStart = [], rrStop = [], a77Time = [];
+
+    for (let i = 1; i < rows.length; i++) {
+        const cells = rows[i].getElementsByTagName("td");
+        if (cells.length < 10) continue;
+
+        const date = cells[0].innerText;
+        const refTime = parseTimeToMinutes(cells[2].innerText); // COB Start
+
+        if (refTime === null) continue;
+
+        dates.push(date);
+        cobStart.push(refTime);
+        ilc03time.push(parseTimeToMinutes(cells[1].innerText, refTime));
+        cobStop.push(parseTimeToMinutes(cells[3].innerText, refTime));
+        rrStart.push(parseTimeToMinutes(cells[6].innerText, refTime));
+        rrStop.push(parseTimeToMinutes(cells[7].innerText, refTime));
+        a77Time.push(parseTimeToMinutes(cells[9].innerText, refTime));
+    }
+
+    return { dates, ilc03time, cobStart, cobStop, rrStart, rrStop, a77Time };
+}
+
+
 function parseTimeToMinutes(timeStr, reference = null) {
     const parts = timeStr.split(":");
     if (parts.length !== 3) return null;
