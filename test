@@ -1,3 +1,23 @@
+function parseTimeToMinutes(timeString, reference = null) {
+    const parts = timeString.split(":");
+    if (parts.length === 3) {
+        let hours = parseInt(parts[0], 10);
+        const minutes = parseInt(parts[1], 10);
+        const seconds = parseInt(parts[2], 10);
+        let totalMinutes = hours * 60 + minutes + seconds / 60;
+
+        // Shift if after midnight and earlier than the reference (like COB Start)
+        if (reference !== null && totalMinutes < reference) {
+            totalMinutes += 1440;
+        }
+
+        return totalMinutes;
+    }
+    return 0;
+}
+
+
+
 const startTime = parseTimeToMinutes(cells[2].innerText); // COB Start
 
 const stopTime = parseTimeToMinutes(cells[3].innerText, startTime);  // COB Stop
