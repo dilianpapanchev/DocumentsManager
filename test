@@ -1,3 +1,27 @@
+# Зареждаме функцията локално
+source ./lib/sql_query.sh
+
+# Инжектираме функцията и променливите в SSH + dzdo
+ssh "${USER}@${HOSTNAME}" bash <<EOF >"$TMP_OUT" 2>&1
+$(declare -f sql_query)
+
+echo "[Connected to \$(hostname)]"
+
+dzdo su - je35696 -c "$(cat <<'INNER'
+$(declare -f sql_query)
+
+echo "[Switched to user \$(whoami)]"
+echo "You selected: $SEARCH_TYPE"
+echo "Searching for: $MASK"
+
+sql_query "$SEARCH_TYPE" "$MASK"
+INNER
+)"
+EOF
+
+
+
+
 ssh "${USER}@${HOSTNAME}" bash <<EOF >"$TMP_OUT" 2>&1
 $(declare -f sql_query)
 
