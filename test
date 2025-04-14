@@ -1,3 +1,42 @@
+function getTimingChartData() {
+    const table = document.getElementById("recordsTable");
+    const rows = table.getElementsByTagName("tr");
+
+    const dates = [];
+    const ilc03time = [], cobStart = [], cobStop = [], rrStart = [], rrStop = [], a77Time = [];
+
+    for (let i = 1; i < rows.length; i++) {
+        const cells = rows[i].getElementsByTagName("td");
+        if (cells.length < 10) continue;
+
+        const date = cells[0].innerText;
+
+        // 1. COB Start as reference
+        const cobStartText = cells[2].innerText;
+        const cobStartMin = parseTimeToMinutes(cobStartText);
+        cobStart.push(cobStartMin);
+
+        // 2. Parse rest with reference
+        const ilcTime = parseTimeToMinutes(cells[1].innerText, cobStartMin);
+        const cobStopTime = parseTimeToMinutes(cells[3].innerText, cobStartMin);
+        const rrStartTime = parseTimeToMinutes(cells[6].innerText, cobStartMin);
+        const rrStopTime = parseTimeToMinutes(cells[7].innerText, cobStartMin);
+        const a77_Time = parseTimeToMinutes(cells[9].innerText, cobStartMin);
+
+        dates.push(date);
+        ilc03time.push(ilcTime);
+        cobStop.push(cobStopTime);
+        rrStart.push(rrStartTime);
+        rrStop.push(rrStopTime);
+        a77Time.push(a77_Time);
+    }
+
+    return { dates, ilc03time, cobStart, cobStop, rrStart, rrStop, a77Time };
+}
+
+
+
+
 <script>
 function parseTimeToMinutes(timeString, reference = null) {
     const parts = timeString.split(":");
