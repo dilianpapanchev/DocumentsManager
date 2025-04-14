@@ -1,3 +1,26 @@
+function parseTimeToMinutes(timeString, reference = null) {
+    const parts = timeString.split(":");
+    if (parts.length === 3) {
+        let hours = parseInt(parts[0], 10);
+        const minutes = parseInt(parts[1], 10);
+        const seconds = parseInt(parts[2], 10);
+        let totalMinutes = hours * 60 + minutes + seconds / 60;
+
+        // Ако reference е под 300 мин (5ч), и времето е < reference => преминаване след полунощ
+        if (reference !== null && totalMinutes < reference) {
+            totalMinutes += 1440; // добавя 24ч
+        }
+
+        return totalMinutes;
+    }
+    return 0;
+}
+
+
+
+
+
+
 awk -F '|' '
   /Package/ && $1 ~ /^Package / && NF >= 2 {
     printf "\\Z1%s\\Zn\\Z2 is installed on \\Zn\\Z1%s\\Zn\n", $1, $2
