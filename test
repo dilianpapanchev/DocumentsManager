@@ -1,3 +1,42 @@
+function getTimingChartData() {
+    const table = document.getElementById("recordsTable");
+    const rows = table.getElementsByTagName("tr");
+
+    const dates = [];
+    const ilc03time = [], cobStart = [], cobStop = [], rrStart = [], rrStop = [], a77Time = [];
+
+    for (let i = 1; i < rows.length; i++) {
+        const cells = rows[i].getElementsByTagName("td");
+        if (cells.length < 10) continue;
+
+        const date = cells[0].innerText;
+        const cobStartText = cells[2].innerText;
+        const cobStartMinutes = parseTimeToMinutes(cobStartText);  // без reference, това Е reference
+
+        // Парсваме останалите с тази стойност като reference
+        const ilc03Minutes = parseTimeToMinutes(cells[1].innerText, cobStartMinutes);
+        const cobStopMinutes = parseTimeToMinutes(cells[3].innerText, cobStartMinutes);
+        const rrStartMinutes = parseTimeToMinutes(cells[6].innerText, cobStartMinutes);
+        const rrStopMinutes = parseTimeToMinutes(cells[7].innerText, cobStartMinutes);
+        const a77Minutes = parseTimeToMinutes(cells[9].innerText, cobStartMinutes);
+
+        dates.push(date);
+        cobStart.push(cobStartMinutes);
+        ilc03time.push(ilc03Minutes);
+        cobStop.push(cobStopMinutes);
+        rrStart.push(rrStartMinutes);
+        rrStop.push(rrStopMinutes);
+        a77Time.push(a77Minutes);
+    }
+
+    return { dates, ilc03time, cobStart, cobStop, rrStart, rrStop, a77Time };
+}
+
+
+
+
+
+
 function parseTimeToMinutes(timeStr, reference = null) {
     const parts = timeStr.split(":");
     if (parts.length !== 3) return 0;
