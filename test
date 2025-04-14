@@ -1,3 +1,23 @@
+ssh "${USER}@${HOSTNAME}" bash <<EOF >"$TMP_OUT" 2>&1
+$(declare -f sql_query)
+
+echo "[Connected to \$(hostname)]"
+
+dzdo su - je35696 -c "$(cat <<EOF_INNER
+$(declare -f sql_query)
+
+echo "[Switched to user \`whoami\`]"
+echo "You selected: ${SEARCH_TYPE}"
+echo "Searching for: ${MASK}"
+sql_query "${SEARCH_TYPE}" "${MASK}"
+EOF_INNER
+)"
+EOF
+
+
+
+
+
 # Зареждаме функцията локално
 source ./lib/sql_query.sh
 
