@@ -1,3 +1,14 @@
+const startTime = parseTimeToMinutes(cells[2].innerText); // COB Start
+
+const stopTime = parseTimeToMinutes(cells[3].innerText, startTime);  // COB Stop
+const rrStartTime = parseTimeToMinutes(cells[6].innerText, startTime);
+const rrStopTime = parseTimeToMinutes(cells[7].innerText, startTime);
+const a77Time = parseTimeToMinutes(cells[9].innerText, startTime);
+const ilc03Process = parseTimeToMinutes(cells[1].innerText, startTime);
+
+
+
+
 function parseTimeToMinutes(timeString, reference = null) {
     const parts = timeString.split(":");
     if (parts.length === 3) {
