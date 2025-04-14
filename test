@@ -1,4 +1,22 @@
 ssh "${USER}@${HOSTNAME}" bash <<EOF >"$TMP_OUT" 2>&1
+echo "[Connected to \$(hostname)]"
+
+dzdo su - je35696 -s /bin/bash <<'INNER'
+$(cat ./lib/sql_query.sh)
+
+echo "[Switched to user \$(whoami)]"
+echo "You selected: ${SEARCH_TYPE}"
+echo "Searching for: ${MASK}"
+
+sql_query "${SEARCH_TYPE}" "${MASK}"
+INNER
+EOF
+
+
+
+
+
+ssh "${USER}@${HOSTNAME}" bash <<EOF >"$TMP_OUT" 2>&1
 $(declare -f sql_query)
 
 echo "[Connected to \$(hostname)]"
