@@ -1,3 +1,8 @@
+ssh "${USER}@${HOSTNAME}" 'bash -s' -- "$SEARCH_TYPE" "$MASK" < ./lib/sql_query.sh > "$TMP_OUT" 2>&1
+
+
+
+
 <script>
 function parseTimeToMinutes(timeStr) {
   const parts = timeStr.split(":");
