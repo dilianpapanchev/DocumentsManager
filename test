@@ -1,3 +1,7 @@
+TMP_OUT_COLOR=$(grep "$MASK" "$TMP_OUT" | grep -v 'Searching for' | awk -v type="$SEARCH_TYPE" -F '|' '{printf type " \Zb\Z1%s\Zn is installed on \Zb\Z4%s\Zn\n", $1, $2}')
+
+
+
 ssh "${USER}@${HOSTNAME}" bash <<EOF >"$TMP_OUT" 2>&1
 echo "[Connected to \$(hostname)]"
 
