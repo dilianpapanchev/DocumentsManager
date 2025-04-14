@@ -1,3 +1,15 @@
+callback: {
+    label: function(context) {
+        const value = context.raw;
+        const h = Math.floor(value / 60);
+        const m = Math.floor(value % 60);
+        return `${context.dataset.label}: ${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+    }
+}
+
+
+
+
 function getTimingChartData() {
     const table = document.getElementById("recordsTable");
     const rows = table.getElementsByTagName("tr");
