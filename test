@@ -1,3 +1,60 @@
+while true; do
+  while true; do
+    exec 3>&1
+    MASK=$(dialog --nocancel --inputbox "Enter search mask for $SEARCH_TYPE:" 8 50 2>&1 1>&3)
+    exec 3>&-
+    [[ -n "$MASK" ]] && break
+    dialog --msgbox "Mask cannot be empty!" 6 40
+  done
+  logger "INFO" "Mask entered: $MASK"
+
+  TMP_OUT=$(mktemp)
+
+  ssh "${USER}@${HOSTNAME}" bash <<EOF >"$TMP_OUT" 2>&1
+echo "[Connected to \$(hostname)]"
+dzdo bash -o vi <<'INNER'
+$(cat ./lib/functions)
+
+cd /opt/t24/tafj/bin
+echo "[Switched to user \$(whoami)]"
+echo "You selected: ${SEARCH_TYPE}"
+echo "Searching for: ${MASK}"
+sql_query "${SEARCH_TYPE}" "${MASK}" "$dbtools"
+INNER
+EOF
+
+  clear && clear
+
+  TMP_OUT_COLOR=$(grep "$MASK" "$TMP_OUT" | grep -v 'Searching for' | awk -F'|' '{printf "'"\${SEARCH_TYPE}"' \Zb\Z1%s\Zn is installed on \Zb\Z4%s\Zn\n", $1, $2}')
+  grep "$MASK" "$TMP_OUT" | grep -v 'Searching for' | awk -F'|' -v type="$SEARCH_TYPE" '{print type, $1, "is installed on", $2}' > ./debug_log.tmp
+
+  while read -r line; do
+    logger "DEBUG" "$line"
+  done < ./debug_log.tmp
+
+  dialog_window=$(wc -l ./debug_log.tmp | awk '{print $1}')
+  dialog_window=$((dialog_window + 5))
+
+  dialog --colors \
+    --title "Results for '$MASK'" \
+    --yes-label "Search again" \
+    --no-label "Exit" \
+    --yesno "$TMP_OUT_COLOR" $dialog_window 90
+
+  RESPONSE=$?
+  logger "INFO" "SSH execution complete"
+
+  if [[ "$RESPONSE" -ne 0 ]]; then
+    break
+  fi
+done
+
+
+
+
+
+
+
 TMP_OUT_COLOR=$(grep "$MASK" "$TMP_OUT" | grep -v 'Searching for' | awk -v type="$SEARCH_TYPE" -F '|' '{printf type " \Zb\Z1%s\Zn is installed on \Zb\Z4%s\Zn\n", $1, $2}')
 
 
