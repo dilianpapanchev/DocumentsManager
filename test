@@ -1,3 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Dark Mode Example</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <style>
+        body, table, th, td {
+            transition: background-color 0.5s, color 0.5s;
+        }
+
+        table {
+            width: 80%;
+            margin: 20px auto;
+            border-collapse: collapse;
+        }
+
+        th, td {
+            padding: 10px;
+            border: 1px solid #ccc;
+            text-align: center;
+        }
+
+        #darkModeToggle {
+            position: fixed;
+            top: 10px;
+            right: 10px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background-color: #444;
+            color: white;
+            border: none;
+            cursor: pointer;
+            z-index: 9999;
+        }
+
+        /* DARK MODE СТИЛОВЕ */
+        body.dark-mode {
+            background-color: #121212;
+            color: white;
+        }
+
+        body.dark-mode table {
+            background-color: #1e1e1e;
+            color: white;
+        }
+
+        body.dark-mode th {
+            background-color: #333;
+            color: #fff;
+        }
+
+        body.dark-mode td {
+            background-color: #1e1e1e;
+            color: #ddd;
+        }
+
+        body.dark-mode canvas {
+            background-color: #1e1e1e;
+        }
+    </style>
+</head>
+<body>
+
+<button id="darkModeToggle">🌙 Dark Mode</button>
+
+<h1 style="text-align: center;">Example Table and Chart</h1>
+
+<table>
+    <thead>
+        <tr>
+            <th>Day</th>
+            <th>Value</th>
+        </tr>
+    </thead>
+    <tbody>
+        <tr>
+            <td>Monday</td>
+            <td>10</td>
+        </tr>
+        <tr>
+            <td>Tuesday</td>
+            <td>20</td>
+        </tr>
+    </tbody>
+</table>
+
+<div style="width: 60%; margin: 30px auto;">
+    <canvas id="myChart"></canvas>
+</div>
+
+<script>
+    // Chart
+    const ctx = document.getElementById('myChart').getContext('2d');
+    let myChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Monday', 'Tuesday'],
+            datasets: [{
+                label: 'Values',
+                data: [10, 20],
+                backgroundColor: 'rgba(75, 192, 192, 0.6)',
+                borderColor: 'rgba(75, 192, 192, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+
+    // Dark Mode Toggle
+    document.getElementById('darkModeToggle').addEventListener('click', function() {
+        document.body.classList.toggle('dark-mode');
+
+        if (document.body.classList.contains('dark-mode')) {
+            this.innerHTML = '☀️ Light Mode';
+        } else {
+            this.innerHTML = '🌙 Dark Mode';
+        }
+
+        // Презареждане на графиката
+        myChart.destroy();
+        myChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: ['Monday', 'Tuesday'],
+                datasets: [{
+                    label: 'Values',
+                    data: [10, 20],
+                    backgroundColor: document.body.classList.contains('dark-mode') 
+                        ? 'rgba(255, 99, 132, 0.6)' 
+                        : 'rgba(75, 192, 192, 0.6)',
+                    borderColor: document.body.classList.contains('dark-mode') 
+                        ? 'rgba(255, 99, 132, 1)' 
+                        : 'rgba(75, 192, 192, 1)',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    });
+</script>
+
+</body>
+</html>
+
+
+
+
 function getTextColor() {
     return document.body.classList.contains('dark-mode') ? 'white' : 'black';
 }
