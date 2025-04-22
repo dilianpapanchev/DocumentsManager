@@ -1,3 +1,9 @@
+function getTextColor() {
+    return document.body.classList.contains('dark-mode') ? 'white' : 'black';
+}
+
+
+
 body {
     transition: background-color 0.5s, color 0.5s;
 }
