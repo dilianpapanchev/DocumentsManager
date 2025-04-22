@@ -1,3 +1,189 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+    <meta charset="UTF-8">
+    <title>COB Analyser Report - SP24 PROD</title>
+    <link rel="icon" href="https://jobmarketforyoungresearchers.be/files/attachments/28736/w11200hp1200g5S_KBClogonieu.png">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        body {
+            font-family: "Century Gothic", sans-serif;
+            background-color: #f4f4f9;
+            font-size: 12px;
+        }
+        table {
+            border-collapse: collapse;
+            width: 30%;
+            margin: 20px auto;
+            border-radius: 10px;
+            overflow: hidden;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        th, td {
+            padding: 10px;
+            text-align: center;
+            border: 1px solid #b3e0ff;
+        }
+        th {
+            background-color: #b3e0ff;
+            color: black;
+        }
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tr:nth-child(odd) {
+            background-color: #ffffff;
+        }
+        .rounded {
+            border-radius: 10px;
+        }
+        .dark-mode {
+            background-color: #121212;
+            color: #ffffff;
+        }
+        .dark-mode table {
+            background-color: #1e1e1e;
+            color: #ffffff;
+        }
+        .dark-mode th, .dark-mode td {
+            border-color: #444;
+        }
+        #buttonPanel {
+            text-align: center;
+            margin-top: 10px;
+        }
+        #buttonPanel button {
+            margin: 5px;
+            padding: 10px 20px;
+            font-size: 12px;
+            border-radius: 8px;
+            border: none;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+
+<div id="buttonPanel">
+    <button id="toggleDarkMode">Toggle Dark Mode</button>
+    <button id="exportPdf">Export to PDF</button>
+</div>
+
+<h2 style="text-align:center;">SP24 PROD COB Analyser Report</h2>
+
+<!-- Тук си е твоето съдържание с таблици, графики и т.н. -->
+
+<table id="recordsTable" class="rounded">
+    <tr><th colspan="10">COB last 10 Elapsed Time & Transactions</th></tr>
+</table>
+
+<div class="chart-container" style="max-width: 800px; margin: auto;">
+    <canvas id="elapsedChart"></canvas>
+</div>
+
+<!-- JavaScript за Charts, Buttons -->
+
+<script>
+function renderElapsedChart() {
+    const ctx = document.getElementById('elapsedChart').getContext('2d');
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: ['Sample 1', 'Sample 2', 'Sample 3'],
+            datasets: [{
+                label: 'Records Per Minute',
+                data: [10, 20, 15],
+                backgroundColor: 'rgba(255, 99, 132, 0.2)',
+                borderColor: 'rgba(255, 99, 132, 1)',
+                borderWidth: 2,
+                borderRadius: 15,
+                hoverBorderWidth: 3,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        color: '#333'
+                    }
+                },
+                x: {
+                    ticks: {
+                        color: '#333'
+                    }
+                }
+            },
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'COB Elapsed Time vs Transactions',
+                    color: '#222',
+                    font: {
+                        size: 13,
+                        weight: 'bold'
+                    }
+                },
+                legend: {
+                    labels: {
+                        color: '#444',
+                        font: {
+                            size: 13
+                        }
+                    }
+                }
+            }
+        }
+    });
+}
+renderElapsedChart();
+
+// Toggle Dark Mode
+document.getElementById('toggleDarkMode').addEventListener('click', () => {
+    document.body.classList.toggle('dark-mode');
+    updateChartsTheme();
+});
+
+function updateChartsTheme() {
+    const dark = document.body.classList.contains('dark-mode');
+    const charts = Chart.instances;
+    Object.values(charts).forEach(chart => {
+        chart.options.plugins.title.color = dark ? '#ffffff' : '#222222';
+        chart.options.plugins.legend.labels.color = dark ? '#ffffff' : '#444444';
+        chart.options.scales.x.ticks.color = dark ? '#ffffff' : '#333333';
+        chart.options.scales.y.ticks.color = dark ? '#ffffff' : '#333333';
+        chart.update();
+    });
+}
+
+// Export to PDF
+document.getElementById('exportPdf').addEventListener('click', () => {
+    html2canvas(document.body).then(canvas => {
+        const imgData = canvas.toDataURL('image/png');
+        const { jsPDF } = window.jspdf;
+        const pdf = new jsPDF('p', 'mm', 'a4');
+        const imgProps = pdf.getImageProperties(imgData);
+        const pdfWidth = pdf.internal.pageSize.getWidth();
+        const pdfHeight = (imgProps.height * pdfWidth) / imgProps.width;
+        pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
+        pdf.save('COB_Report.pdf');
+    });
+});
+</script>
+
+</body>
+</html>
+
+
+
+
+
 while true; do
   while true; do
     exec 3>&1
