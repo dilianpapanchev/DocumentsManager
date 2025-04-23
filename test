@@ -1,3 +1,62 @@
+const toggle = document.getElementById('darkModeToggle');
+const icon = document.getElementById('themeIcon');
+
+toggle.addEventListener('click', () => {
+  document.body.classList.toggle('dark-mode');
+
+  const isDark = document.body.classList.contains('dark-mode');
+  icon.textContent = isDark ? '🌙' : '🌞';
+
+  // Променяме и позиция и фон автоматично чрез CSS класовете
+});
+
+<div id="darkModeToggle">
+  <div class="icon" id="themeIcon">🌞</div>
+</div>
+
+#darkModeToggle {
+  position: fixed;
+  top: 90px; /* Местим надолу, за да не покрива снимката */
+  left: 20px;
+  z-index: 999;
+  background-color: var(--toggle-bg);
+  border: 2px solid var(--toggle-border);
+  border-radius: 30px;
+  width: 70px;
+  height: 36px;
+  cursor: pointer;
+  transition: background-color 0.3s, border-color 0.3s;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+}
+
+#darkModeToggle .icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.4s ease;
+  transform: translateX(4px);
+}
+
+body.dark-mode #darkModeToggle {
+  --toggle-bg: #222;
+  --toggle-border: #ccc;
+}
+
+body:not(.dark-mode) #darkModeToggle {
+  --toggle-bg: #eee;
+  --toggle-border: #444;
+}
+
+body.dark-mode #darkModeToggle .icon {
+  transform: translateX(36px); /* по-центрирано спрямо края */
+}
+
+
+
 #darkModeToggle {
   position: fixed;
   top: 80px;
