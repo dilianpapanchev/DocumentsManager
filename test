@@ -1,6 +1,225 @@
 <!DOCTYPE html>
 <html lang="bg">
 <head>
+  <meta charset="UTF-8">
+  <title>COB Analyser Report - SP24 PROD</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body {
+      font-family: "Century Gothic", sans-serif;
+      background-color: #f4f4f9;
+      font-size: 12px;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 30%;
+      margin: 20px auto;
+      border-radius: 10px;
+      overflow: hidden;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    }
+
+    th, td {
+      padding: 10px;
+      text-align: center;
+      border: 1px solid #b3e0ff;
+    }
+
+    th {
+      background-color: #b3e0ff;
+      color: black;
+    }
+
+    tr:nth-child(even) {
+      background-color: #f9f9f9;
+    }
+
+    tr:nth-child(odd) {
+      background-color: #ffffff;
+    }
+
+    .rounded {
+      border-radius: 10px;
+    }
+
+    .dark-mode {
+      background-color: #121212;
+      color: #e0e0e0;
+    }
+
+    .dark-mode th {
+      border-color: #e0e0e0;
+    }
+
+    .dark-mode table,
+    .dark-mode td {
+      background-color: #1f1f1f;
+      color: #e0e0e0;
+    }
+
+    .dark-mode tr:nth-child(even) {
+      background-color: #2a2a2a;
+    }
+
+    .dark-mode tr:nth-child(odd) {
+      background-color: #222222;
+    }
+
+    .dark-mode canvas {
+      background-color: #1f1f1f;
+    }
+
+    .chart-container {
+      width: 100%;
+      max-width: 1000px;
+      height: 400px;
+      margin: auto;
+      padding: 10px;
+    }
+
+    canvas {
+      width: 100% !important;
+      height: 100% !important;
+    }
+
+    :root {
+      --toggle-bg-light: #333333;
+      --toggle-bg-dark: #fef0f0;
+      --thumb-bg-light: #767666;
+      --thumb-bg-dark: #d7d7d7;
+    }
+
+    #toolsPanel {
+      position: fixed;
+      top: 110px;
+      left: 41px;
+      background: #ffffff;
+      color: #111;
+      padding: 10px;
+      border-radius: 10px;
+      box-shadow: 2px 6px 8px rgba(0, 0, 0, 0.3);
+      z-index: 99999;
+      transition: background 0.3s ease, color 0.3s ease;
+      width: 130px;
+      text-align: left;
+    }
+
+    body.dark-mode #toolsPanel {
+      background: #222;
+      color: #fef0f0;
+    }
+
+    .tools-title {
+      font-weight: bold;
+      font-size: 14px;
+      margin-bottom: 10px;
+      text-align: center;
+    }
+
+    .tool-button {
+      width: 100%;
+      height: 40px;
+      margin: 8px 0;
+      display: flex;
+      justify-content: left;
+      align-items: center;
+      padding-left: 10px;
+      border-radius: 9999px;
+      font-size: 14px;
+      font-weight: bold;
+      box-shadow: 2px 5px 10px rgba(0, 0, 0, 0.2);
+      border: none;
+      cursor: pointer;
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+
+    #darkModeToggle {
+      background-color: var(--toggle-bg-light);
+    }
+
+    body.dark-mode #darkModeToggle {
+      background-color: var(--toggle-bg-dark);
+    }
+
+    #darkModeToggle .toggle-thumb {
+      width: 30px;
+      height: 30px;
+      background-color: var(--thumb-bg-light);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.4s ease, background-color 0.4s ease;
+      transform: translateX(0);
+    }
+
+    body.dark-mode #darkModeToggle .toggle-thumb {
+      background-color: var(--thumb-bg-dark);
+      transform: translateX(32px);
+    }
+
+    #darkModeToggle .icon {
+      font-size: 18px;
+      transition: transform 1s ease;
+    }
+
+    body.dark-mode #darkModeToggle .icon {
+      transform: rotate(360deg);
+    }
+
+    /* Export Button */
+    #exportGraphsBtn {
+      background-color: #333;
+      color: white;
+    }
+
+    body.dark-mode #exportGraphsBtn {
+      background-color: #eee;
+      color: #111;
+    }
+
+    #exportGraphsBtn:hover {
+      opacity: 0.9;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolsPanel">
+    <div class="tools-title">COB Analyser<br>Tools 🛠</div>
+    <button id="darkModeToggle" class="tool-button" title="Toggle Dark Mode">
+      <div class="toggle-thumb">
+        <span class="icon">🌞</span>
+      </div>
+    </button>
+    <button id="exportGraphsBtn" class="tool-button">
+      🖼 Export<br>Graphs
+    </button>
+  </div>
+
+  <script>
+    const toggleBtn = document.getElementById('darkModeToggle');
+    const thumb = toggleBtn.querySelector('.toggle-thumb');
+    const icon = thumb.querySelector('.icon');
+
+    toggleBtn.addEventListener('click', () => {
+      document.body.classList.toggle('dark-mode');
+      icon.textContent = document.body.classList.contains('dark-mode') ? '🌙' : '🌞';
+      toggleBtn.classList.toggle('active');
+    });
+  </script>
+</body>
+</html>
+
+
+
+
+<!DOCTYPE html>
+<html lang="bg">
+<head>
   <meta charset="UTF-8" />
   <title>COB Analyser Report - CSOB PROD</title>
   <style>
