@@ -1,3 +1,112 @@
+function renderCOBChart() {
+  const { labels, values } = getCOBDataFromTable();
+  const trend = calculateTrendLine(values);
+
+  const canvas = document.getElementById('cobChart');
+  const ctx = canvas.getContext('2d');
+
+  // Фиксирани размери, без скалиране
+  canvas.width = 1000;
+  canvas.height = 400;
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'COB Elapsed',
+          data: values,
+          backgroundColor: 'rgba(154, 200, 245, 1)',
+          borderColor: 'rgba(154, 200, 245, 1)',
+          borderWidth: 1,
+          order: 1
+        },
+        {
+          label: 'Trend Line',
+          data: trend,
+          type: 'line',
+          borderColor: 'red',
+          borderDash: [5, 5],
+          borderWidth: 2,
+          fill: false,
+          pointRadius: 0,
+          tension: 0,
+          order: 2
+        }
+      ]
+    },
+    options: {
+      responsive: false, // Много важно
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function (context) {
+              const val = context.raw;
+              return `${context.dataset.label}: ${formatSecondsToHMS(val)}`;
+            }
+          }
+        },
+        title: {
+          display: true,
+          text: 'COB Elapsed Time & Trend',
+          color: 'black',
+          font: {
+            size: 13,
+            weight: 'bold'
+          }
+        },
+        legend: {
+          labels: {
+            color: 'black'
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: function (value) {
+              return formatSecondsToHMS(value);
+            },
+            color: 'black'
+          },
+          title: {
+            display: false,
+            text: 'Elapsed Time (HH:mm:ss)'
+          }
+        },
+        x: {
+          ticks: {
+            color: 'black'
+          }
+        }
+      }
+    },
+    plugins: [
+      {
+        id: 'barLabelsOnly',
+        afterDatasetsDraw(chart) {
+          const ctx = chart.ctx;
+          const datasetMeta = chart.getDatasetMeta(0);
+          ctx.save();
+          ctx.fillStyle = 'black';
+          ctx.font = 'bold 12px sans-serif';
+          ctx.textAlign = 'center';
+          datasetMeta.data.forEach((bar, i) => {
+            const val = chart.data.datasets[0].data[i];
+            const label = formatSecondsToHMS(val);
+            ctx.fillText(label, bar.x, bar.y - 6);
+          });
+          ctx.restore();
+        }
+      }
+    ]
+  });
+}
+
+
+
 plugins: [{
   id: 'barLabelsOnly',
   afterDatasetsDraw(chart) {
