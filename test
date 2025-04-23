@@ -2,6 +2,81 @@ const toggle = document.getElementById('darkModeToggle');
 const icon = document.getElementById('themeIcon');
 
 toggle.addEventListener('click', () => {
+  icon.style.opacity = 0;
+  setTimeout(() => {
+    document.body.classList.toggle('dark-mode');
+    const isDark = document.body.classList.contains('dark-mode');
+    icon.textContent = isDark ? '🌙' : '🌞';
+    icon.style.opacity = 1;
+  }, 200); // смяна на иконата след кратък fade-out
+});
+
+#darkModeContainer {
+  position: fixed;
+  top: 90px;
+  left: 20px;
+  z-index: 999;
+  text-align: center;
+  font-family: sans-serif;
+  color: var(--label-color);
+}
+
+#darkModeLabel {
+  margin-bottom: 6px;
+  font-size: 13px;
+  font-weight: bold;
+  transition: color 0.3s;
+}
+
+#darkModeToggle {
+  background-color: var(--toggle-bg);
+  border: 2px solid var(--toggle-border);
+  border-radius: 30px;
+  width: 70px;
+  height: 36px;
+  cursor: pointer;
+  transition: background-color 0.3s, border-color 0.3s;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+}
+
+#darkModeToggle .icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background-color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translateX(4px) rotate(0deg);
+  transition: transform 0.6s ease, opacity 0.4s ease;
+  opacity: 1;
+  font-size: 18px;
+}
+
+body.dark-mode #darkModeToggle .icon {
+  transform: translateX(36px) rotate(360deg);
+}
+
+body.dark-mode {
+  --toggle-bg: #222;
+  --toggle-border: #aaa;
+  --label-color: #eee;
+}
+
+body:not(.dark-mode) {
+  --toggle-bg: #eee;
+  --toggle-border: #444;
+  --label-color: #111;
+}
+
+
+const toggle = document.getElementById('darkModeToggle');
+const icon = document.getElementById('themeIcon');
+
+toggle.addEventListener('click', () => {
   document.body.classList.toggle('dark-mode');
 
   const isDark = document.body.classList.contains('dark-mode');
