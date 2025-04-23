@@ -1,3 +1,28 @@
+document.getElementById("exportGraphsBtn").addEventListener("click", () => {
+  const options = ["recordChart", "timingChart", "elapsedChart", "cpuChart"];
+  const selected = confirm("Export all graphs as images?");
+  const date = document.getElementById("reportDate")?.textContent.trim() || 'export';
+
+  if (selected) {
+    options.forEach((id, i) => {
+      const canvas = document.getElementById(id);
+      if (canvas) {
+        html2canvas(canvas.parentElement, {
+          scale: 2, // Увеличаване на качеството
+          useCORS: true
+        }).then(canvasImg => {
+          const link = document.createElement("a");
+          link.download = `${date}_${id}.png`;
+          link.href = canvasImg.toDataURL("image/png", 1.0); // 1.0 = най-високо качество
+          link.click();
+        });
+      }
+    });
+  }
+});
+
+
+
 <!DOCTYPE html>
 <html lang="bg">
 <head>
