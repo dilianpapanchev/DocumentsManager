@@ -1,3 +1,25 @@
+const toggleBtn = document.getElementById('darkModeToggle');
+const emoji = toggleBtn.querySelector('.emoji');
+let isDark = false;
+
+toggleBtn.addEventListener('click', () => {
+  document.body.classList.toggle('dark-mode');
+  toggleBtn.classList.toggle('active');
+
+  emoji.style.opacity = 0;
+  setTimeout(() => {
+    emoji.textContent = isDark ? '☀️' : '🌙';
+    emoji.style.opacity = 1;
+  }, 200);
+
+  isDark = !isDark;
+
+  updateChartsTheme?.(); // ако ползваш chart update
+});
+
+
+
+
 <div id="darkModeToggle" class="dark-toggle" title="Toggle Dark Mode">
   <span class="emoji">☀️</span>
 </div>
