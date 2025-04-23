@@ -1,3 +1,42 @@
+<button id="toggleDarkMode">Toggle Dark Mode</button>
+
+<script>
+document.getElementById('toggleDarkMode').addEventListener('click', () => {
+    document.body.classList.toggle('dark-mode');
+    updateChartsTheme();
+});
+
+function updateChartsTheme() {
+    const dark = document.body.classList.contains('dark-mode');
+    const charts = Chart.instances;
+    Object.values(charts).forEach(chart => {
+        // Заглавие и легенда
+        if (chart.options.plugins?.title) {
+            chart.options.plugins.title.color = dark ? '#ffffff' : '#222222';
+        }
+        if (chart.options.plugins?.legend?.labels) {
+            chart.options.plugins.legend.labels.color = dark ? '#ffffff' : '#444444';
+        }
+        // Скали
+        if (chart.options.scales?.x?.ticks) {
+            chart.options.scales.x.ticks.color = dark ? '#ffffff' : '#333333';
+        }
+        if (chart.options.scales?.y?.ticks) {
+            chart.options.scales.y.ticks.color = dark ? '#ffffff' : '#333333';
+        }
+        // Cutoff линии (само ако има)
+        chart.data.datasets.forEach(dataset => {
+            if (dataset.label?.includes('Cutoff')) {
+                dataset.borderColor = dark ? '#ffffff' : '#000000'; // Бяло в Dark Mode, Черно в Normal
+            }
+        });
+        chart.update();
+    });
+}
+</script>
+
+
+
 label: 'ILC03 Cutoff (22:30)',
 data: Array(dates.length).fill(2.5),
 borderColor: document.body.classList.contains('dark-mode') ? 'white' : 'black',
