@@ -1,3 +1,14 @@
+<script>
+  const darkToggle = document.getElementById('darkModeToggle');
+
+  window.addEventListener('scroll', () => {
+    const scrollTop = window.scrollY + 120; // 120px от горе
+    darkToggle.style.top = `${scrollTop}px`;
+  });
+</script>
+
+
+
 const toggle = document.getElementById('darkModeToggle');
 const icon = document.getElementById('themeIcon');
 
