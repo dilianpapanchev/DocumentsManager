@@ -1,3 +1,52 @@
+<script>
+  const toggleBtn = document.getElementById('darkModeToggle');
+  const emoji = toggleBtn.querySelector('.emoji');
+  let isDark = false;
+
+  toggleBtn.addEventListener('click', () => {
+    document.body.classList.toggle('dark-mode');
+    toggleBtn.classList.toggle('active');
+
+    // Смяна на емоджи
+    emoji.textContent = isDark ? '☀️' : '🌙';
+    isDark = !isDark;
+
+    updateChartsTheme(); // ако имаш функция за смяна на цветове на chart
+  });
+</script>
+
+
+.dark-toggle {
+  position: fixed;
+  top: 20px;
+  left: 20px;
+  width: 60px;
+  height: 30px;
+  background-color: #444;
+  border-radius: 30px;
+  cursor: pointer;
+  z-index: 9999;
+  display: flex;
+  align-items: center;
+  padding: 5px;
+  transition: background-color 0.3s;
+  overflow: hidden;
+}
+
+.dark-toggle .emoji {
+  font-size: 22px;
+  transition: transform 0.5s ease;
+  transform: translateX(0);
+}
+
+.dark-toggle.active .emoji {
+  transform: translateX(30px) rotate(360deg);
+}
+
+
+
+
+
 document.getElementById('darkModeToggle').addEventListener('click', () => {
   document.body.classList.toggle('dark-mode');
   document.getElementById('darkModeToggle').classList.toggle('active');
