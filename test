@@ -1,3 +1,34 @@
+#darkModeToggle .left-icon {
+  margin-right: auto;
+  padding-left: 10px;
+  transition: opacity 0.3s ease;
+}
+
+#darkModeToggle .moon {
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 1s ease;
+}
+
+body.dark-mode #darkModeToggle .left-icon {
+  opacity: 0;
+}
+
+body.dark-mode #darkModeToggle .moon {
+  opacity: 1;
+  transform: rotate(360deg);
+}
+
+
+<button id="darkModeToggle" class="tool-button" title="Toggle Dark Mode">
+  <span class="icon left-icon">🌞</span>
+  <div class="toggle-thumb">
+    <span class="icon moon">🌙</span>
+  </div>
+</button>
+
+
+
+
 <!DOCTYPE html>
 <html lang="bg">
 <head>
