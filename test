@@ -1,3 +1,41 @@
+body:not(.dark-mode) {
+  --toggle-bg: #e0e0e0;       /* Светлосиво тяло на бутона */
+  --thumb-bg: #ffffff;        /* Бяла иконка вътре */
+  --panel-bg: rgba(255,255,255,0.85);
+  --panel-shadow: rgba(0, 0, 0, 0.1);
+  --export-bg: #ffffff;
+  --export-text: #222;
+  --export-border: #ccc;
+}
+
+body.dark-mode {
+  --toggle-bg: #2c2c2c;       /* Тъмносиво тяло на бутона */
+  --thumb-bg: #444;           /* Тъмна иконка вътре */
+  --panel-bg: rgba(20,20,20,0.85);
+  --panel-shadow: rgba(0, 0, 0, 0.4);
+  --export-bg: #333;
+  --export-text: #eee;
+  --export-border: #666;
+}
+
+/* Tools панел */
+#toolsPanel {
+  background: var(--panel-bg);
+  box-shadow: 0 4px 12px var(--panel-shadow);
+  transition: background 0.3s ease, box-shadow 0.3s ease;
+}
+
+/* Export бутона */
+#exportGraphsBtn {
+  background-color: var(--export-bg);
+  color: var(--export-text);
+  border: 1px solid var(--export-border);
+  box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+  transition: background-color 0.3s, color 0.3s, box-shadow 0.3s;
+}
+
+
+
 <!DOCTYPE html>
 <html lang="bg">
 <head>
