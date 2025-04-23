@@ -1,3 +1,175 @@
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="UTF-8">
+  <title>COB Analyser Report - CSOB PROD</title>
+  <style>
+    :root {
+      --toggle-bg-light: #333333;
+      --toggle-bg-dark: #f0f0f0;
+      --thumb-bg-light: #767666;
+      --thumb-bg-dark: #d7d7d7;
+    }
+
+    body {
+      font-family: "Century Gothic", sans-serif;
+      background-color: #f4f4f9;
+      font-size: 12px;
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    body.dark-mode {
+      background-color: #121212;
+      color: #e0e0e0;
+    }
+
+    /* COB Tools Panel */
+    #toolsPanel {
+      position: fixed;
+      top: 120px;
+      left: 40px;
+      background: #ffffff;
+      color: #111;
+      border-radius: 18px;
+      box-shadow: 2px 6px 8px rgba(0, 0, 0, 0.3);
+      padding: 20px 15px;
+      width: 180px;
+      z-index: 99999;
+      transition: background 0.3s ease, color 0.3s ease;
+    }
+
+    body.dark-mode #toolsPanel {
+      background: #222;
+      color: #f0f0f0;
+    }
+
+    .tools-title {
+      font-weight: bold;
+      font-size: 16px;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    /* Tool Buttons */
+    .tool-button {
+      width: 100%;
+      height: 50px;
+      margin-bottom: 15px;
+      border-radius: 999px;
+      border: none;
+      font-size: 15px;
+      font-weight: bold;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 0 20px;
+      cursor: pointer;
+      box-shadow: 2px 5px 10px rgba(0, 0, 0, 0.2);
+      transition: background-color 0.3s ease, color 0.3s ease;
+    }
+
+    #exportGraphsBtn {
+      background-color: #333;
+      color: white;
+    }
+
+    body.dark-mode #exportGraphsBtn {
+      background-color: #eee;
+      color: #111;
+    }
+
+    #exportGraphsBtn .icon {
+      font-size: 18px;
+    }
+
+    /* Dark Mode Toggle */
+    #darkModeToggle {
+      width: 100%;
+      height: 50px;
+      background-color: var(--toggle-bg-light);
+      border-radius: 999px;
+      box-shadow: 2px 5px 10px rgba(0, 0, 0, 0.2);
+      padding: 6px;
+      display: flex;
+      align-items: center;
+      cursor: pointer;
+      transition: background-color 0.4s ease;
+    }
+
+    body.dark-mode #darkModeToggle {
+      background-color: var(--toggle-bg-dark);
+    }
+
+    #darkModeToggle .toggle-thumb {
+      width: 36px;
+      height: 36px;
+      background-color: var(--thumb-bg-light);
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: transform 0.4s ease, background-color 0.4s ease;
+      transform: translateX(0);
+    }
+
+    body.dark-mode #darkModeToggle .toggle-thumb {
+      background-color: var(--thumb-bg-dark);
+      transform: translateX(92px);
+    }
+
+    #darkModeToggle .icon {
+      font-size: 18px;
+      transition: transform 0.5s ease;
+    }
+
+    body.dark-mode #darkModeToggle .icon {
+      transform: rotate(360deg);
+    }
+
+    /* Animation on page scroll */
+    window, body {
+      scroll-behavior: smooth;
+    }
+  </style>
+</head>
+<body>
+  <div id="toolsPanel">
+    <div class="tools-title">COB Analyser Tools 🛠️</div>
+
+    <div id="darkModeToggle" title="Switch Theme">
+      <div class="toggle-thumb">
+        <span class="icon">☀️</span>
+      </div>
+    </div>
+
+    <button id="exportGraphsBtn" class="tool-button">
+      <span class="icon">🖼️</span>
+      Export Graphs
+    </button>
+  </div>
+
+  <script>
+    const toggleBtn = document.getElementById('darkModeToggle');
+    const thumb = toggleBtn.querySelector('.toggle-thumb');
+    const icon = thumb.querySelector('.icon');
+
+    toggleBtn.addEventListener('click', () => {
+      document.body.classList.toggle('dark-mode');
+      icon.textContent = document.body.classList.contains('dark-mode') ? '🌙' : '☀️';
+    });
+
+    // Optional: follow scroll if needed (already positioned fixed, so optional)
+    window.addEventListener('scroll', () => {
+      const scrollTop = window.scrollY + 120;
+      document.getElementById('toolsPanel').style.top = `${scrollTop}px`;
+    });
+  </script>
+</body>
+</html>
+
+
+
+
 #darkModeToggle .left-icon {
   margin-right: auto;
   padding-left: 10px;
