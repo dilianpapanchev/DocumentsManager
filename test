@@ -1,3 +1,59 @@
+document.getElementById('darkModeToggle').addEventListener('click', () => {
+  document.body.classList.toggle('dark-mode');
+  document.getElementById('darkModeToggle').classList.toggle('active');
+  updateChartsTheme();
+});
+
+
+#darkModeToggle {
+  position: fixed;
+  top: 100px;
+  left: 20px;
+  width: 50px;
+  height: 25px;
+  background-color: #ccc;
+  border-radius: 25px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: flex-start;
+  transition: background-color 0.3s;
+  z-index: 999;
+}
+
+#darkModeToggle .icon {
+  width: 25px;
+  height: 25px;
+  text-align: center;
+  line-height: 25px;
+  font-size: 14px;
+  transition: transform 0.3s;
+}
+
+#darkModeToggle.active {
+  background-color: #333;
+  justify-content: flex-end;
+}
+
+#darkModeToggle.active .sun {
+  transform: translateX(-100%);
+  opacity: 0;
+}
+
+#darkModeToggle:not(.active) .moon {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+
+<div id="darkModeToggle">
+  <div class="icon sun">☀️</div>
+  <div class="icon moon">🌙</div>
+</div>
+
+
+
+
 plugins: [{
   id: 'customLabels',
   afterDatasetsDraw(chart) {
