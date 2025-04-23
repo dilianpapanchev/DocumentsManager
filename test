@@ -3,6 +3,45 @@
   
   <div id="darkModeToggle" title="Switch Dark Mode">
     <span class="toggle-thumb"></span>
+    <span class="icon sun">☀️</span>
+    <span class="icon moon">🌙</span>
+  </div>
+
+  <button id="exportGraphsBtn" title="Export selected graphs as images">Export Graphs</button>
+</div>
+
+
+
+#toolsPanel {
+  position: absolute;
+  left: 20px;
+  top: 120px;
+  transition: top 0.3s ease;
+  z-index: 10000;
+}
+
+
+
+const toolsPanel = document.getElementById('toolsPanel');
+
+window.addEventListener('load', () => {
+  toolsPanel.style.top = `${window.scrollY + 120}px`;
+});
+
+window.addEventListener('scroll', () => {
+  const scrollTop = window.scrollY + 120;
+  toolsPanel.style.top = `${scrollTop}px`;
+});
+
+
+
+
+
+<div id="toolsPanel">
+  <div class="tools-title">Tools</div>
+  
+  <div id="darkModeToggle" title="Switch Dark Mode">
+    <span class="toggle-thumb"></span>
     <span class="icon sun">🌞</span>
     <span class="icon moon">🌜</span>
   </div>
