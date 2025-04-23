@@ -6,6 +6,120 @@ function renderCOBChart() {
   const ctx = canvas.getContext('2d');
 
   const ratio = window.devicePixelRatio || 1;
+  canvas.width = 500 * ratio;
+  canvas.height = 500 * ratio;
+  canvas.style.width = '500px';
+  canvas.style.height = '500px';
+  ctx.scale(ratio, ratio);
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'COB Elapsed',
+          data: values,
+          backgroundColor: 'rgba(154, 208, 245, 1)',
+          borderColor: 'rgba(154, 208, 245, 1)',
+          borderWidth: 1,
+          order: 1,
+          clip: false // prevent clipping text outside chart area
+        },
+        {
+          label: 'Trend Line',
+          data: trend,
+          type: 'line',
+          borderColor: 'red',
+          borderDash: [5, 5],
+          borderWidth: 2,
+          fill: false,
+          pointRadius: 0,
+          tension: 0,
+          order: 0
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true },
+        tooltip: {
+          callbacks: {
+            label: function (context) {
+              const val = context.raw;
+              return `${context.dataset.label}: ${formatSecondsToHMS(val)}`;
+            }
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: function (value) {
+              return formatSecondsToHMS(value);
+            }
+          },
+          title: {
+            display: false,
+            text: 'Elapsed Time (HH:mm:ss)'
+          }
+        }
+      },
+      layout: {
+        padding: {
+          top: 20
+        }
+      }
+    },
+    plugins: [{
+      id: 'barLabelsOnly',
+      afterDatasetsDraw(chart) {
+        const ctx = chart.ctx;
+        const datasetMeta = chart.getDatasetMeta(0);
+        const dark = document.body.classList.contains('dark-mode');
+
+        datasetMeta.data.forEach((bar, i) => {
+          const val = chart.data.datasets[0].data[i];
+          const label = formatSecondsToHMS(val);
+          const barHeight = bar.base - bar.y;
+
+          ctx.save();
+          ctx.font = `bold ${barHeight > 30 ? '12px' : '10px'} sans-serif`;
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'bottom';
+
+          const x = bar.x;
+          const y = bar.y - 5;
+
+          // Outline for better contrast
+          ctx.lineWidth = 3;
+          ctx.strokeStyle = dark ? '#111' : '#fff';
+          ctx.strokeText(label, x, y);
+
+          ctx.fillStyle = dark ? '#fff' : '#000';
+          ctx.fillText(label, x, y);
+
+          ctx.restore();
+        });
+      }
+    }]
+  });
+}
+
+
+
+
+function renderCOBChart() {
+  const { labels, values } = getCOBDataFromTable();
+  const trend = calculateTrendLine(values);
+
+  const canvas = document.getElementById('cobChart');
+  const ctx = canvas.getContext('2d');
+
+  const ratio = window.devicePixelRatio || 1;
   canvas.width = canvas.clientWidth * ratio;
   canvas.height = canvas.clientHeight * ratio;
   ctx.scale(ratio, ratio);
