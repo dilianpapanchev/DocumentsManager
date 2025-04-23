@@ -1,3 +1,145 @@
+<style>
+  /* Tools panel */
+  #toolsPanel {
+    position: fixed;
+    top: 110px;
+    left: 41px;
+    background: rgba(255, 255, 255, 0.85);
+    padding: 10px;
+    border-radius: 10px;
+    box-shadow: 2px 6px 8px rgba(0, 0, 0, 0.3);
+    z-index: 99999;
+    transition: background 0.3s ease;
+  }
+
+  body.dark-mode #toolsPanel {
+    background: rgba(0, 0, 0, 0.6);
+  }
+
+  .tools-title {
+    font-weight: bold;
+    margin-bottom: 10px;
+    font-size: 14px;
+    text-align: center;
+  }
+
+  /* Dark mode toggle button */
+  #darkModeToggle {
+    position: relative;
+    width: 72px;
+    height: 40px;
+    border-radius: 20px;
+    background-color: var(--toggle-bg);
+    box-shadow: 2px 8px 9px rgba(0, 0, 0, 0.2);
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    padding: 6px;
+    overflow: hidden;
+    margin: 0 auto 10px auto;
+    transition: background-color 0.4s ease, box-shadow 0.45s ease;
+  }
+
+  #darkModeToggle .toggle-thumb {
+    width: 30px;
+    height: 30px;
+    background-color: var(--thumb-bg);
+    border-radius: 100%;
+    position: relative;
+  }
+
+  #darkModeToggle .icon {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
+    font-size: 20px;
+    transition: left 0.4s ease, transform 0.4s ease, opacity 0.4s ease;
+  }
+
+  #darkModeToggle .sun {
+    left: 6px;
+    opacity: 1;
+  }
+
+  #darkModeToggle .moon {
+    left: 42px;
+    opacity: 0;
+  }
+
+  #darkModeToggle.active .sun {
+    left: 42px;
+    opacity: 0;
+    transform: translateY(-50%) rotate(360deg);
+  }
+
+  #darkModeToggle.active .moon {
+    left: 6px;
+    opacity: 1;
+    transform: translateY(-50%) rotate(360deg);
+  }
+
+  body:not(.dark-mode) {
+    --toggle-bg: #333333;
+    --thumb-bg: #767666;
+  }
+
+  body.dark-mode {
+    --toggle-bg: #f0f0f0;
+    --thumb-bg: #d7d7d7;
+  }
+
+  /* Export button */
+  #exportGraphsBtn {
+    background-color: #333;
+    color: white;
+    padding: 10px 20px;
+    border-radius: 999px;
+    border: none;
+    font-size: 14px;
+    font-weight: bold;
+    box-shadow: 2px 5px 10px rgba(0, 0, 0, 0.2);
+    cursor: pointer;
+    display: block;
+    margin: 0 auto;
+    transition: background 0.3s ease;
+  }
+
+  body.dark-mode #exportGraphsBtn {
+    background-color: #eee;
+    color: #111;
+  }
+
+  #exportGraphsBtn:hover {
+    opacity: 0.9;
+  }
+</style>
+
+<body>
+  <div id="toolsPanel">
+    <div class="tools-title">Tools</div>
+
+    <div id="darkModeToggle" title="Switch Dark Mode">
+      <div class="toggle-thumb">
+        <span class="icon sun">☀️</span>
+        <span class="icon moon">🌙</span>
+      </div>
+    </div>
+
+    <button id="exportGraphsBtn">Export Graphs</button>
+  </div>
+
+  <script>
+    const toggleBtn = document.getElementById('darkModeToggle');
+    toggleBtn.addEventListener('click', () => {
+      document.body.classList.toggle('dark-mode');
+      toggleBtn.classList.toggle('active');
+      updateChartsTheme?.(); // ако имаш тази функция
+    });
+  </script>
+</body>
+
+
+
 <!DOCTYPE html>
 <html lang="bg">
 <head>
