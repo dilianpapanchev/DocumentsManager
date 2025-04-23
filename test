@@ -1,3 +1,70 @@
+#darkModeToggle {
+  position: relative;
+  width: 72px;
+  height: 40px;
+  border-radius: 20px;
+  background-color: var(--toggle-bg);
+  box-shadow: 2px 8px 9px rgba(0, 0, 0, 0.2);
+  transition: background-color 0.4s ease, box-shadow 0.45s ease;
+  display: flex;
+  align-items: center;
+  cursor: pointer;
+  padding: 6px;
+  overflow: hidden;
+}
+
+#darkModeToggle .toggle-thumb {
+  width: 30px;
+  height: 30px;
+  background-color: var(--thumb-bg);
+  border-radius: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.3s ease;
+  transform: translateX(0);
+}
+
+#darkModeToggle .icon {
+  width: 25px;
+  height: 25px;
+  opacity: 0;
+  transition: opacity 0.3s ease, transform 0.55s ease;
+  pointer-events: none;
+  font-size: 18px;
+  transform-origin: center;
+}
+
+#darkModeToggle .moon {
+  position: absolute;
+}
+
+#darkModeToggle.active .toggle-thumb {
+  transform: translateX(42px);
+}
+
+#darkModeToggle.active .sun {
+  opacity: 0;
+  transform: rotate(360deg);
+}
+
+#darkModeToggle.active .moon {
+  opacity: 1;
+  transform: rotate(360deg);
+}
+
+#darkModeToggle:not(.active) .sun {
+  opacity: 1;
+  transform: rotate(360deg);
+}
+
+#darkModeToggle:not(.active) .moon {
+  opacity: 0;
+  transform: rotate(0deg);
+}
+
+
+
 <div id="toolsPanel">
   <div class="tools-title">Tools</div>
 
