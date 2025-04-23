@@ -1,3 +1,34 @@
+afterDatasetsDraw(chart) {
+    const ctx = chart.ctx;
+    const datasetMeta = chart.getDatasetMeta(0);
+    const dark = document.body.classList.contains('dark-mode');
+
+    ctx.save();
+    ctx.font = 'bold 12px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+
+    datasetMeta.data.forEach((bar, i) => {
+        const val = chart.data.datasets[0].data[i];
+        const label = formatSecondsToHMS(val);
+
+        const x = bar.x;
+        const y = bar.y - 6;
+
+        // Outline за по-добър контраст
+        ctx.lineWidth = 3;
+        ctx.strokeStyle = dark ? '#111' : '#fff';
+        ctx.strokeText(label, x, y);
+
+        ctx.fillStyle = dark ? '#fff' : '#000';
+        ctx.fillText(label, x, y);
+    });
+    ctx.restore();
+}
+
+
+
+
 plugins: [{
     id: 'barLabelsOnly',
     afterDatasetsDraw(chart) {
