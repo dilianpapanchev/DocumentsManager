@@ -1,3 +1,20 @@
+const canvasBackgroundColor = getComputedStyle(ctx.canvas).backgroundColor;
+
+function rgbToHex(rgb) {
+  const result = rgb.match(/\d+/g).map((c) => {
+    const hex = parseInt(c).toString(16);
+    return hex.length === 1 ? '0' + hex : hex;
+  });
+  return `#${result.join('')}`;
+}
+
+const canvasHexColor = rgbToHex(canvasBackgroundColor);
+ctx.fillStyle = getTextColor(canvasHexColor);
+
+
+
+
+
 <button id="toggleDarkMode">Toggle Dark Mode</button>
 
 <script>
