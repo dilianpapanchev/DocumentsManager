@@ -1,3 +1,9 @@
+<div id="darkModeToggle" class="dark-toggle" title="Toggle Dark Mode">
+  <span class="emoji">☀️</span>
+</div>
+
+
+
 <script>
   const toggleBtn = document.getElementById('darkModeToggle');
   const emoji = toggleBtn.querySelector('.emoji');
