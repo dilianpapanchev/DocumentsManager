@@ -1,3 +1,26 @@
+plugins: [{
+  id: 'barLabelsOnly',
+  afterDatasetsDraw(chart) {
+    const { ctx } = chart;
+    const datasetMeta = chart.getDatasetMeta(0);
+    const dark = document.body.classList.contains('dark-mode');
+
+    ctx.save();
+    ctx.fillStyle = dark ? "#ffffff" : "black";
+    ctx.font = "bold 12px sans-serif";
+    ctx.textAlign = "center";
+
+    datasetMeta.data.forEach((bar, i) => {
+      const val = chart.data.datasets[0].data[i];
+      const label = formatSecondsToHMS(val);
+      ctx.fillText(label, bar.x, bar.y - 6);
+    });
+
+    ctx.restore();
+  }
+}]
+
+
 document.getElementById("exportGraphsBtn").addEventListener("click", () => {
   const options = ["recordChart", "timingChart", "elapsedChart", "cpuChart"];
   const selected = confirm("Export all graphs as images?");
