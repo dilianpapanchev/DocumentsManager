@@ -1,4 +1,80 @@
 const toggleBtn = document.getElementById('darkModeToggle');
+let isDark = false;
+
+toggleBtn.addEventListener('click', () => {
+  isDark = !isDark;
+  document.body.classList.toggle('dark-mode');
+  toggleBtn.classList.toggle('active');
+  updateChartsTheme?.(); // извикваш твоята функция при нужда
+});
+
+
+#darkModeToggle {
+  position: fixed;
+  top: 80px;
+  left: 20px;
+  width: 70px;
+  height: 40px;
+  background-color: #e0e0e0;
+  border-radius: 20px;
+  cursor: pointer;
+  z-index: 9999;
+  transition: background-color 0.4s ease;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  padding: 0 5px;
+}
+
+#darkModeToggle .toggle-thumb {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background-color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.4s ease, background-color 0.4s ease;
+}
+
+#darkModeToggle .icon {
+  width: 24px;
+  height: 24px;
+  pointer-events: none;
+}
+
+#darkModeToggle .moon {
+  display: none;
+}
+
+#darkModeToggle.active {
+  background-color: #222;
+}
+
+#darkModeToggle.active .toggle-thumb {
+  transform: translateX(30px);
+  background-color: #333;
+}
+
+#darkModeToggle.active .sun {
+  display: none;
+}
+
+#darkModeToggle.active .moon {
+  display: block;
+}
+
+
+<div id="darkModeToggle" class="dark-toggle" title="Toggle Dark Mode">
+  <div class="toggle-thumb">
+    <svg class="icon sun" viewBox="0 0 24 24"><text x="4" y="17" font-size="18">☀️</text></svg>
+    <svg class="icon moon" viewBox="0 0 24 24"><text x="4" y="17" font-size="18">🌙</text></svg>
+  </div>
+</div>
+
+
+
+const toggleBtn = document.getElementById('darkModeToggle');
 const emoji = toggleBtn.querySelector('.emoji');
 let isDark = false;
 
