@@ -1,3 +1,24 @@
+function updateChartsTheme() {
+    const dark = document.body.classList.contains('dark-mode');
+    const charts = Chart.instances;
+
+    Object.values(charts).forEach(chart => {
+        chart.options.plugins.title.color = dark ? '#ffffff' : '#222222';
+        chart.options.plugins.legend.labels.color = dark ? '#f0f0f0' : '#444444';
+
+        chart.options.scales.x.ticks.color = dark ? '#ffffff' : '#333333';
+        chart.options.scales.y.ticks.color = dark ? '#ffffff' : '#333333';
+
+        chart.options.scales.x.grid.color = dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+        chart.options.scales.y.grid.color = dark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)';
+        
+        chart.update();
+    });
+}
+
+
+
+
 <script>
   const darkToggle = document.getElementById('darkModeToggle');
 
