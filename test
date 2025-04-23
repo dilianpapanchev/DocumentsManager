@@ -1,3 +1,62 @@
+document.getElementById("exportGraphsBtn").addEventListener("click", () => {
+  const options = ["recordChart", "timingChart", "elapsedChart", "cpuChart"];
+  const selected = confirm("Export all graphs as images?");
+
+  if (selected) {
+    options.forEach(id => {
+      const canvas = document.getElementById(id);
+      if (canvas) {
+        html2canvas(canvas.parentElement).then(canvasImg => {
+          const link = document.createElement("a");
+          link.download = `${id}.png`;
+          link.href = canvasImg.toDataURL();
+          link.click();
+        });
+      }
+    });
+  }
+});
+
+#toolsPanel {
+  position: fixed;
+  top: 50px;
+  left: 10px;
+  background: rgba(255,255,255,0.85);
+  padding: 10px;
+  border-radius: 10px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+  z-index: 9999;
+  transition: background 0.3s ease;
+}
+body.dark-mode #toolsPanel {
+  background: rgba(0,0,0,0.6);
+}
+.tools-title {
+  font-weight: bold;
+  margin-bottom: 10px;
+  font-size: 14px;
+  text-align: center;
+}
+#exportGraphsBtn {
+  margin-top: 10px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+<div id="toolsPanel">
+  <div class="tools-title">Tools</div>
+  <div id="darkModeToggle" title="Switch Dark Mode">
+    <span class="toggle-thumb"></span>
+    <span class="icon sun">🌞</span>
+    <span class="icon moon">🌜</span>
+  </div>
+  <button id="exportGraphsBtn">Export Graphs</button>
+</div>
+
+
+
 function updateChartsTheme() {
     const dark = document.body.classList.contains('dark-mode');
     const charts = Chart.instances;
