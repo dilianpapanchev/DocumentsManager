@@ -1,3 +1,115 @@
+function renderCOBChart() {
+    const { labels, values } = getCOBDataFromTable();
+    const trend = calculateTrendLine(values);
+
+    const canvas = document.getElementById('cobChart');
+    const ctx = canvas.getContext('2d');
+    const ratio = window.devicePixelRatio || 1;
+
+    // Истински пиксели спрямо контейнера
+    const containerWidth = canvas.parentElement.offsetWidth;
+
+    // Реално пикселно мащабиране, независимо от скалирането на Windows
+    canvas.width = containerWidth * ratio;
+    canvas.height = 400 * ratio;
+    canvas.style.width = containerWidth + 'px';
+    canvas.style.height = '400px';
+    ctx.setTransform(ratio, 0, 0, ratio, 0, 0); // Рисувай в пълна резолюция
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'COB Elapsed',
+                    data: values,
+                    backgroundColor: 'rgba(154, 208, 245, 1)',
+                    borderColor: 'rgba(154, 208, 245, 1)',
+                    borderWidth: 1,
+                    order: 1,
+                },
+                {
+                    label: 'Trend Line',
+                    data: trend,
+                    type: 'line',
+                    borderColor: 'red',
+                    borderDash: [5, 5],
+                    borderWidth: 2,
+                    fill: false,
+                    pointRadius: 0,
+                    tension: 0,
+                }
+            ]
+        },
+        options: {
+            responsive: false, // Важно! За да не презапише мащабите
+            plugins: {
+                legend: {
+                    display: true
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            const val = context.raw;
+                            return `${context.dataset.label}: ${formatSecondsToHMS(val)}`;
+                        }
+                    }
+                },
+                title: {
+                    display: true,
+                    text: 'COB Elapsed Time & Trend',
+                    color: getTextColor(),
+                    font: {
+                        size: 13,
+                        weight: 'bold'
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function (value) {
+                            return formatSecondsToHMS(value);
+                        }
+                    },
+                    title: {
+                        display: false,
+                        text: 'Elapsed Time (HH:mm:ss)'
+                    }
+                }
+            },
+            animation: false
+        },
+        plugins: [{
+            id: 'barLabelsOnly',
+            afterDatasetsDraw(chart) {
+                const ctx = chart.ctx;
+                const datasetMeta = chart.getDatasetMeta(0);
+                const dark = document.body.classList.contains('dark-mode');
+
+                ctx.save();
+                ctx.fillStyle = dark ? '#ffffff' : 'black';
+                ctx.font = 'bold 12px sans-serif';
+                ctx.textAlign = 'center';
+
+                datasetMeta.data.forEach((bar, i) => {
+                    const val = chart.data.datasets[0].data[i];
+                    const label = formatSecondsToHMS(val);
+                    ctx.fillText(label, bar.x, bar.y - 6);
+                });
+
+                ctx.restore();
+            }
+        }]
+    });
+}
+
+
+
+
+
 const ratio = window.devicePixelRatio || 1;
 canvas.style.width = rect.width + "px";
 canvas.style.height = rect.height + "px";
