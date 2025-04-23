@@ -1,5 +1,20 @@
 <div id="toolsPanel">
   <div class="tools-title">Tools</div>
+
+  <div id="darkModeToggle" title="Switch Dark Mode">
+    <span class="toggle-thumb"></span>
+    <span class="icon sun">🌞</span>
+    <span class="icon moon">🌜</span>
+  </div>
+
+  <button id="exportGraphsBtn">Export Graphs</button>
+</div>
+
+
+
+
+<div id="toolsPanel">
+  <div class="tools-title">Tools</div>
   
   <div id="darkModeToggle" title="Switch Dark Mode">
     <span class="toggle-thumb"></span>
