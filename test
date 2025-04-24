@@ -2,6 +2,160 @@
 set -euo pipefail
 
 # ------------------------------------------------------------------------------
+# scb_file.sh — Secure Upload/Download wrapper with enhanced table alignment & multi-color
+# ------------------------------------------------------------------------------
+
+# Color definitions
+declare -r RED='\e[31m'
+declare -r GREEN='\e[32m'
+declare -r YELLOW='\e[33m'
+declare -r BLUE='\e[34m'
+declare -r CYAN='\e[36m'
+declare -r NC='\e[0m'
+
+readonly SELF=$(basename "$0")
+readonly BASE_DIR=$(cd "$(dirname "$0")" && pwd)
+readonly LOG_DIR="$BASE_DIR/log"
+readonly UPLOAD_DIR="$BASE_DIR/upload"
+readonly DOWNLOAD_BASE="$BASE_DIR/download"
+readonly REMOTE_DIR="/opt/t24/bnk/UD/DUMMY"
+readonly LOCAL_TMP="/tmp/${SELF}_$$"
+readonly USER_NAME=$(id -un)
+readonly LOG_FILE="$LOG_DIR/${SELF%.sh}.log"
+
+# Ensure necessary directories exist
+mkdir -p "$LOG_DIR" "$UPLOAD_DIR" "$DOWNLOAD_BASE"
+
+# Logging function
+tlog() {
+  local level="$1"; shift
+  echo "$(date '+%F %T') [$level] $*" >> "$LOG_FILE"
+}
+
+# Print error and exit
+die() {
+  local msg="$1"
+  echo -e "${RED}Error:${NC} $msg" >&2
+  tlog "ERROR" "$msg"
+  exit 1
+}
+
+# Function to print a styled ASCII table for info messages
+show_table() {
+  local func="$1" src_dir="$2" file="$3" dest="$4"
+  # Column widths: 12, 20, 15, 30
+  local border_line="+------------+--------------------+---------------+--------------------------------+"
+  local format="| %-10s | %-18s | %-13s | %-30s |"
+
+  # Print header (title row)
+  echo -e "${YELLOW}${border_line}${NC}"
+  echo -e "${CYAN}$(printf "%b" "| Function   | Source Dir         | File          | Destination                    |")${NC}"
+  echo -e "${YELLOW}${border_line}${NC}"
+  # Print data row
+  echo -e "${GREEN}$(printf "$format" "$func" "$src_dir" "$file" "$dest")${NC}"
+  # Print footer
+  echo -e "${YELLOW}${border_line}${NC}"
+}
+
+# Print informational message
+echo_info() {
+  local msg="$1"
+  echo -e "${BLUE}Info:${NC} $msg"
+  tlog "INFO" "$msg"
+}
+
+# User check: must run as the login user
+LOGIN_USER=$(logname 2>/dev/null || echo "")
+[[ -n "$LOGIN_USER" ]] || die "Could not determine login user"
+[[ "$USER_NAME" == "$LOGIN_USER" ]] || die "Script must be run by $LOGIN_USER, current: $USER_NAME"
+
+# Ensure script is executed from its own directory
+[[ "$(pwd)" == "$BASE_DIR" ]] || die "Script must be run from its directory: $BASE_DIR"
+
+# Initialize log file
+if [[ ! -f "$LOG_FILE" ]]; then
+  touch "$LOG_FILE"
+  chmod 600 "$LOG_FILE"
+fi
+
+# Trap unexpected errors
+taperr() {
+  tlog "ERROR" "Unexpected error at line $LINENO"
+  echo -e "${RED}Error:${NC} Unexpected error, see log for details." >&2
+  exit 1
+}
+trap 'taperr' ERR
+
+# Usage message
+usage() {
+  echo -e "${YELLOW}Usage:${NC}"
+  show_table "Upload" "$UPLOAD_DIR" "<file_in_upload_dir>" "$REMOTE_DIR"
+  show_table "Download" "$REMOTE_DIR" "<remote_file>" "$DOWNLOAD_BASE/<user>/<YYYYmmdd>"
+  exit 1
+}
+
+# Require at least two arguments
+(( $# >= 2 )) || usage
+
+ACTION=$1; shift
+SRC=$1;    shift
+
+# Upload function
+upload() {
+  local src_path="$UPLOAD_DIR/$SRC"
+  [[ -f $src_path ]] || die "Upload source not found: $src_path"
+  [[ -r $src_path ]] || die "No read permission: $src_path"
+  dzdo test -d "$REMOTE_DIR" || die "Remote directory not found: $REMOTE_DIR"
+  dzdo test -w "$REMOTE_DIR" || die "No write permission on remote directory: $REMOTE_DIR"
+
+  show_table "Upload" "$UPLOAD_DIR" "$SRC" "$REMOTE_DIR"
+  echo_info "Uploading '$SRC'..."
+
+  cp "$src_path" "$LOCAL_TMP"
+  dzdo chown "$USER_NAME":"$USER_NAME" "$LOCAL_TMP"
+  dzdo chmod 770 "$LOCAL_TMP"
+  dzdo mv "$LOCAL_TMP" "$REMOTE_DIR/"
+
+  echo_info "Upload complete: '$SRC'"
+}
+
+# Download function
+download() {
+  local remote_file="$REMOTE_DIR/$(basename "$SRC")"
+  local date_dir=$(date '+%Y%m%d')
+  local dest_dir="$DOWNLOAD_BASE/$USER_NAME/$date_dir"
+
+  dzdo test -f "$remote_file" || die "Remote file not found: $remote_file"
+  dzdo test -r "$remote_file" || die "No read permission on remote file: $remote_file"
+
+  mkdir -p "$dest_dir"
+  [[ -w $dest_dir ]] || die "No write permission: $dest_dir"
+
+  show_table "Download" "$REMOTE_DIR" "$(basename "$SRC")" "$dest_dir"
+  echo_info "Downloading '$(basename "$SRC")'..."
+
+  dzdo cp "$remote_file" "$LOCAL_TMP"
+  dzdo chown "$USER_NAME":"$USER_NAME" "$LOCAL_TMP"
+  dzdo chmod 770 "$LOCAL_TMP"
+  mv "$LOCAL_TMP" "$dest_dir/"
+
+  echo_info "Download complete: '$(basename "$SRC")' to $dest_dir/"
+}
+
+# Main dispatch
+case "$ACTION" in
+  upload)   upload   ;;
+  download) download ;;
+  *)        usage    ;;
+esac
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ------------------------------------------------------------------------------
 # scb_file.sh — Secure Upload/Download wrapper with table-styled info messages
 # ------------------------------------------------------------------------------
 
