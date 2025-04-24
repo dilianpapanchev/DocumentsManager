@@ -219,6 +219,227 @@ esac
 
 
 
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ------------------------------------------------------------------------------
+# scb_file.sh — Secure Upload/Download wrapper with enhanced table alignment & multi-color
+# ------------------------------------------------------------------------------
+
+# Color definitions
+declare -r RED='\e[31m'
+declare -r GREEN='\e[32m'
+declare -r YELLOW='\e[33m'
+declare -r BLUE='\e[34m'
+declare -r CYAN='\e[36m'
+declare -r NC='\e[0m'
+
+readonly SELF=$(basename "$0")
+readonly BASE_DIR=$(cd "$(dirname "$0")" && pwd)
+readonly LOG_DIR="$BASE_DIR/log"
+readonly UPLOAD_DIR="$BASE_DIR/upload"
+readonly DOWNLOAD_BASE="$BASE_DIR/download"
+# Default remote directory (can be overridden by optional parameter)
+readonly REMOTE_DIR_DEFAULT="/opt/t24/bnk/UD/DUMMY"
+readonly LOCAL_TMP="/tmp/${SELF}_$$"
+readonly USER_NAME=$(id -un)
+readonly LOG_FILE="$LOG_DIR/${SELF%.sh}.log"
+
+# Ensure necessary directories exist
+mkdir -p "$LOG_DIR" "$UPLOAD_DIR" "$DOWNLOAD_BASE"
+
+# Logging function
+tlog() {
+  local level="$1"; shift
+  echo "$(date '+%F %T') [$level] $*" >> "$LOG_FILE"
+}
+
+# Print error and exit
+die() {
+  local msg="$1"
+  echo -e "${RED}Error:${NC} $msg" >&2
+  tlog "ERROR" "$msg"
+  exit 1
+}
+
+# Function to print a styled ASCII table for info messages
+# (Used for info messages with a single row)
+show_table() {
+  local func="$1" src_dir="$2" file="$3" dest="$4"
+  # headers
+  local headers=("Function" "Source Dir" "File" "Destination")
+  local rows=("$func" "$src_dir" "$file" "$dest")
+  local cols=4
+  # compute column widths
+  declare -a widths
+  for ((i=0;i<cols;i++)); do
+    widths[i]=${#headers[i]}
+    [[ ${#rows[i]} -gt ${widths[i]} ]] && widths[i]=${#rows[i]}
+  done
+  # build border
+  local border=""
+  for ((i=0;i<cols;i++)); do
+    border+="+$(printf '%*s' $((widths[i]+2)) '' | tr ' ' '-')"
+  done
+  border+="+"
+  # build format string
+  local fmt=""
+  for ((i=0;i<cols;i++)); do
+    fmt+="| %-${widths[i]}s "
+  done
+  fmt+="|"
+  # print table
+  echo -e "${YELLOW}${border}${NC}"
+  printf "${CYAN}${fmt}${NC}
+" "${headers[@]}"
+  echo -e "${YELLOW}${border}${NC}"
+  printf "${GREEN}${fmt}${NC}
+" "${rows[@]}"
+  echo -e "${YELLOW}${border}${NC}"
+}
+
+# Function to print a styled ASCII table with multiple rows (for usage)
+show_table_multi "$u_cmd" "$u_src" "$u_file" "$REMOTE_DIR" \
+                  "$d_cmd" "$REMOTE_DIR" "$d_file" "$d_dest"
+  echo -e "${YELLOW}Options:${NC}"
+  echo "  -h, --help      Display detailed help"
+  exit 1
+}
+
+# Handle help option
+if [[ "${1:-}" =~ ^(-h|--help)$ ]]; then
+  display_help
+  exit 0
+fi
+
+echo_info() {
+  local msg="$1"
+  echo -e "${BLUE}Info:${NC} $msg"
+  tlog "INFO" "$msg"
+}
+
+# Detailed help message
+display_help() {
+  echo -e "${CYAN}scb_file.sh - Secure Upload/Download Utility${NC}"
+  echo
+  echo -e "${YELLOW}Usage:${NC}"
+  echo "  $SELF [OPTIONS] <command> <file>"
+  echo
+  echo -e "${YELLOW}Commands:${NC}"
+  echo "  upload <file_in_upload_dir>      Upload file from $UPLOAD_DIR to $REMOTE_DIR"
+  echo "  download <remote_file>           Download file from $REMOTE_DIR to download/<user>/<YYYYmmdd>"
+  echo
+  echo -e "${YELLOW}Options:${NC}"
+  echo "  -h, --help      Display this help and exit"
+  echo
+  echo -e "${YELLOW}Examples:${NC}"
+  echo "  $SELF upload test.txt"
+  echo "  $SELF download test.txt"
+}
+
+# Usage message
+usage() {
+  echo -e "${YELLOW}Usage:${NC}"
+  # Prepare usage table with both Upload and Download rows
+  local u_cmd="Upload" u_src="$UPLOAD_DIR" u_file="<file_in_upload_dir>" u_dest="$REMOTE_DIR"
+  local d_cmd="Download" d_src="$REMOTE_DIR" d_file="<remote_file>" d_dest="$DOWNLOAD_BASE/<user>/<YYYYmmdd>"
+  show_table_multi \
+    "$u_cmd" "$u_src" "$u_file" "$u_dest" \
+    "$d_cmd" "$d_src" "$d_file" "$d_dest"
+  echo -e "${YELLOW}Options:${NC}"
+  echo "  -h, --help      Display detailed help"
+  exit 1
+}
+
+# Handle help option
+if [[ "${1:-}" =~ ^(-h|--help)$ ]]; then
+  display_help
+  exit 0
+fi
+if [[ "${1:-}" =~ ^(-h|--help)$ ]]; then
+  display_help
+  exit 0
+fi
+
+# Require at least one argument (action) and one parameter
+(( $# >= 2 )) || usage
+
+# Parse action and source file
+ACTION=$1; shift
+SRC=$1;    shift
+
+# Optional remote directory override
+REMOTE_DIR="${1:-$REMOTE_DIR_DEFAULT}"
+# If override provided, consume it
+if [[ $# -ge 1 ]]; then shift; fi
+if [[ $# -ge 1 ]]; then shift; fi
+(( $# >= 2 )) || tusage
+
+  echo -e "${YELLOW}Usage:${NC}"
+  show_table "Upload" "$UPLOAD_DIR" "<file_in_upload_dir>" "$REMOTE_DIR"
+  show_table "Download" "$REMOTE_DIR" "<remote_file>" "$DOWNLOAD_BASE/<user>/<YYYYmmdd>"
+  exit 1
+}
+
+# Require at least two arguments
+(( $# >= 2 )) || usage
+
+ACTION=$1; shift
+SRC=$1;    shift
+
+# Upload function
+upload() {
+  local src_path="$UPLOAD_DIR/$SRC"
+  [[ -f $src_path ]] || die "Upload source not found: $src_path"
+  [[ -r $src_path ]] || die "No read permission: $src_path"
+  dzdo test -d "$REMOTE_DIR" || die "Remote directory not found: $REMOTE_DIR"
+  dzdo test -w "$REMOTE_DIR" || die "No write permission on remote directory: $REMOTE_DIR"
+
+  show_table "Upload" "$UPLOAD_DIR" "$SRC" "$REMOTE_DIR"
+  echo_info "Uploading '$SRC'..."
+
+  cp "$src_path" "$LOCAL_TMP"
+  dzdo chown "$USER_NAME":"$USER_NAME" "$LOCAL_TMP"
+  dzdo chmod 770 "$LOCAL_TMP"
+  dzdo mv "$LOCAL_TMP" "$REMOTE_DIR/"
+
+  echo_info "Upload complete: '$SRC'"
+}
+
+# Download function
+download() {
+  local remote_file="$REMOTE_DIR/$(basename "$SRC")"
+  local date_dir=$(date '+%Y%m%d')
+  local dest_dir="$DOWNLOAD_BASE/$USER_NAME/$date_dir"
+
+  dzdo test -f "$remote_file" || die "Remote file not found: $remote_file"
+  dzdo test -r "$remote_file" || die "No read permission on remote file: $remote_file"
+
+  mkdir -p "$dest_dir"
+  [[ -w $dest_dir ]] || die "No write permission: $dest_dir"
+
+  show_table "Download" "$REMOTE_DIR" "$(basename "$SRC")" "$dest_dir"
+  echo_info "Downloading '$(basename "$SRC")'..."
+
+  dzdo cp "$remote_file" "$LOCAL_TMP"
+  dzdo chown "$USER_NAME":"$USER_NAME" "$LOCAL_TMP"
+  dzdo chmod 770 "$LOCAL_TMP"
+  mv "$LOCAL_TMP" "$dest_dir/"
+
+  echo_info "Download complete: '$(basename "$SRC")' to $dest_dir/"
+}
+
+# Main dispatch
+case "$ACTION" in
+  upload)   upload   ;;
+  download) download ;;
+  *)        usage    ;;
+esac
+
+
+
+
+
 
 
 
