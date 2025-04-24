@@ -1,6 +1,87 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# -----------------------------------------------------------------------------
+# scb_file.sh — simple upload/download wrapper for /opt/t24/bnk/UD/DUMMY
+# -----------------------------------------------------------------------------
+
+# ANSI colors
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+NC='\033[0m'
+
+# Paths
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+UPLOAD_DIR="$SCRIPT_DIR/upload"
+DOWNLOAD_BASE="$SCRIPT_DIR/download"
+REMOTE_DIR="/opt/t24/bnk/UD/DUMMY"
+LOG_DIR="$SCRIPT_DIR/log"
+LOG_FILE="$LOG_DIR/scb_file.log"
+
+# Users
+USER_NAME=$(id -un)
+LOGIN_USER=$(logname 2>/dev/null || echo "")
+
+# Helpers
+die()   { echo -e "${RED}[ERROR] $*${NC}" >&2; exit 1; }
+info()  { echo -e "${GREEN}[INFO]  $*${NC}"; }
+usage() {
+  echo -e "${GREEN}Usage:${NC}"
+  echo -e "${GREEN}+------------+------------------------+-----------+------------------------------+${NC}"
+  echo -e "${GREEN}| Function   | Source Directory      | File      | Destination                  |${NC}"
+  echo -e "${GREEN}+------------+------------------------+-----------+------------------------------+${NC}"
+  echo -e "${GREEN}| Upload     | $UPLOAD_DIR        | <file>    | $REMOTE_DIR         |${NC}"
+  echo -e "${GREEN}+------------+------------------------+-----------+------------------------------+${NC}"
+  echo -e "${GREEN}| Download   | $REMOTE_DIR      | <file>    | $DOWNLOAD_BASE/<user>/YYYYmmdd |${NC}"
+  echo -e "${GREEN}+------------+------------------------+-----------+------------------------------+${NC}"
+  exit 1
+}
+
+# ensure dirs
+mkdir -p "$UPLOAD_DIR" "$DOWNLOAD_BASE" "$LOG_DIR"
+
+# check login user
+[[ "$LOGIN_USER" == "$USER_NAME" ]] || die "Please run as login user '$LOGIN_USER', not '$USER_NAME'."
+
+# minimal args
+(( $# >= 2 )) || usage
+
+ACTION=$1; shift
+SRC=$1;    shift
+
+case "$ACTION" in
+  upload)
+    # must exist in local upload dir
+    [[ -f "$UPLOAD_DIR/$SRC" ]] || die "File '$SRC' not found in $UPLOAD_DIR."
+    info "Uploading   : $UPLOAD_DIR/$SRC → $REMOTE_DIR/"
+    dzdo chown "$USER_NAME":"$USER_NAME" "$UPLOAD_DIR/$SRC"
+    dzdo chmod 770 "$UPLOAD_DIR/$SRC"
+    dzdo mv "$UPLOAD_DIR/$SRC" "$REMOTE_DIR/"
+    info "Upload done : $REMOTE_DIR/$SRC"
+    ;;
+  download)
+    TODAY=$(date +%Y%m%d)
+    DEST_DIR="$DOWNLOAD_BASE/$USER_NAME/$TODAY"
+    mkdir -p "$DEST_DIR"
+    # must exist on remote
+    dzdo test -f "$REMOTE_DIR/$SRC" || die "Remote file '$SRC' not found in $REMOTE_DIR."
+    info "Downloading : $REMOTE_DIR/$SRC → $DEST_DIR/"
+    dzdo cp "$REMOTE_DIR/$SRC" "$DEST_DIR/"
+    dzdo chown "$USER_NAME":"$USER_NAME" "$DEST_DIR/$SRC"
+    dzdo chmod 770 "$DEST_DIR/$SRC"
+    info "Download done: $DEST_DIR/$SRC"
+    ;;
+  *)
+    usage
+    ;;
+esac
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+
 # ------------------------------------------------------------------------------
 # scb_file.sh — Secure Upload/Download wrapper with enhanced table alignment & multi-color
 # ------------------------------------------------------------------------------
