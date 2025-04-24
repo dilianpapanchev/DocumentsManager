@@ -1,3 +1,45 @@
+cleanup() {
+  local base="$DOWNLOAD_BASE"
+  [[ -d $base ]] || { echo_info "Nothing to clean in $base"; return; }
+
+  # събираме list-овете преди да трием
+  local old_files=()
+  local large_files=()
+  IFS=$'\n' read -d '' -r -a old_files < <(find "$base" -mindepth 2 -type f -mtime +7 -print && printf '\0')
+  IFS=$'\n' read -d '' -r -a large_files < <(find "$base" -mindepth 2 -type f -size +10M -print && printf '\0')
+
+  # ако няма нищо за триене → един лог и return
+  if (( ${#old_files[@]} == 0 && ${#large_files[@]} == 0 )); then
+    echo_info "No files to clean under '$base'"
+    return
+  fi
+
+  # трием остарелите
+  if (( ${#old_files[@]} > 0 )); then
+    echo_info "Removing files older than 7 days under '$base'..."
+    for f in "${old_files[@]}"; do
+      rm -f "$f"
+      echo_info "Removed old file: $f"
+    done
+  fi
+
+  # трием големите
+  if (( ${#large_files[@]} > 0 )); then
+    echo_info "Removing files larger than 10MB under '$base'..."
+    for f in "${large_files[@]}"; do
+      rm -f "$f"
+      echo_info "Removed large file: $f"
+    done
+  fi
+
+  echo_info "Cleanup complete."
+}
+
+
+
+
+
+
 #!/usr/bin/env bash
 set -euo pipefail
 
