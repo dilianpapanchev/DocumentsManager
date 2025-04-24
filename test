@@ -1,3 +1,18 @@
+#!/bin/bash
+
+WHITE="\Z7"
+GREEN="\Z2"
+RED="\Z1"
+NC="\Zn"
+
+dialog --colors --title " \Z4File Transfer Info\Zn " --msgbox "\n\
+${WHITE}FILE TRANSFER SCRIPTS${NC}\n\n\
+${GREEN}SUCCESSFULLY INSTALLED${NC}\n\n\
+${WHITE}USE ====${NC}${RED} FTS ${NC}${WHITE}==== TO ACCESS${NC}\n\n\
+${WHITE}ENJOY!${NC}" 12 60
+
+
+
 function renderCOBChart() {
   const { labels, values } = getCOBDataFromTable();
   const trend = calculateTrendLine(values);
