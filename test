@@ -18,6 +18,226 @@ readonly BASE_DIR=$(cd "$(dirname "$0")" && pwd)
 readonly LOG_DIR="$BASE_DIR/log"
 readonly UPLOAD_DIR="$BASE_DIR/upload"
 readonly DOWNLOAD_BASE="$BASE_DIR/download"
+readonly REMOTE_DIR="/opt/t24/bnk/UD/DUMMY"
+readonly LOCAL_TMP="/tmp/${SELF}_$$"
+readonly USER_NAME=$(id -un)
+readonly LOG_FILE="$LOG_DIR/${SELF%.sh}.log"
+
+# Ensure necessary directories exist
+mkdir -p "$LOG_DIR" "$UPLOAD_DIR" "$DOWNLOAD_BASE"
+
+# Logging function
+tlog() {
+  local level="$1"; shift
+  echo "$(date '+%F %T') [$level] $*" >> "$LOG_FILE"
+}
+
+# Print error and exit
+die() {
+  local msg="$1"
+  echo -e "${RED}Error:${NC} $msg" >&2
+  tlog "ERROR" "$msg"
+  exit 1
+}
+
+# Function to print a styled ASCII table for info messages
+show_table() {
+  local func="$1" src_dir="$2" file="$3" dest="$4"
+  local headers=("Function" "Source Dir" "File" "Destination")
+  local rows=("$func" "$src_dir" "$file" "$dest")
+  local cols=4
+  declare -a widths
+  for ((i=0; i<cols; i++)); do
+    widths[i]=${#headers[i]}
+    [[ ${#rows[i]} -gt ${widths[i]} ]] && widths[i]=${#rows[i]}
+  done
+  local border=""
+  for ((i=0; i<cols; i++)); do
+    border+="+$(printf '%*s' $((widths[i]+2)) '' | tr ' ' '-')"
+  done
+  border+="+"
+  local fmt=""
+  for ((i=0; i<cols; i++)); do
+    fmt+="| %-${widths[i]}s "
+  done
+  fmt+="|"
+
+  echo -e "${YELLOW}${border}${NC}"
+  printf "${CYAN}${fmt}${NC}\n" "${headers[@]}"
+  echo -e "${YELLOW}${border}${NC}"
+  printf "${GREEN}${fmt}${NC}\n" "${rows[@]}"
+  echo -e "${YELLOW}${border}${NC}"
+}
+
+# Function to print a styled ASCII table with multiple rows (for usage)
+show_table_multi() {
+  local args=("$@")
+  local total=${#args[@]}
+  local cols=4
+  local rows_count=$(( total / cols ))
+  local headers=("Function" "Source Dir" "File" "Destination")
+  declare -a widths
+  for ((c=0; c<cols; c++)); do
+    widths[c]=${#headers[c]}
+  done
+  for ((i=0; i<total; i++)); do
+    local col=$(( i % cols ))
+    [[ ${#args[i]} -gt ${widths[col]} ]] && widths[col]=${#args[i]}
+  done
+  local border=""
+  for ((i=0; i<cols; i++)); do
+    border+="+$(printf '%*s' $((widths[i]+2)) '' | tr ' ' '-')"
+  done
+  border+="+"
+  local fmt=""
+  for ((i=0; i<cols; i++)); do
+    fmt+="| %-${widths[i]}s "
+  done
+  fmt+="|"
+
+  echo -e "${YELLOW}${border}${NC}"
+  printf "${CYAN}${fmt}${NC}\n" "${headers[@]}"
+  echo -e "${YELLOW}${border}${NC}"
+  for ((r=0; r<rows_count; r++)); do
+    local idx=$(( r * cols ))
+    printf "${GREEN}${fmt}${NC}\n" \
+      "${args[idx]}" "${args[idx+1]}" "${args[idx+2]}" "${args[idx+3]}"
+  done
+  echo -e "${YELLOW}${border}${NC}"
+}
+
+# Print info message and log
+echo_info() {
+  local msg="$1"
+  echo -e "${BLUE}Info:${NC} $msg"
+  tlog "INFO" "$msg"
+}
+
+# Detailed help message
+display_help() {
+  echo -e "${CYAN}scb_file.sh - Secure Upload/Download Utility${NC}"
+  echo
+  echo -e "${YELLOW}Usage:${NC}"
+  echo "  $SELF [OPTIONS] <command> <file> [<path>]"
+  echo
+  echo -e "${YELLOW}Commands:${NC}"
+  echo "  upload <file_in_upload_dir> [<dest_dir>]   Upload from \$UPLOAD_DIR to specified directory"
+  echo "  download <remote_file> [<src_dir>]        Download from specified directory to \$DOWNLOAD_BASE/<user>/<YYYYmmdd>"
+  echo
+  echo -e "${YELLOW}Options:${NC}"
+  echo "  -h, --help      Display this help and exit"
+  echo
+  echo -e "${YELLOW}Examples:${NC}"
+  echo "  $SELF upload test.txt"
+  echo "  $SELF upload test.txt /opt/t24/bnk/UD/DUMMY"
+  echo "  $SELF download test.txt"
+  echo "  $SELF download test.txt /opt/t24/bnk/UD/DUMMY"
+}
+
+# Usage message
+usage() {
+  echo -e "${YELLOW}Usage:${NC}"
+  local u_cmd="Upload" u_src="$UPLOAD_DIR" u_file="<file_in_upload_dir>" u_dest="$REMOTE_DIR"
+  local d_cmd="Download" d_src="$REMOTE_DIR" d_file="<remote_file>" d_dest="$DOWNLOAD_BASE/<user>/<YYYYmmdd>"
+  show_table_multi \
+    "$u_cmd" "$u_src" "$u_file" "$u_dest" \
+    "$d_cmd" "$d_src" "$d_file" "$d_dest"
+  echo -e "${YELLOW}Options:${NC}"
+  echo "  -h, --help      Display detailed help"
+  exit 1
+}
+
+# Handle help option
+if [[ "${1:-}" =~ ^(-h|--help)$ ]]; then
+  display_help
+  exit 0
+fi
+
+# Require at least two arguments
+(( $# >= 2 )) || usage
+
+ACTION=$1; shift
+SRC=$1;    shift
+PARAM=${1:-}
+
+# Upload function
+upload() {
+  local file_name="$1"
+  local dest_dir="${2:-$REMOTE_DIR}"
+  local src_path="$UPLOAD_DIR/$file_name"
+
+  [[ -f $src_path ]]       || die "Upload source not found: $src_path"
+  [[ -r $src_path ]]       || die "No read permission: $src_path"
+  dzdo test -d "$dest_dir" || die "Destination directory not found: $dest_dir"
+  dzdo test -w "$dest_dir" || die "No write permission on destination: $dest_dir"
+
+  show_table "Upload" "$UPLOAD_DIR" "$file_name" "$dest_dir"
+  echo_info "Uploading '$file_name' to '$dest_dir'..."
+
+  cp "$src_path" "$LOCAL_TMP"
+  dzdo chown "$USER_NAME":"$USER_NAME" "$LOCAL_TMP"
+  dzdo chmod 770 "$LOCAL_TMP"
+  dzdo mv "$LOCAL_TMP" "$dest_dir/"
+
+  echo_info "Upload complete: '$file_name' -> '$dest_dir/'"
+}
+
+# Download function
+download() {
+  local file_name="$1"
+  local src_dir="${2:-$REMOTE_DIR}"
+  local remote_file="$src_dir/$file_name"
+  local date_dir
+  date_dir=$(date '+%Y%m%d')
+  local dest_dir="$DOWNLOAD_BASE/$USER_NAME/$date_dir"
+
+  dzdo test -f "$remote_file" || die "Remote file not found: $remote_file"
+  dzdo test -r "$remote_file" || die "No read permission on remote file: $remote_file"
+
+  mkdir -p "$dest_dir"
+  [[ -w $dest_dir ]]       || die "No write permission: $dest_dir"
+
+  show_table "Download" "$src_dir" "$file_name" "$dest_dir"
+  echo_info "Downloading '$file_name' from '$src_dir'..."
+
+  dzdo cp "$remote_file" "$LOCAL_TMP"
+  dzdo chown "$USER_NAME":"$USER_NAME" "$LOCAL_TMP"
+  dzdo chmod 770 "$LOCAL_TMP"
+  mv "$LOCAL_TMP" "$dest_dir/"
+
+  echo_info "Download complete: '$file_name' -> '$dest_dir/'"
+}
+
+# Main dispatch
+case "$ACTION" in
+  upload)   upload   "$SRC" "$PARAM" ;;
+  download) download "$SRC" "$PARAM" ;;
+  *)        usage          ;;
+esac
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ------------------------------------------------------------------------------
+# scb_file.sh — Secure Upload/Download wrapper with enhanced table alignment & multi-color
+# ------------------------------------------------------------------------------
+
+# Color definitions
+declare -r RED='\e[31m'
+declare -r GREEN='\e[32m'
+declare -r YELLOW='\e[33m'
+declare -r BLUE='\e[34m'
+declare -r CYAN='\e[36m'
+declare -r NC='\e[0m'
+
+readonly SELF=$(basename "$0")
+readonly BASE_DIR=$(cd "$(dirname "$0")" && pwd)
+readonly LOG_DIR="$BASE_DIR/log"
+readonly UPLOAD_DIR="$BASE_DIR/upload"
+readonly DOWNLOAD_BASE="$BASE_DIR/download"
 # default remote dir (може да се override-не като втори аргумент на download)
 readonly REMOTE_DIR="/opt/t24/bnk/UD/DUMMY"
 readonly LOCAL_TMP="/tmp/${SELF}_$$"
