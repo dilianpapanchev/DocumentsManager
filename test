@@ -1,6 +1,158 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# ------------------------------------------------------------------------------
+# scb_file.sh — Secure Upload/Download wrapper with enhanced table alignment & multi-color
+# ------------------------------------------------------------------------------
+
+# Color definitions
+declare -r RED='\e[31m'
+declare -r GREEN='\e[32m'
+declare -r YELLOW='\e[33m'
+declare -r BLUE='\e[34m'
+declare -r CYAN='\e[36m'
+declare -r NC='\e[0m'
+
+readonly SELF=$(basename "$0")
+readonly BASE_DIR=$(cd "$(dirname "$0")" && pwd)
+readonly LOG_DIR="$BASE_DIR/log"
+readonly UPLOAD_DIR="$BASE_DIR/upload"
+readonly DOWNLOAD_BASE="$BASE_DIR/download"
+# default remote dir (може да се override-не като втори аргумент на download)
+readonly REMOTE_DIR="/opt/t24/bnk/UD/DUMMY"
+readonly LOCAL_TMP="/tmp/${SELF}_$$"
+readonly USER_NAME=$(id -un)
+readonly LOG_FILE="$LOG_DIR/${SELF%.sh}.log"
+
+# Ensure necessary directories exist
+mkdir -p "$LOG_DIR" "$UPLOAD_DIR" "$DOWNLOAD_BASE"
+
+# Logging function
+tlog() {
+  local level="$1"; shift
+  echo "$(date '+%F %T') [$level] $*" >> "$LOG_FILE"
+}
+
+# Print error and exit
+die() {
+  local msg="$1"
+  echo -e "${RED}Error:${NC} $msg" >&2
+  tlog "ERROR" "$msg"
+  exit 1
+}
+
+# Info + table helpers (не са променяни)
+
+show_table() {
+  local func="$1" src_dir="$2" file="$3" dest="$4"
+  local headers=("Function" "Source Dir" "File" "Destination")
+  local rows=("$func" "$src_dir" "$file" "$dest")
+  local cols=4
+  declare -a widths
+  for ((i=0;i<cols;i++)); do
+    widths[i]=${#headers[i]}
+    [[ ${#rows[i]} -gt ${widths[i]} ]] && widths[i]=${#rows[i]}
+  done
+  local border=""
+  for ((i=0;i<cols;i++)); do
+    border+="+$(printf '%*s' $((widths[i]+2)) '' | tr ' ' '-')"
+  done
+  border+="+"
+  local fmt=""
+  for ((i=0;i<cols;i++)); do
+    fmt+="| %-${widths[i]}s "
+  done
+  fmt+="|"
+
+  echo -e "${YELLOW}${border}${NC}"
+  printf "${CYAN}${fmt}${NC}\n" "${headers[@]}"
+  echo -e "${YELLOW}${border}${NC}"
+  printf "${GREEN}${fmt}${NC}\n" "${rows[@]}"
+  echo -e "${YELLOW}${border}${NC}"
+}
+
+show_table_multi() { ... }   # оставяме без промяна
+echo_info()      { ... }     # оставяме без промяна
+display_help()   { ... }     # оставяме без промяна
+usage()          { ... }     # оставяме без промяна
+
+# --- начало на аргумент парсинг ---
+
+if [[ "${1:-}" =~ ^(-h|--help)$ ]]; then
+  display_help
+  exit 0
+fi
+
+# минимум два аргумента: команда + файл
+(( $# >= 2 )) || usage
+
+ACTION=$1; shift
+SRC=$1;    shift
+# тук взимаме опционалния трети аргумент (за dest при upload, за src при download)
+PARAM=${1:-}
+
+# --- фунции upload/download (ПОПРАВЕНИ) ---
+
+upload() {
+  local file_name="$1"
+  local dest_dir="${2:-$REMOTE_DIR}"
+  local src_path="$UPLOAD_DIR/$file_name"
+
+  [[ -f $src_path ]]       || die "Upload source not found: $src_path"
+  [[ -r $src_path ]]       || die "No read permission: $src_path"
+  dzdo test -d "$dest_dir" || die "Destination directory not found: $dest_dir"
+  dzdo test -w "$dest_dir" || die "No write permission on destination: $dest_dir"
+
+  show_table "Upload" "$UPLOAD_DIR" "$file_name" "$dest_dir"
+  echo_info "Uploading '$file_name' to '$dest_dir'..."
+
+  cp "$src_path" "$LOCAL_TMP"
+  dzdo chown "$USER_NAME":"$USER_NAME" "$LOCAL_TMP"
+  dzdo chmod 770 "$LOCAL_TMP"
+  dzdo mv "$LOCAL_TMP" "$dest_dir/"
+
+  echo_info "Upload complete: '$file_name' -> '$dest_dir/'"
+}
+
+download() {
+  local file_name="$1"
+  local src_dir="${2:-$REMOTE_DIR}"
+  local remote_file="$src_dir/$file_name"
+  local date_dir
+  date_dir=$(date '+%Y%m%d')
+  local dest_dir="$DOWNLOAD_BASE/$USER_NAME/$date_dir"
+
+  dzdo test -f "$remote_file" || die "Remote file not found: $remote_file"
+  dzdo test -r "$remote_file" || die "No read permission on remote file: $remote_file"
+
+  mkdir -p "$dest_dir"
+  [[ -w $dest_dir ]]       || die "No write permission: $dest_dir"
+
+  show_table "Download" "$src_dir" "$file_name" "$dest_dir"
+  echo_info "Downloading '$file_name' from '$src_dir'..."
+
+  dzdo cp "$remote_file" "$LOCAL_TMP"
+  dzdo chown "$USER_NAME":"$USER_NAME" "$LOCAL_TMP"
+  dzdo chmod 770 "$LOCAL_TMP"
+  mv "$LOCAL_TMP" "$dest_dir/"
+
+  echo_info "Download complete: '$file_name' -> '$dest_dir/'"
+}
+
+# --- главно разпределяне ---
+case "$ACTION" in
+  upload)   upload   "$SRC" "$PARAM" ;;
+  download) download "$SRC" "$PARAM" ;;
+  *)        usage ;;
+esac
+
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+
 # -----------------------------------------------------------------------------
 # scb_file.sh — simple upload/download wrapper for /opt/t24/bnk/UD/DUMMY
 # -----------------------------------------------------------------------------
