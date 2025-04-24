@@ -34,6 +34,226 @@ readonly LOGIN_USER=$(logname 2>/dev/null || echo "")
 mkdir -p "$LOG_DIR" "$UPLOAD_DIR" "$DOWNLOAD_BASE"
 
 # --- logging helpers ---
+tlog()       { echo "$(date '+%F %T') [$1] ${*:2}" >> "$LOG_FILE"; }
+die()        { echo -e "${RED}Error:${NC} $1" >&2; tlog ERROR "$1"; exit 1; }
+echo_info()  { echo -e "${BLUE}Info:${NC} $1"; tlog INFO "$1"; }
+
+# --- ASCII table printer (single row) ---
+show_table() {
+  local func=$1 src_dir=$2 file=$3 dest=$4
+  local headers=("Function" "Source Dir" "File" "Destination")
+  local rows=("$func" "$src_dir" "$file" "$dest")
+  local cols=4
+  local -a widths
+  for ((i=0;i<cols;i++)); do
+    widths[i]=${#headers[i]}
+    (( ${#rows[i]} > widths[i] )) && widths[i]=${#rows[i]}
+  done
+
+  local border=""
+  for w in "${widths[@]}"; do
+    border+="+$(printf '%*s' $((w+2)) '' | tr ' ' '-')"
+  done
+  border+="+"
+
+  local fmt=""
+  for w in "${widths[@]}"; do
+    fmt+="| %-${w}s "
+  done
+  fmt+="|"
+
+  echo -e "${YELLOW}${border}${NC}"
+  printf "${CYAN}${fmt}${NC}\n" "${headers[@]}"
+  echo -e "${YELLOW}${border}${NC}"
+  printf "${GREEN}${fmt}${NC}\n" "${rows[@]}"
+  echo -e "${YELLOW}${border}${NC}"
+}
+
+# --- ASCII table printer (multiple rows) ---
+show_table_multi() {
+  local args=("$@")
+  local total=${#args[@]} cols=4 rows_num=$(( total/cols ))
+  local headers=("Function" "Source Dir" "File" "Destination")
+  local -a widths
+  for ((i=0;i<cols;i++)); do widths[i]=${#headers[i]}; done
+  for ((i=0;i<total;i++)); do
+    local c=$(( i % cols ))
+    (( ${#args[i]} > widths[c] )) && widths[c]=${#args[i]}
+  done
+
+  local border=""
+  for w in "${widths[@]}"; do
+    border+="+$(printf '%*s' $((w+2)) '' | tr ' ' '-')"
+  done
+  border+="+"
+
+  local fmt=""
+  for w in "${widths[@]}"; do
+    fmt+="| %-${w}s "
+  done
+  fmt+="|"
+
+  echo -e "${YELLOW}${border}${NC}"
+  printf "${CYAN}${fmt}${NC}\n" "${headers[@]}"
+  echo -e "${YELLOW}${border}${NC}"
+  for ((r=0;r<rows_num;r++)); do
+    local idx=$(( r * cols ))
+    printf "${GREEN}${fmt}${NC}\n" \
+      "${args[idx]}" "${args[idx+1]}" "${args[idx+2]}" "${args[idx+3]}"
+  done
+  echo -e "${YELLOW}${border}${NC}"
+}
+
+# --- help & usage ---
+display_help() {
+  cat <<EOF
+${CYAN}scb_file.sh${NC} — Secure Upload/Download/Cleanup Utility
+
+${YELLOW}Usage:${NC}
+  $SELF [OPTIONS] <command> <file|none>
+
+${YELLOW}Commands:${NC}
+  upload   <file_in_upload_dir> [<dest_dir>]
+  download <remote_file>        [<src_dir>]
+  cleanup                      Cleanup files >7d or >10MB under $DOWNLOAD_BASE (all users)
+
+${YELLOW}Options:${NC}
+  -h, --help    Display this help and exit
+
+${YELLOW}Examples:${NC}
+  $SELF upload    test.txt
+  $SELF download  test.txt
+  $SELF cleanup
+EOF
+}
+
+usage() {
+  echo -e "${YELLOW}Usage:${NC}"
+  show_table_multi \
+    "Upload"   "$UPLOAD_DIR"                  "<file_in_upload_dir>"       "$REMOTE_DIR" \
+    "Download" "$REMOTE_DIR"                  "<remote_file>"              "$DOWNLOAD_BASE/<user>/<YYYYmmdd>" \
+    "Cleanup"  "$DOWNLOAD_BASE"               "<older than 7d or >10MB>"   "-"
+  echo -e "${YELLOW}Options:${NC}"
+  echo "  -h, --help    Display detailed help"
+  exit 1
+}
+
+# --- parse args ---
+if [[ "${1:-}" =~ ^(-h|--help)$ ]]; then
+  display_help; exit 0
+fi
+(( $# >= 1 )) || usage
+ACTION=$1; shift
+
+# --- command implementations ---
+upload() {
+  (( $# >= 1 )) || die "Missing <file> for upload"
+  local name=$1 dest=${2:-$REMOTE_DIR} src="$UPLOAD_DIR/$name"
+
+  [[ -f $src ]]       || die "Upload source not found: $src"
+  [[ -r $src ]]       || die "No read permission: $src"
+  dzdo test -d "$dest" || die "Destination not found: $dest"
+  dzdo test -w "$dest" || die "No write permission: $dest"
+
+  show_table "Upload" "$UPLOAD_DIR" "$name" "$dest"
+  echo_info "Uploading '$name' → '$dest/'"
+
+  local tmpf
+  tmpf=$(mktemp "/tmp/${name}.XXXXXX") || die "Cannot create temp file"
+  cp "$src" "$tmpf"
+  dzdo chown "$USER_NAME":"$USER_NAME" "$tmpf"
+  dzdo chmod 770 "$tmpf"
+  dzdo mv "$tmpf" "$dest/$name"
+
+  echo_info "Upload complete: '$name'"
+}
+
+download() {
+  (( $# >= 1 )) || die "Missing <file> for download"
+  local name=$1 srcd=${2:-$REMOTE_DIR} remote="$srcd/$name"
+
+  dzdo test -f "$remote" || die "Remote file not found: $remote"
+  dzdo test -r "$remote" || die "No read permission: $remote"
+
+  local date_dir=$(date '+%Y%m%d')
+  local dest="$DOWNLOAD_BASE/$USER_NAME/$date_dir"
+  mkdir -p "$dest"; [[ -w $dest ]] || die "No write permission: $dest"
+
+  show_table "Download" "$srcd" "$name" "$dest"
+  echo_info "Downloading '$name' → '$dest/'"
+
+  local tmpf
+  tmpf=$(mktemp "/tmp/${name}.XXXXXX") || die "Cannot create temp file"
+  dzdo cp "$remote" "$tmpf"
+  dzdo chown "$USER_NAME":"$USER_NAME" "$tmpf"
+  dzdo chmod 770 "$tmpf"
+  mv "$tmpf" "$dest/$name"
+
+  echo_info "Download complete: '$name'"
+}
+
+cleanup() {
+  local base="$DOWNLOAD_BASE"
+  [[ -d $base ]] || { echo_info "Nothing to clean in $base"; return; }
+
+  echo_info "Removing files older than 7 days under '$base'..."
+  find "$base" -mindepth 2 -type f -mtime +7 -print -exec rm -f {} \; \
+    | while read -r f; do echo_info "Removed old file: $f"; done
+
+  echo_info "Removing files larger than 10MB under '$base'..."
+  find "$base" -mindepth 2 -type f -size +10M -print -exec rm -f {} \; \
+    | while read -r f; do echo_info "Removed large file: $f"; done
+
+  echo_info "Cleanup complete."
+}
+
+# --- main dispatch ---
+case "$ACTION" in
+  upload)   upload   "$@" ;;
+  download) download "$@" ;;
+  cleanup)  (( $# == 0 )) || die "cleanup takes no arguments"; cleanup ;;
+  *)        usage ;;
+esac
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ------------------------------------------------------------------------------
+# scb_file.sh — Secure Upload/Download/Cleanup wrapper with enhanced table alignment & multi-color
+# ------------------------------------------------------------------------------
+
+# Color definitions
+declare -r RED='\e[31m'
+declare -r GREEN='\e[32m'
+declare -r YELLOW='\e[33m'
+declare -r BLUE='\e[34m'
+declare -r CYAN='\e[36m'
+declare -r NC='\e[0m'
+
+# Paths & names
+readonly SELF=$(basename "$0")
+readonly BASE_DIR=$(cd "$(dirname "$0")" && pwd)
+readonly LOG_DIR="$BASE_DIR/log"
+readonly UPLOAD_DIR="$BASE_DIR/upload"
+readonly DOWNLOAD_BASE="$BASE_DIR/download"
+readonly LOG_FILE="$LOG_DIR/${SELF%.sh}.log"
+readonly REMOTE_DIR="/opt/t24/bnk/UD/DUMMY"
+readonly USER_NAME=$(id -un)
+readonly LOGIN_USER=$(logname 2>/dev/null || echo "")
+
+# Ensure we run as the login user
+[[ "$LOGIN_USER" == "$USER_NAME" ]] || {
+  echo -e "${RED}Error:${NC} Please run as login user '$LOGIN_USER', not '$USER_NAME'." >&2
+  exit 1
+}
+
+# Ensure directories exist
+mkdir -p "$LOG_DIR" "$UPLOAD_DIR" "$DOWNLOAD_BASE"
+
+# --- logging helpers ---
 tlog()      { echo "$(date '+%F %T') [$1] ${*:2}" >> "$LOG_FILE"; }
 die()       { echo -e "${RED}Error:${NC} $1" >&2; tlog ERROR "$1"; exit 1; }
 echo_info() { echo -e "${BLUE}Info:${NC} $1"; tlog INFO "$1"; }
