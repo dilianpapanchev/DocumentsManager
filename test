@@ -1,3 +1,19 @@
+for (let i = rows.length - 1; i >= 1 && count < maxDays; i--) {
+  const cells = rows[i].getElementsByTagName("td");
+  if (cells.length >= 9) {
+    const date = cells[0].innerText;
+    const cob = parseElapsedToHours(cells[4].innerText);
+    const rr = parseElapsedToHours(cells[8].innerText);
+
+    dates.unshift(date);
+    cobElapsed.unshift(cob);
+    rrElapsed.unshift(rr);
+    count++;
+  }
+}
+
+
+
 let elapsedChartInstance; // Глобално, за да пазим инстанцията
 
 function renderElapsedChart() {
