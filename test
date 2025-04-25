@@ -1,3 +1,36 @@
+function getElapsedChartData() {
+  const table = document.getElementById("recordsTable");
+  const rows = table.getElementsByTagName("tr");
+
+  const dates = [];
+  const cobElapsed = [];
+  const rrElapsed = [];
+
+  const range = parseInt(document.getElementById("daysRange").value, 10) || 10;
+  const startIndex = Math.max(1, rows.length - range); // пропускаме заглавния ред
+
+  for (let i = startIndex; i < rows.length; i++) {
+    const cells = rows[i].getElementsByTagName("td");
+    if (cells.length < 9) continue;
+
+    const date = cells[0].innerText;
+    const cob = parseElapsedToHours(cells[4].innerText);
+    const rr = parseElapsedToHours(cells[8].innerText);
+
+    dates.push(date);
+    cobElapsed.push(cob);
+    rrElapsed.push(rr);
+  }
+
+  return {
+    dates,
+    cobElapsed,
+    rrElapsed
+  };
+}
+
+
+
 document.getElementById("daysRange").addEventListener("input", () => {
   const val = document.getElementById("daysRange").value;
   document.getElementById("daysValue").textContent = `${val} days`;
