@@ -1,3 +1,26 @@
+const toggleBtn = document.getElementById("darkModeToggle");
+const modeLabel = document.getElementById("modeLabel");
+
+toggleBtn.addEventListener("click", () => {
+  document.body.classList.toggle("dark-mode");
+  const isDark = document.body.classList.contains("dark-mode");
+  modeLabel.textContent = isDark ? "Dark Mode" : "Light Mode";
+  updateChartsTheme();
+});
+
+
+<div id="darkModeToggle" class="tool-button">
+  <div class="toggle-thumb">
+    <span class="icon sun">☀️</span>
+    <span class="icon moon">🌙</span>
+  </div>
+  <span id="modeLabel">Light Mode</span>
+</div>
+
+
+
+
+
 # --- prevent running from other directory ---
 if [[ "$(pwd)" != "$BASE_DIR" ]]; then
   die "Please run '$SELF' from its own directory: $BASE_DIR"
