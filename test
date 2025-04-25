@@ -1,3 +1,15 @@
+<script>
+  const slider = document.getElementById('daysSlider');
+  const daysValue = document.getElementById('daysValue');
+
+  slider.addEventListener('input', () => {
+    daysValue.textContent = slider.value;
+    renderCOBChart();  // обновява графиката
+  });
+</script>
+
+
+
 <div id="toolsPanel">
   <div class="tools-title">COB Analyser Tools <span>🛠️</span></div>
 
