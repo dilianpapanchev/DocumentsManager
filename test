@@ -1,3 +1,11 @@
+document.getElementById("daysRange").addEventListener("input", () => {
+  const val = parseInt(document.getElementById("daysRange").value, 10);
+  document.getElementById("daysValue").textContent = `${val} days`;
+  renderElapsedChart();  // тук трябва да се подава и стойността!
+});
+
+
+
 for (let i = rows.length - 1; i >= 1 && count < maxDays; i--) {
   const cells = rows[i].getElementsByTagName("td");
   if (cells.length >= 9) {
