@@ -1,3 +1,137 @@
+let elapsedChartInstance; // Глобално, за да пазим инстанцията
+
+function renderElapsedChart() {
+  const ctx = document.getElementById("elapsedChart").getContext("2d");
+  const { dates, cobElapsed, rrElapsed } = getElapsedChartData();
+
+  // Изтриване на старата графика ако съществува
+  if (elapsedChartInstance) {
+    elapsedChartInstance.destroy();
+  }
+
+  elapsedChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: dates,
+      datasets: [
+        {
+          label: 'COB Elapsed',
+          data: cobElapsed,
+          backgroundColor: 'rgba(154, 200, 245, 1)',
+          stack: 'stack1',
+          order: 1
+        },
+        {
+          label: 'RR Elapsed',
+          data: rrElapsed,
+          backgroundColor: 'rgba(181, 181, 181, 1)',
+          stack: 'stack1',
+          order: 2
+        },
+        {
+          label: 'Duration Limit (2:30)',
+          data: Array(dates.length).fill(2.5),
+          type: 'line',
+          borderColor: 'red',
+          borderDash: [6, 4],
+          pointRadius: 0,
+          borderWidth: 2,
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 7,
+          ticks: {
+            callback: function(value) {
+              return formatHHMM(value);
+            }
+          },
+          title: {
+            display: false,
+            text: 'Duration (HH:mm)'
+          },
+          stacked: true
+        },
+        x: {
+          stacked: true
+        }
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return `${context.dataset.label}: ${formatHHMM(context.raw)}`;
+            }
+          }
+        },
+        title: {
+          display: true,
+          text: 'COB & RR Elapsed Times vs Duration Limit',
+          color: getTextColor(),
+          font: {
+            size: 13,
+            weight: 'bold'
+          }
+        },
+        legend: {
+          labels: {
+            font: { size: 13 }
+          }
+        }
+      }
+    },
+    plugins: [{
+      id: 'customLabels',
+      afterDatasetsDraw(chart) {
+        const { ctx, chartArea, data, scales } = chart;
+        const cobMeta = chart.getDatasetMeta(0);
+        const rrMeta = chart.getDatasetMeta(1);
+        const y = scales.y;
+
+        ctx.save();
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+
+        ctx.fillStyle = getTextColor();
+
+        data.labels.forEach((_, i) => {
+          const cob = data.datasets[0].data[i];
+          const rr = data.datasets[1].data[i];
+          const total = cob + rr;
+
+          const x = cobMeta.data[i].x;
+          const cobTop = y.getPixelForValue(cob);
+          const rrTop = y.getPixelForValue(total);
+
+          if (cob > 0) {
+            const cobCenterY = (y.getPixelForValue(0) + cobTop) / 2;
+            ctx.fillText(formatHHMM(cob), x, cobCenterY);
+          }
+
+          if (rr > 0) {
+            const rrCenterY = (cobTop + rrTop) / 2;
+            ctx.fillText(formatHHMM(rr), x, rrCenterY);
+          }
+
+          if (total > 0) {
+            ctx.fillText(formatHHMM(total), x, rrTop - 6);
+          }
+        });
+
+        ctx.restore();
+      }
+    }]
+  });
+}
+
+
+
+
 function getElapsedChartData() {
   const table = document.getElementById("recordsTable");
   const rows = table.getElementsByTagName("tr");
