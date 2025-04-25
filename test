@@ -1,3 +1,27 @@
+<div id="toolsPanel">
+  <div class="tools-title">COB Analyser Tools <span>🛠️</span></div>
+
+  <!-- Dark Mode Toggle -->
+  <div id="darkModeToggle" class="tool-button">
+    <div class="toggle-thumb">
+      <span id="themeIcon" class="icon sun">☀️</span>
+    </div>
+  </div>
+
+  <!-- Export Button -->
+  <button id="exportGraphsBtn" class="tool-button">
+    <span class="icon">🖼️</span> Export Graphs
+  </button>
+
+  <!-- Slider: Days Back -->
+  <div style="margin-top: 15px; text-align: center; font-size: 13px;">
+    <label for="daysSlider">Days Back: <span id="daysValue">10</span></label><br>
+    <input type="range" min="3" max="10" value="10" id="daysSlider" />
+  </div>
+</div>
+
+
+
 const toggleBtn = document.getElementById("darkModeToggle");
 const modeLabel = document.getElementById("modeLabel");
 
