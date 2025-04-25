@@ -1,3 +1,20 @@
+window.onload = function() {
+  renderIDsChart();
+  renderTimingChart();
+  renderElapsedChart();
+  renderCPUChart();
+
+  const daysRange = document.getElementById("daysRange");
+  const daysValue = document.getElementById("daysValue");
+
+  daysRange.addEventListener("input", () => {
+    daysValue.textContent = `${daysRange.value} days`;
+    renderElapsedChart();
+  });
+};
+
+
+
 document.getElementById("daysRange").addEventListener("input", () => {
   const val = parseInt(document.getElementById("daysRange").value, 10);
   document.getElementById("daysValue").textContent = `${val} days`;
