@@ -1,3 +1,9 @@
+# --- prevent running from other directory ---
+if [[ "$(pwd)" != "$BASE_DIR" ]]; then
+  die "Please run '$SELF' from its own directory: $BASE_DIR"
+fi
+
+
 cleanup() {
   local base="$DOWNLOAD_BASE"
   [[ -d $base ]] || { echo_info "Nothing to clean in $base"; return; }
