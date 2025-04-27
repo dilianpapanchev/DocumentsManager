@@ -1,4 +1,31 @@
 /**
+ * Скрива table-rows извън текущия range:
+ * - при days ≤ 10: остава видим само последните 10
+ * - при days > 10: остава видим само последните days
+ */
+function updateTableRows(days) {
+  const rows = Array.from(
+    document.getElementById('recordsTable')
+            .getElementsByTagName('tr')
+  ).slice(1);  // пропускаме header-а
+  const n = rows.length;
+
+  // Ако нямаме поне 1 ред, нищо не правим
+  if (n === 0) return;
+
+  // Започваме от този индекс
+  const start = days <= 10
+    ? Math.max(0, n - 10)    // винаги последните 10, ако могат
+    : Math.max(0, n - days); // или последните days
+
+  rows.forEach((tr, i) => {
+    tr.hidden = i < start;
+  });
+}
+
+
+
+/**
  * Скрива (hidden) всички table-rows извън текущия range,
  * но само когато days > 10. Последните 10 винаги остават видими.
  */
