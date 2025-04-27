@@ -152,3 +152,161 @@ function renderElapsedChart() {
     }
   });
 }
+
+
+
+
+<table class="rounded" id="elapsedTable">
+  <tr><th colspan="10">📊 COB & RR Elapsed Times vs Duration Limit</th></tr>
+  <tr>
+    <td>
+      <div class="chart-container">
+        <canvas id="elapsedChart"></canvas>
+      </div>
+    </td>
+  </tr>
+</table>
+
+
+.chart-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+#elapsedChart {
+  width: 100% !important;
+  height: 400px !important;
+}
+
+
+function renderElapsedChart() {
+  const ctx = document.getElementById("elapsedChart").getContext("2d");
+  const { dates, cobElapsed, rrElapsed } = getElapsedChartData();
+
+  const canvas = document.getElementById("elapsedChart");
+  
+  // Задаваме ширината спрямо броя дни
+  canvas.width = Math.max(dates.length * 100, 1000);
+
+  new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: dates,
+      datasets: [
+        {
+          label: 'COB Elapsed',
+          data: cobElapsed,
+          backgroundColor: 'rgba(154, 200, 245, 1)',
+          stack: 'stack1',
+          order: 1
+        },
+        {
+          label: 'RR Elapsed',
+          data: rrElapsed,
+          backgroundColor: 'rgba(181, 181, 181, 1)',
+          stack: 'stack1',
+          order: 2
+        },
+        {
+          label: 'Duration Limit (2:30)',
+          data: Array(dates.length).fill(2.5),
+          type: 'line',
+          borderColor: 'red',
+          borderDash: [6, 4],
+          pointRadius: 0,
+          borderWidth: 2
+        }
+      ]
+    },
+    options: {
+      responsive: false,
+      maintainAspectRatio: false,
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 7,
+          ticks: {
+            callback: function(value) {
+              return formatHHMM(value);
+            }
+          },
+          stacked: true
+        },
+        x: {
+          stacked: true,
+          ticks: {
+            autoSkip: false,
+            font: { size: 13 },
+            color: '#333'
+          }
+        }
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return `${context.dataset.label}: ${formatHHMM(context.raw)}`;
+            }
+          }
+        },
+        title: {
+          display: true,
+          text: 'COB & RR Elapsed Times vs Duration Limit',
+          color: getTextColor(),
+          font: {
+            size: 13,
+            weight: 'bold'
+          }
+        },
+        legend: {
+          labels: {
+            font: { size: 13 }
+          }
+        }
+      },
+      plugins: [{
+        id: 'customLabels',
+        afterDatasetsDraw(chart) {
+          const { ctx, chartArea, data, scales } = chart;
+          const cobMeta = chart.getDatasetMeta(0);
+          const rrMeta = chart.getDatasetMeta(1);
+          const y = scales.y;
+
+          ctx.save();
+          ctx.font = 'bold 11px sans-serif';
+          ctx.textAlign = 'center';
+
+          const canvasBgColor = getComputedStyle(ctx.canvas).backgroundColor;
+          const canvasHexColor = rgbToHex(canvasBgColor);
+          ctx.fillStyle = getTextColor(canvasHexColor);
+
+          data.labels.forEach((label, i) => {
+            const cob = data.datasets[0].data[i];
+            const rr = data.datasets[1].data[i];
+            const total = cob + rr;
+
+            const x = cobMeta.data[i].x;
+            const cobTop = y.getPixelForValue(cob);
+            const rrTop = y.getPixelForValue(total);
+
+            if (cob > 0) {
+              const cobCenterY = (y.getPixelForValue(0) + cobTop) / 2;
+              ctx.fillText(formatHHMM(cob), x, cobCenterY);
+            }
+
+            if (rr > 0) {
+              const rrCenterY = (cobTop + rrTop) / 2;
+              ctx.fillText(formatHHMM(rr), x, rrCenterY);
+            }
+
+            if (total > 0) {
+              ctx.fillText(formatHHMM(total), x, rrTop - 8);
+            }
+          });
+
+          ctx.restore();
+        }
+      }]
+    }
+  });
+}
