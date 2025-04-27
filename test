@@ -1,4 +1,75 @@
 /**
+ * Скрива всички table-rows извън последните N, където
+ * N = max(days, 3)
+ */
+function updateTableRows(days) {
+  const rows = Array.from(
+    document.getElementById('recordsTable')
+            .getElementsByTagName('tr')
+  ).slice(1);  // пропускаме header-а
+  const n = rows.length;
+
+  // Колко да покажем (най-малко 3)
+  const visibleCount = Math.max(days, 3);
+  // Индексът, от който започваме да показваме
+  const start = Math.max(0, n - visibleCount);
+
+  rows.forEach((tr, i) => {
+    tr.hidden = i < start;
+  });
+}
+
+plugins: [{
+  id: 'labelsInside',
+  afterDatasetsDraw(chart) {
+    const { ctx, data, scales } = chart;
+    const cobMeta = chart.getDatasetMeta(0);
+    // RR колоните са върху COB, но взимаме техния мета вече за изчисления
+    const yScale  = scales.y;
+
+    ctx.save();
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = getTextColor();
+
+    data.labels.forEach((_, i) => {
+      const cob   = data.datasets[0].data[i];
+      const rr    = data.datasets[1].data[i];
+      const total = cob + rr;
+      const x     = cobMeta.data[i].x;
+
+      // COB етикет вътре в синята част
+      if (cob > 0) {
+        const cobTop    = yScale.getPixelForValue(cob);
+        const cobBottom = yScale.getPixelForValue(0);
+        const yCob      = (cobTop + cobBottom) / 2;
+        ctx.fillText(formatHHMM(cob), x, yCob);
+      }
+
+      // RR етикет вътре в сивата част
+      if (rr > 0) {
+        const rrTop     = yScale.getPixelForValue(total);
+        const rrBottom  = yScale.getPixelForValue(cob);
+        const yRr       = (rrTop + rrBottom) / 2;
+        ctx.fillText(formatHHMM(rr), x, yRr);
+      }
+
+      // Total над колоната
+      if (total > 0) {
+        const yTotal = yScale.getPixelForValue(total) - 6;
+        ctx.fillText(formatHHMM(total), x, yTotal);
+      }
+    });
+
+    ctx.restore();
+  }
+}]
+
+
+
+
+
+/**
  * Скрива table-rows извън текущия range:
  * - при days ≤ 10: остава видим само последните 10
  * - при days > 10: остава видим само последните days
