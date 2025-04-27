@@ -1,4 +1,25 @@
 function updateTableRows(days) {
+  const allRows = getAllRows();    // всички <tr>
+  const dataRows = getDataRows();  // само <tr> за данни
+  const n = dataRows.length;
+
+  const visibleCount = Math.max(days, 3);
+  const start = Math.max(0, n - visibleCount);
+
+  allRows.forEach((tr, i) => {
+    if (i < 2) {
+      tr.hidden = false; // показваме винаги header-ите
+    } else {
+      tr.hidden = (i - 2) < start;
+    }
+  });
+}
+
+
+
+
+
+function updateTableRows(days) {
   const allRows = getAllRows(); // всички tr (вкл. th + tr)
   const dataRows = getDataRows(); // само данните
   const n = dataRows.length;
