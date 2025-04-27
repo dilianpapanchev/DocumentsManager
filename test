@@ -1,3 +1,52 @@
+<div id="daysSliderWrapper" style="margin-top: 10px;">
+  <label for="daysRange" style="font-size: 13px; font-weight: bold;">COB Days:</label>
+  
+  <input type="range" id="daysRange" min="3" max="31" value="10" style="width: 100%; margin-bottom: 5px;">
+  
+  <div style="display: flex; align-items: center; justify-content: center; gap: 5px;">
+    <input type="number" id="daysInput" min="3" max="31" value="10" style="width: 60px; font-size: 13px; text-align: center;">
+    <span style="font-size: 13px;">days</span>
+  </div>
+</div>
+
+
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const slider = document.getElementById("daysRange");
+  const input = document.getElementById("daysInput");
+
+  function syncDaysFromSlider() {
+    input.value = slider.value;
+    // тук извикваш каквото още искаш като update на графики, таблици и т.н.
+    updateContainerWidth(slider.value);
+    updateTableRows(slider.value);
+    renderElapsedChart();
+    renderTimingChart();
+    renderIDsChart();
+  }
+
+  function syncDaysFromInput() {
+    let value = parseInt(input.value, 10);
+
+    if (isNaN(value)) value = 10;
+    if (value < 3) value = 3;
+    if (value > 31) value = 31;
+
+    input.value = value;
+    slider.value = value;
+    syncDaysFromSlider();
+  }
+
+  slider.addEventListener("input", syncDaysFromSlider);
+  input.addEventListener("input", syncDaysFromInput);
+
+  syncDaysFromSlider(); // за да се инициализира правилно при зареждане
+});
+</script>
+
+
+
+
 const toggleBtn = document.getElementById('darkModeToggle');
 const icon = document.getElementById('themeIcon');
 const text = document.getElementById('themeText');
