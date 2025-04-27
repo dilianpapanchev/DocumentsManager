@@ -1,3 +1,33 @@
+function onDaysChange() {
+    const slider = document.getElementById("daysRange");
+    const label = document.getElementById("daysValue");
+
+    let days = parseInt(slider.value, 10);
+
+    if (days < 3) {
+        days = 3;
+        slider.value = 3;
+    }
+
+    label.textContent = `${days} days`;
+
+    updateContainerWidth(days);
+    updateTableRows(days);
+
+    renderElapsedChart();
+    renderTimingChart();
+}
+
+
+document.addEventListener("DOMContentLoaded", () => {
+    const slider = document.getElementById("daysRange");
+
+    slider.addEventListener("input", onDaysChange);
+    onDaysChange(); // За да се рендерират правилно при зареждане
+});
+
+
+
 let timingChartInstance;
 
 function renderTimingChart() {
