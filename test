@@ -1,3 +1,27 @@
+const daysRange = document.getElementById("daysRange");
+const daysValue = document.getElementById("daysValue");
+
+daysRange.addEventListener("input", () => {
+    let selectedDays = parseInt(daysRange.value, 10);
+    if (selectedDays < 3) {
+        selectedDays = 3;
+        daysRange.value = 3;
+    }
+    daysValue.textContent = `${selectedDays} days`;
+
+    renderAllCharts(selectedDays);
+});
+
+function renderAllCharts(selectedDays) {
+    renderIDsChart(selectedDays);
+    renderTimingChart(selectedDays);
+    renderElapsedChart(selectedDays);
+    renderCPUChart(selectedDays);
+}
+
+
+
+
 let recordsChartInstance = null;
 let timingChartInstance = null;
 
