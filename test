@@ -1,4 +1,254 @@
 <script>
+document.addEventListener('DOMContentLoaded', () => {
+  // Chart-инстанции, за да можем да ги destroy-нем
+  let recordsChartInstance;
+  let timingChartInstance;
+
+  // Парсваме HH:MM:SS в минути (float)
+  function parseTimeToMinutes(timeString) {
+    const parts = timeString.split(':');
+    if (parts.length === 3) {
+      const hours   = parseInt(parts[0], 10);
+      const minutes = parseInt(parts[1], 10);
+      const seconds = parseInt(parts[2], 10);
+      return hours * 60 + minutes + seconds / 60;
+    }
+    return 0;
+  }
+
+  // За цветът на cutoff линиите
+  function getCutoffColor() {
+    return document.body.classList.contains('dark-mode') ? 'white' : 'black';
+  }
+
+  // Събираме данните за последните N дни от таблицата
+  function getRecordsData() {
+    const table = document.getElementById('recordsTable');
+    const allRows = Array.from(table.getElementsByTagName('tr')).slice(1);
+    const validRows = allRows.filter(r => r.getElementsByTagName('td').length === 10);
+    const days = parseInt(document.getElementById('daysRange').value, 10);
+    const slice = validRows.slice(-days);
+
+    const labels = [];
+    const recordsPerMinute = [];
+
+    slice.forEach(row => {
+      const cells = row.getElementsByTagName('td');
+      const date = cells[0].innerText.trim();
+      const elapsed = parseTimeToMinutes(cells[4].innerText.trim());
+      const tx     = parseInt(cells[5].innerText.trim(), 10);
+      if (elapsed > 0) {
+        labels.push(date);
+        recordsPerMinute.push(tx / elapsed);
+      }
+    });
+
+    return { labels, recordsPerMinute };
+  }
+
+  // Рендер / рефреш на recordsChart
+  function renderRecordsChart() {
+    const { labels, recordsPerMinute } = getRecordsData();
+    const ctx = document.getElementById('recordsChart').getContext('2d');
+
+    if (recordsChartInstance) {
+      recordsChartInstance.destroy();
+    }
+
+    recordsChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels: labels,
+        datasets: [{
+          label: 'Records Per Minute',
+          data: recordsPerMinute,
+          backgroundColor: [
+            'rgba(255, 99, 132, 0.6)',
+            'rgba(54, 162, 235, 0.6)',
+            'rgba(75, 192, 192, 0.6)'
+          ],
+          borderColor: [
+            'rgba(255, 99, 132, 1)',
+            'rgba(54, 162, 235, 1)',
+            'rgba(75, 192, 192, 1)'
+          ],
+          borderWidth: 2,
+          borderRadius: 15,
+          hoverBorderWidth: 3
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            stacked: true,
+            ticks: {
+              font: { size: 13 },
+              color: '#333'
+            }
+          },
+          y: {
+            stacked: true,
+            beginAtZero: true,
+            ticks: {
+              font: { size: 13 },
+              color: '#333'
+            }
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          title: {
+            display: true,
+            text: 'Records Processed per minute',
+            font: { size: 13, weight: 'bold' },
+            color: '#222'
+          },
+          tooltip: {
+            callbacks: {
+              label(ctx) {
+                return ctx.dataset.label + ': ' + ctx.formattedValue;
+              }
+            }
+          }
+        },
+        animation: {
+          duration: 1500,
+          easing: 'easeOutBounce'
+        }
+      }
+    });
+  }
+
+  // Събираме времената за последните N дни
+  function getTimingChartData() {
+    const table = document.getElementById('recordsTable');
+    const allRows = Array.from(table.getElementsByTagName('tr')).slice(1)
+                         .filter(r => r.getElementsByTagName('td').length === 10);
+    const days = parseInt(document.getElementById('daysRange').value, 10);
+    const slice = allRows.slice(-days);
+
+    const dates    = [];
+    const ilc03time= [];
+    const cobStart = [];
+    const cobStop  = [];
+    const rrStart  = [];
+    const rrStop   = [];
+    const a77time  = [];
+    const baseMin  = parseTimeToMinutes('12:00:00');
+
+    function adjust(timeStr) {
+      const m = parseTimeToMinutes(timeStr.trim());
+      return m < baseMin ? m + 1440 : m;
+    }
+
+    slice.forEach(row => {
+      const c = row.getElementsByTagName('td');
+      dates.push(row.cells[0].innerText.trim());
+      ilc03time.push(adjust(c[1].innerText));
+      cobStart.push(adjust(c[2].innerText));
+      cobStop.push(adjust(c[3].innerText));
+      rrStart.push(adjust(c[6].innerText));
+      rrStop.push(adjust(c[7].innerText));
+      a77time.push(adjust(c[9].innerText));
+    });
+
+    return { dates, ilc03time, cobStart, cobStop, rrStart, rrStop, a77time };
+  }
+
+  // Рендер / рефреш на timingChart
+  function renderTimingChart() {
+    const { dates, ilc03time, cobStart, cobStop, rrStart, rrStop, a77time } =
+      getTimingChartData();
+    const ctx = document.getElementById('timingChart').getContext('2d');
+
+    if (timingChartInstance) {
+      timingChartInstance.destroy();
+    }
+
+    timingChartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: dates,
+        datasets: [
+          { label: 'ILC03 Time',    data: ilc03time, borderColor: 'rgba(155,99,132,1)', tension: .3 },
+          { label: 'COB Start Time', data: cobStart,  borderColor: 'rgba(255,99,132,1)', tension: .3 },
+          { label: 'COB End Time',   data: cobStop,   borderColor: 'rgba(54,162,235,1)', tension: .3 },
+          { label: 'RR Start Time',  data: rrStart,   borderColor: 'rgba(75,192,192,1)', tension: .3 },
+          { label: 'RR Stop Time',   data: rrStop,    borderColor: 'rgba(175,92,192,1)', tension: .3 },
+          { label: 'A770 Time',      data: a77time,   borderColor: 'rgba(54,113,35,1)', tension: .3 },
+          {
+            label: 'ILC03 Cutoff (22:30)',
+            data: Array(dates.length).fill(1350),
+            borderColor: getCutoffColor(),
+            borderDash: [10,5],
+            pointRadius: 0,
+            borderWidth: 2
+          },
+          {
+            label: 'RR Cutoff (01:30)',
+            data: Array(dates.length).fill(1530),
+            borderColor: 'orange',
+            borderDash: [10,5],
+            pointRadius: 0,
+            borderWidth: 2
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            min: 1200,
+            max: 1680,
+            ticks: {
+              callback(value) {
+                const h = Math.floor(value/60) % 24;
+                const m = Math.floor(value % 60);
+                return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
+              },
+              font: { size: 13 },
+              color: '#333'
+            }
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          title: {
+            display: true,
+            text: 'COB & RR Times vs Cutoff Threshold',
+            font: { size: 13, weight: 'bold' },
+            color: getCutoffColor()
+          }
+        },
+        animation: {
+          duration: 1500,
+          easing: 'easeOutBounce'
+        }
+      }
+    });
+  }
+
+  // При всяка промяна на slider-а — рефрешваме и двете графики
+  const slider = document.getElementById('daysRange');
+  slider.addEventListener('input', () => {
+    document.getElementById('daysValue').textContent = slider.value + ' days';
+    renderRecordsChart();
+    renderTimingChart();
+  });
+
+  // initial draw
+  renderRecordsChart();
+  renderTimingChart();
+});
+</script>
+
+
+
+
+<script>
   // --- Запазваме инстанции, за да можем да ги destroy-нем при рефреш ---
   let recordsChartInstance;
   let timingChartInstance;
