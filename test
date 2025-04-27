@@ -1,3 +1,82 @@
+let timingChartInstance;
+function renderTimingChart(days) {
+    const { dates, ilc03time, cobStart, cobStop, rrStart, rrStop, a77time } = getTimingChartData();
+
+    const sliceStart = Math.max(dates.length - days, 0);
+
+    if (timingChartInstance) {
+        timingChartInstance.destroy();
+    }
+
+    const ctx = document.getElementById("timingChart").getContext("2d");
+    timingChartInstance = new Chart(ctx, {
+        type: "line",
+        data: {
+            labels: dates.slice(sliceStart),
+            datasets: [
+                { label: "ILC03 Time", data: ilc03time.slice(sliceStart), borderColor: "rgba(155,99,132,1)", tension: 0.3 },
+                { label: "COB Start Time", data: cobStart.slice(sliceStart), borderColor: "rgba(255,99,132,1)", tension: 0.3 },
+                { label: "COB End Time", data: cobStop.slice(sliceStart), borderColor: "rgba(54,162,235,1)", tension: 0.3 },
+                { label: "RR Start Time", data: rrStart.slice(sliceStart), borderColor: "rgba(75,192,192,1)", tension: 0.3 },
+                { label: "RR Stop Time", data: rrStop.slice(sliceStart), borderColor: "rgba(75,192,192,1)", tension: 0.3 },
+                { label: "A770 Time", data: a77time.slice(sliceStart), borderColor: "rgba(54,113,35,1)", tension: 0.3 },
+                {
+                    label: "ILC03 Cutoff (22:30)",
+                    data: Array(dates.length).fill(1350).slice(sliceStart),
+                    borderColor: "black",
+                    borderDash: [10, 5],
+                    borderWidth: 2,
+                    pointRadius: 0
+                },
+                {
+                    label: "RR Cutoff (01:30)",
+                    data: Array(dates.length).fill(1530).slice(sliceStart),
+                    borderColor: "orange",
+                    borderDash: [10, 5],
+                    borderWidth: 2,
+                    pointRadius: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                y: {
+                    min: 1200,
+                    max: 1680,
+                    ticks: {
+                        callback: function(value) {
+                            const hours = Math.floor(value / 60) % 24;
+                            const minutes = Math.floor(value % 60);
+                            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+                        }
+                    },
+                    title: {
+                        display: true,
+                        text: "Time (HH:mm)",
+                        font: { size: 13, weight: "bold" }
+                    }
+                },
+                x: {}
+            },
+            plugins: {
+                legend: {
+                    labels: { font: { size: 13 } }
+                },
+                title: {
+                    display: true,
+                    text: "COB & RR Times vs Cutoff Threshold",
+                    color: "#222",
+                    font: { size: 13, weight: "bold" }
+                }
+            }
+        }
+    });
+}
+
+
+
 function onDaysChange() {
     const slider = document.getElementById("daysRange");
     const label = document.getElementById("daysValue");
