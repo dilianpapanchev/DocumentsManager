@@ -1,3 +1,17 @@
+#daysLabel {
+    font-size: 13px;
+    font-weight: bold;
+    margin-bottom: 5px;
+    color: #111; /* За светъл фон */
+}
+
+body.dark-mode #daysLabel {
+    color: #f0f0f0; /* За тъмен фон */
+}
+
+<label id="daysLabel" for="daysRange">COB Days:</label>
+
+
 #daysSliderWrapper {
   flex-direction: column;
   gap: 5px;
