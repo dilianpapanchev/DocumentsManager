@@ -1,3 +1,31 @@
+window.onload = function() {
+    const daysRange = document.getElementById("daysRange");
+    const daysValue = document.getElementById("daysValue");
+
+    // Първоначално показваме избрания брой дни
+    daysValue.textContent = `${daysRange.value} days`;
+
+    // Рендерираме графиките още при зареждане
+    renderIDsChart();
+    renderTimingChart();
+
+    // Слушаме за промяна на плъзгача
+    daysRange.addEventListener("input", () => {
+        daysValue.textContent = `${daysRange.value} days`;
+
+        // Изтриваме старите графики преди да рендерираме нови
+        Chart.helpers.each(Chart.instances, function(instance) {
+            instance.destroy();
+        });
+
+        // Рендерираме графиките отново според новата стойност
+        renderIDsChart();
+        renderTimingChart();
+    });
+};
+
+
+
 function getRecordsData() {
     const table = document.getElementById("recordsTable");
     const rows = table.getElementsByTagName("tr");
