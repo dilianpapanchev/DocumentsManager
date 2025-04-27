@@ -1,3 +1,20 @@
+function updateTableRows(days) {
+    const rows = Array.from(
+        document.getElementById('recordsTable')
+            .getElementsByTagName('tr')
+    ).slice(2); // пропускаме 2 заглавни реда
+
+    const n = rows.length;
+    const visibleCount = Math.max(days, 3); // минимум 3 дни, не 5
+    const start = Math.max(0, n - visibleCount);
+
+    rows.forEach((tr, i) => {
+        tr.hidden = i < start ? true : false;
+    });
+}
+
+
+
 document.addEventListener("DOMContentLoaded", () => {
     const slider = document.getElementById("daysRange");
     const label = document.getElementById("daysValue");
