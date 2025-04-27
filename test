@@ -1,3 +1,54 @@
+function getTimingChartData() {
+    const table = document.getElementById("recordsTable");
+    const rows = Array.from(table.getElementsByTagName("tr")).slice(2);
+    const maxDays = parseInt(document.getElementById("daysRange").value, 10) || 10;
+
+    const dates = [];
+    const ilc03Time = [];
+    const cobStart = [];
+    const cobStop = [];
+    const rrStart = [];
+    const rrStop = [];
+    const a770Time = [];
+
+    for (let i = rows.length - 1; i >= 0 && dates.length < maxDays; i--) {
+        const cells = rows[i].getElementsByTagName("td");
+        if (cells.length >= 10) {
+            const date = cells[0].innerText.trim();
+            const ilc03 = cells[1].innerText.trim();
+            const cobS = cells[2].innerText.trim();
+            const cobE = cells[3].innerText.trim();
+            const rrS = cells[6].innerText.trim();
+            const rrE = cells[7].innerText.trim();
+            const a770 = cells[9].innerText.trim();
+            if (date && ilc03 && cobS && cobE && rrS && rrE && a770) {
+                dates.push(date);
+                ilc03Time.push(adjustTime(ilc03));
+                cobStart.push(adjustTime(cobS));
+                cobStop.push(adjustTime(cobE));
+                rrStart.push(adjustTime(rrS));
+                rrStop.push(adjustTime(rrE));
+                a770Time.push(adjustTime(a770));
+            }
+        }
+    }
+
+    return { dates, ilc03Time, cobStart, cobStop, rrStart, rrStop, a770Time };
+}
+
+function adjustTime(timeStr) {
+    const parts = timeStr.split(":");
+    if (parts.length !== 3) return 0;
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    const seconds = parseInt(parts[2], 10);
+    const totalMinutes = hours * 60 + minutes + seconds / 60;
+    const noon = 12 * 60;
+    return totalMinutes < noon ? totalMinutes + 1440 : totalMinutes;
+}
+
+
+
 function getAllRows() {
     return Array.from(document.getElementById('recordsTable').getElementsByTagName('tr'));
 }
