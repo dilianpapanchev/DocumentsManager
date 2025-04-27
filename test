@@ -1,3 +1,31 @@
+document.addEventListener("DOMContentLoaded", () => {
+    const slider = document.getElementById("daysRange");
+    const label = document.getElementById("daysValue");
+
+    function onDaysChange() {
+        let days = parseInt(slider.value, 10);
+
+        // Минимум 3 дни
+        if (days < 3) {
+            days = 3;
+            slider.value = 3;
+        }
+
+        label.textContent = `${days} days`;
+
+        updateContainerWidth(days);
+        updateTableRows(days);
+        renderIDsChart();
+        renderTimingChart();
+        renderElapsedChart();
+        renderCPUChart(); // ако искаш и CPU графиката да се адаптира!
+    }
+
+    slider.addEventListener("input", onDaysChange);
+    onDaysChange(); // Първоначално зареждане
+});
+
+
 let idsChartInstance;
 
 function renderIDsChart() {
