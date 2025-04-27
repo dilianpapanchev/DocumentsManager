@@ -1,3 +1,183 @@
+<!-- RECORDS CHART -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const rangeInput = document.getElementById('daysRange');
+  let recordsChartInstance;
+
+  function parseTimeToMinutes(timeString) {
+    const parts = timeString.split(':');
+    if (parts.length === 3) {
+      const h = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const s = parseInt(parts[2], 10);
+      return h * 60 + m + s / 60;
+    }
+    return 0;
+  }
+
+  function getRecordsChartData() {
+    const maxDays = Math.max(3, Math.min(31, parseInt(rangeInput.value, 10)));
+    const rows = Array.from(document
+      .getElementById('recordsTable')
+      .getElementsByTagName('tr'))
+      .slice(1, -1);
+    const labels = [], data = [];
+
+    for (let i = rows.length - 1; i >= 0 && labels.length < maxDays; i--) {
+      const cells = rows[i].getElementsByTagName('td');
+      if (cells.length === 10) {
+        const date = cells[0].innerText.trim();
+        const elapsed = parseTimeToMinutes(cells[4].innerText.trim());
+        const tx = parseInt(cells[5].innerText.trim(), 10);
+        if (elapsed > 0) {
+          labels.push(date);
+          data.push(tx / elapsed);
+        }
+      }
+    }
+    return { labels: labels.reverse(), data: data.reverse() };
+  }
+
+  function renderRecordsChart() {
+    const ctx = document.getElementById('recordsChart').getContext('2d');
+    const { labels, data } = getRecordsChartData();
+    if (recordsChartInstance) recordsChartInstance.destroy();
+    recordsChartInstance = new Chart(ctx, {
+      type: 'bar',
+      data: {
+        labels,
+        datasets: [{
+          label: 'Records Per Minute',
+          data,
+          backgroundColor: 'rgba(54,162,235,0.6)',
+          borderColor: 'rgba(54,162,235,1)',
+          borderWidth: 2,
+          borderRadius: 15,
+          hoverBorderWidth: 3
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          title: {
+            display: true,
+            text: 'Records Processed per minute',
+            font: { size: 13, weight: 'bold' }
+          },
+          legend: { display: false }
+        }
+      }
+    });
+  }
+
+  rangeInput.addEventListener('input', renderRecordsChart);
+
+  // ---> Начален рендер при зареждане:
+  renderRecordsChart();
+});
+</script>
+
+<!-- TIMING CHART -->
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  const rangeInput = document.getElementById('daysRange');
+  let timingChartInstance;
+
+  function parseTimeToMinutes(timeString) {
+    const parts = timeString.split(':');
+    if (parts.length === 3) {
+      const h = parseInt(parts[0], 10);
+      const m = parseInt(parts[1], 10);
+      const s = parseInt(parts[2], 10);
+      return h * 60 + m + s / 60;
+    }
+    return 0;
+  }
+
+  function getTimingChartData() {
+    const maxDays = Math.max(3, Math.min(31, parseInt(rangeInput.value, 10)));
+    const rows = Array.from(document
+      .getElementById('recordsTable')
+      .getElementsByTagName('tr'))
+      .slice(1);
+    const dates = [], cobS = [], cobE = [], rrS = [], rrE = [], a77 = [];
+
+    for (let i = rows.length - 1; i >= 0 && dates.length < maxDays; i--) {
+      const c = rows[i].getElementsByTagName('td');
+      if (c.length === 10) {
+        dates.push(c[0].innerText.trim());
+        cobS.push(parseTimeToMinutes(c[2].innerText));
+        cobE.push(parseTimeToMinutes(c[3].innerText));
+        rrS.push(parseTimeToMinutes(c[6].innerText));
+        rrE.push(parseTimeToMinutes(c[7].innerText));
+        a77.push(parseTimeToMinutes(c[9].innerText));
+      }
+    }
+    return {
+      labels: dates.reverse(),
+      cobStarts: cobS.reverse(),
+      cobStops:  cobE.reverse(),
+      rrStarts:  rrS.reverse(),
+      rrStops:   rrE.reverse(),
+      a770s:     a77.reverse()
+    };
+  }
+
+  function renderTimingChart() {
+    const ctx = document.getElementById('timingChart').getContext('2d');
+    const { labels, cobStarts, cobStops, rrStarts, rrStops, a770s } = getTimingChartData();
+    if (timingChartInstance) timingChartInstance.destroy();
+    timingChartInstance = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels,
+        datasets: [
+          { label: 'COB Start Time', data: cobStarts, borderColor: 'rgba(255,99,132,1)', tension: 0.3 },
+          { label: 'COB End Time',   data: cobStops,  borderColor: 'rgba(54,162,235,1)', tension: 0.3 },
+          { label: 'RR Start Time',  data: rrStarts,  borderColor: 'rgba(75,192,192,1)', tension: 0.3 },
+          { label: 'RR Stop Time',   data: rrStops,   borderColor: 'rgba(175,92,192,1)', tension: 0.3 },
+          { label: 'A770 Time',      data: a770s,     borderColor: 'rgba(54,113,35,1)', tension: 0.3 }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          y: {
+            min: 0,
+            ticks: {
+              callback: value => {
+                const h = Math.floor(value / 60);
+                const m = Math.floor(value % 60);
+                return `${h.toString().padStart(2,'0')}:${m.toString().padStart(2,'0')}`;
+              }
+            }
+          }
+        },
+        plugins: {
+          title: {
+            display: true,
+            text: 'COB & RR Times vs Cutoff Threshold',
+            color: () => document.body.classList.contains('dark-mode') ? 'white' : 'black',
+            font: { size: 13, weight: 'bold' }
+          }
+        }
+      }
+    });
+  }
+
+  rangeInput.addEventListener('input', renderTimingChart);
+
+  // ---> Начален рендер при зареждане:
+  renderTimingChart();
+});
+</script>
+
+
+
+
+
 <script>
 document.addEventListener('DOMContentLoaded', () => {
   const rangeInput = document.getElementById('daysRange');
