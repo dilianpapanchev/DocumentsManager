@@ -1,141 +1,102 @@
-<!-- Chart.js CDN -->
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+let elapsedChartInstance;
 
-<script>
-document.addEventListener('DOMContentLoaded', () => {
-  // === помощни функции ===
-  function getTextColor() {
-    return document.body.classList.contains('dark-mode') ? 'white' : 'black';
-  }
-  function parseElapsedToHours(timeStr) {
-    const [h, m] = timeStr.split(':').map(v => parseInt(v,10));
-    return (isNaN(h)||isNaN(m)) ? 0 : h + m/60;
-  }
-  function formatHHMM(val) {
-    const h = Math.floor(val);
-    const m = Math.round((val - h)*60);
-    return `${h}:${m.toString().padStart(2,'0')}`;
+function renderElapsedChart() {
+  // --- вадим данните както досега ---
+  const { dates, cobElapsed, rrElapsed } = getElapsedChartData();
+
+  // --- динамична височина (както вече имаш) ---
+  const perDayHeight = 20;
+  const minH = 200, maxH = 800;
+  const neededH = Math.min(maxH, Math.max(minH, dates.length * perDayHeight + 100));
+  document.getElementById('chartContainer').style.height = neededH + 'px';
+
+  // --- нова ширина спрямо дни: 50px за ден (регулирай) ---
+  const perDayWidth = 50;
+  const minW = 400;  // минимум ширина
+  const neededW = Math.max(minW, dates.length * perDayWidth);
+  document.getElementById('chartContainer').style.width = neededW + 'px';
+
+  // --- унищожаваме стар чарт ---
+  if (elapsedChartInstance) {
+    elapsedChartInstance.destroy();
   }
 
-  // === взимаме данните ===
-  function getElapsedChartData() {
-    const rows = Array.from(document
-      .getElementById('recordsTable')
-      .getElementsByTagName('tr'))
-      .slice(1);
-    const maxDays = parseInt(document.getElementById('daysRange').value, 10);
-    const dates = [], cob = [], rr = [];
-    for (let i = rows.length - 1; i >= 0 && dates.length < maxDays; i--) {
-      const cells = rows[i].getElementsByTagName('td');
-      if (cells.length >= 9) {
-        const d = cells[0].innerText.trim();
-        const c = cells[4].innerText.trim();
-        const r = cells[8].innerText.trim();
-        if (d && c && r) {
-          dates.push(d);
-          cob.push(parseElapsedToHours(c));
-          rr.push(parseElapsedToHours(r));
+  // --- рендер на Chart.js ---
+  const ctx = document.getElementById("elapsedChart").getContext("2d");
+  elapsedChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: dates,
+      datasets: [
+        { label: 'COB Elapsed', data: cobElapsed, backgroundColor: 'rgba(154,200,245,1)', stack: 's1', order: 1 },
+        { label: 'RR Elapsed',  data: rrElapsed,  backgroundColor: 'rgba(181,181,181,1)', stack: 's1', order: 2 },
+        { label: 'Limit (2:30)',
+          data: Array(dates.length).fill(2.5),
+          type: 'line',
+          borderColor: 'red',
+          borderDash: [6,4],
+          pointRadius: 0,
+          borderWidth: 2,
+          order: 0
         }
-      }
-    }
-    return { 
-      dates: dates.reverse(), 
-      cobElapsed: cob.reverse(), 
-      rrElapsed: rr.reverse() 
-    };
-  }
-
-  // === рендер на графиката ===
-  let elapsedChartInstance;
-  function renderElapsedChart() {
-    const { dates, cobElapsed, rrElapsed } = getElapsedChartData();
-
-    // --- динамична височина ---
-    const perDayH = 20, minH = 200, maxH = 800;
-    const h = Math.min(maxH, Math.max(minH, dates.length * perDayH + 100));
-    document.getElementById('chartContainer').style.height = h + 'px';
-
-    // --- динамична широчина (50px на ден) ---
-    const perDayW = 50, minW = 400;
-    const w = Math.max(minW, dates.length * perDayW);
-    document.getElementById('chartContainer').style.width = w + 'px';
-
-    // --- destroy ---
-    if (elapsedChartInstance) elapsedChartInstance.destroy();
-
-    // --- нов чарт ---
-    const ctx = document.getElementById('elapsedChart').getContext('2d');
-    elapsedChartInstance = new Chart(ctx, {
-      type: 'bar',
-      data: {
-        labels: dates,
-        datasets: [
-          { label:'COB Elapsed', data:cobElapsed, backgroundColor:'rgba(154,200,245,1)', stack:'s1', order:1 },
-          { label:'RR Elapsed',  data:rrElapsed,  backgroundColor:'rgba(181,181,181,1)', stack:'s1', order:2 },
-          { label:'Limit (2:30)', 
-            data:Array(dates.length).fill(2.5), 
-            type:'line', borderColor:'red', borderDash:[6,4], pointRadius:0, borderWidth:2, order:0 
-          }
-        ]
-      },
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        layout:{ padding:{ top:20,bottom:20,left:10,right:10 } },
-        scales: {
-          x:{ 
-            stacked: true,
-            ticks:{ autoSkip:false, maxRotation:45, minRotation:45 }
-          },
-          y:{
-            beginAtZero:true,
-            max:7,
-            ticks:{ maxTicksLimit:8, callback: v=>formatHHMM(v) }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      layout: { padding: { top:20, bottom:20, left:10, right:10 } },
+      scales: {
+        x: {
+          stacked: true,
+          ticks: {
+            autoSkip: false,       // изключваме скриването
+            maxRotation: 45,
+            minRotation: 45
           }
         },
-        plugins:{
-          tooltip:{
-            callbacks:{ label: ctx=>`${ctx.dataset.label}: ${formatHHMM(ctx.raw)}` }
-          },
-          title:{
-            display:true,
-            text:'COB & RR Elapsed Times vs Duration Limit',
-            color:getTextColor(),
-            font:{ size:13, weight:'bold' }
-          },
-          legend:{ labels:{ font:{ size:13 } } }
+        y: {
+          beginAtZero: true,
+          max: 7,
+          ticks: {
+            maxTicksLimit: 8,
+            callback: v => formatHHMM(v)
+          }
         }
       },
-      plugins:[{
-        id:'totalLabel',
-        afterDatasetsDraw(chart){
-          const { ctx, data, scales } = chart;
-          const meta = chart.getDatasetMeta(0);
-          const yScale = scales.y;
-          ctx.save();
-          ctx.font='bold 11px sans-serif';
-          ctx.textAlign='center';
-          ctx.fillStyle=getTextColor();
-          data.labels.forEach((_,i)=>{
-            const total = data.datasets[0].data[i] + data.datasets[1].data[i];
-            if(!total) return;
-            const x = meta.data[i].x;
-            const y = yScale.getPixelForValue(total) - 6;
-            ctx.fillText(formatHHMM(total), x, y);
-          });
-          ctx.restore();
-        }
-      }]
-    });
-  }
-
-  // при смяна на slider-а и при стартиране
-  const slider = document.getElementById('daysRange');
-  const lbl    = document.getElementById('daysValue');
-  slider.addEventListener('input', ()=>{
-    lbl.textContent = slider.value;
-    renderElapsedChart();
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${formatHHMM(ctx.raw)}`
+          }
+        },
+        title: {
+          display: true,
+          text: 'COB & RR Elapsed Times vs Duration Limit',
+          color: getTextColor(),
+          font: { size:13, weight:'bold' }
+        },
+        legend: { labels: { font: { size:13 } } }
+      }
+    },
+    plugins: [{
+      id: 'totalLabel',
+      afterDatasetsDraw(chart) {
+        const { ctx, data, scales } = chart;
+        const metaCob = chart.getDatasetMeta(0);
+        const yScale  = scales.y;
+        ctx.save();
+        ctx.font = 'bold 11px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillStyle = getTextColor();
+        data.labels.forEach((_, i) => {
+          const total = data.datasets[0].data[i] + data.datasets[1].data[i];
+          if (total <= 0) return;
+          const x = metaCob.data[i].x;
+          const y = yScale.getPixelForValue(total) - 6;
+          ctx.fillText(formatHHMM(total), x, y);
+        });
+        ctx.restore();
+      }
+    }]
   });
-  renderElapsedChart();
-});
-</script>
+}
