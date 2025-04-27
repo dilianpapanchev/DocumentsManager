@@ -1,3 +1,50 @@
+window.onload = function () {
+    const slider = document.getElementById("daysRange");
+    const label = document.getElementById("daysValue");
+
+    function onDaysChange() {
+        let days = parseInt(slider.value, 10);
+        days = Math.max(days, 3); // Минимум 3 дни
+        label.textContent = `${days} days`;
+
+        updateContainerWidth(days);
+        updateTableRows(days);
+        renderElapsedChart();
+    }
+
+    slider.addEventListener("input", onDaysChange);
+    onDaysChange();
+};
+
+function updateContainerWidth(days) {
+    const ctr = document.getElementById("chartContainer");
+    ctr.classList.remove("w-0-10", "w-11-20", "w-21-plus");
+    if (days <= 10) {
+        ctr.classList.add("w-0-10");
+    } else if (days <= 20) {
+        ctr.classList.add("w-11-20");
+    } else {
+        ctr.classList.add("w-21-plus");
+    }
+}
+
+function updateTableRows(days) {
+    const rows = Array.from(
+        document.getElementById('recordsTable')
+            .getElementsByTagName('tr')
+    ).slice(2); // Пропускаме заглавията
+
+    const n = rows.length;
+    const visibleCount = Math.max(days, 3); // Минимум 3 реда
+    const start = Math.max(0, n - visibleCount);
+
+    rows.forEach((tr, i) => {
+        tr.hidden = i < start;
+    });
+}
+
+
+
 const daysRange = document.getElementById("daysRange");
 const daysValue = document.getElementById("daysValue");
 
