@@ -1,3 +1,13 @@
+<div class="chart-wrapper">
+  <div class="chart-container" id="chartContainer">
+    <canvas id="elapsedChart"></canvas>
+  </div>
+</div>
+
+
+
+
+
 <script>
   // === helper функции ===
   function getTextColor() {
