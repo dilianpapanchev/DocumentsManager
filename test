@@ -1,3 +1,31 @@
+function getAllRows() {
+    return Array.from(document.getElementById('recordsTable').getElementsByTagName('tr'));
+}
+
+function getDataRows() {
+    const rows = getAllRows();
+    return rows.slice(2); // Пропускаме първите 2 реда с <th>
+}
+
+function updateTableRows(days) {
+    const allRows = getAllRows();
+    const dataRows = getDataRows();
+    const n = dataRows.length;
+
+    const visibleCount = Math.max(days, 3); // Минимално 3 дни
+    const start = Math.max(0, n - visibleCount);
+
+    dataRows.forEach((tr, i) => {
+        tr.hidden = i < start;
+    });
+
+    // Заглавните редове винаги да са видими
+    if (allRows[0]) allRows[0].hidden = false;
+    if (allRows[1]) allRows[1].hidden = false;
+}
+
+
+
 function updateTableRows(days) {
     const allRows = Array.from(document.getElementById('recordsTable').getElementsByTagName('tr'));
     const dataRows = allRows.slice(2); // Пропускаме 2 заглавни реда
