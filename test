@@ -1,102 +1,51 @@
-let elapsedChartInstance;
+.chart-container-new {
+  margin: auto;
+  padding: 10px;
+  height: auto;       /* височината остава динамична или по избор */
+}
 
-function renderElapsedChart() {
-  // --- вадим данните както досега ---
-  const { dates, cobElapsed, rrElapsed } = getElapsedChartData();
+/* широчината се сменя чрез допълнителни класове */
+.chart-container-new.w-0-10 {
+  width: 500px;
+}
+.chart-container-new.w-11-20 {
+  width: 700px;
+}
+.chart-container-new.w-21-plus {
+  width: 900px;
+}
 
-  // --- динамична височина (както вече имаш) ---
-  const perDayHeight = 20;
-  const minH = 200, maxH = 800;
-  const neededH = Math.min(maxH, Math.max(minH, dates.length * perDayHeight + 100));
-  document.getElementById('chartContainer').style.height = neededH + 'px';
 
-  // --- нова ширина спрямо дни: 50px за ден (регулирай) ---
-  const perDayWidth = 50;
-  const minW = 400;  // минимум ширина
-  const neededW = Math.max(minW, dates.length * perDayWidth);
-  document.getElementById('chartContainer').style.width = neededW + 'px';
 
-  // --- унищожаваме стар чарт ---
-  if (elapsedChartInstance) {
-    elapsedChartInstance.destroy();
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+  // Функция, която превключва класа на контейнера спрямо броя дни
+  function updateContainerWidth(days) {
+    const ctr = document.getElementById('chartContainer');
+    ctr.classList.remove('w-0-10', 'w-11-20', 'w-21-plus');
+    if (days <= 10) {
+      ctr.classList.add('w-0-10');
+    } else if (days <= 20) {
+      ctr.classList.add('w-11-20');
+    } else {
+      ctr.classList.add('w-21-plus');
+    }
   }
 
-  // --- рендер на Chart.js ---
-  const ctx = document.getElementById("elapsedChart").getContext("2d");
-  elapsedChartInstance = new Chart(ctx, {
-    type: 'bar',
-    data: {
-      labels: dates,
-      datasets: [
-        { label: 'COB Elapsed', data: cobElapsed, backgroundColor: 'rgba(154,200,245,1)', stack: 's1', order: 1 },
-        { label: 'RR Elapsed',  data: rrElapsed,  backgroundColor: 'rgba(181,181,181,1)', stack: 's1', order: 2 },
-        { label: 'Limit (2:30)',
-          data: Array(dates.length).fill(2.5),
-          type: 'line',
-          borderColor: 'red',
-          borderDash: [6,4],
-          pointRadius: 0,
-          borderWidth: 2,
-          order: 0
-        }
-      ]
-    },
-    options: {
-      responsive: true,
-      maintainAspectRatio: false,
-      layout: { padding: { top:20, bottom:20, left:10, right:10 } },
-      scales: {
-        x: {
-          stacked: true,
-          ticks: {
-            autoSkip: false,       // изключваме скриването
-            maxRotation: 45,
-            minRotation: 45
-          }
-        },
-        y: {
-          beginAtZero: true,
-          max: 7,
-          ticks: {
-            maxTicksLimit: 8,
-            callback: v => formatHHMM(v)
-          }
-        }
-      },
-      plugins: {
-        tooltip: {
-          callbacks: {
-            label: ctx => `${ctx.dataset.label}: ${formatHHMM(ctx.raw)}`
-          }
-        },
-        title: {
-          display: true,
-          text: 'COB & RR Elapsed Times vs Duration Limit',
-          color: getTextColor(),
-          font: { size:13, weight:'bold' }
-        },
-        legend: { labels: { font: { size:13 } } }
-      }
-    },
-    plugins: [{
-      id: 'totalLabel',
-      afterDatasetsDraw(chart) {
-        const { ctx, data, scales } = chart;
-        const metaCob = chart.getDatasetMeta(0);
-        const yScale  = scales.y;
-        ctx.save();
-        ctx.font = 'bold 11px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillStyle = getTextColor();
-        data.labels.forEach((_, i) => {
-          const total = data.datasets[0].data[i] + data.datasets[1].data[i];
-          if (total <= 0) return;
-          const x = metaCob.data[i].x;
-          const y = yScale.getPixelForValue(total) - 6;
-          ctx.fillText(formatHHMM(total), x, y);
-        });
-        ctx.restore();
-      }
-    }]
-  });
-}
+  const slider = document.getElementById('daysRange');
+  const label  = document.getElementById('daysValue');
+
+  // При промяна на слайдъра само ъпдейтваме широчината и лейбъла
+  function onDaysChange() {
+    const days = parseInt(slider.value, 10);
+    label.textContent = days;
+    updateContainerWidth(days);
+    // renderElapsedChart() ще бъде извикана по-надолу в твоя код
+  }
+
+  slider.addEventListener('input', onDaysChange);
+
+  // Първоначално задаваме състоянието
+  onDaysChange();
+});
+</script>
