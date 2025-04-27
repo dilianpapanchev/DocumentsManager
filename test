@@ -1,3 +1,39 @@
+<div id="daysSliderWrapper" class="tool-button" style="flex-direction: column; gap: 5px;">
+  <label for="daysRange" style="font-size: 13px; font-weight: bold;">COB Days:</label>
+  
+  <input type="range" id="daysRange" min="3" max="31" value="10" style="width: 100%;">
+  
+  <div style="display: flex; align-items: center; justify-content: center; gap: 5px;">
+    <input type="number" id="daysInput" min="3" max="31" value="10" style="width: 60px; font-size: 13px; text-align: center;">
+    <span style="font-size: 13px;">days</span>
+  </div>
+</div>
+
+
+#daysSliderWrapper input[type="range"],
+#daysSliderWrapper input[type="number"] {
+  background: none;
+  border: none;
+  outline: none;
+  color: inherit;
+}
+
+#daysSliderWrapper label {
+  margin-bottom: 5px;
+}
+
+body.dark-mode #daysSliderWrapper input[type="number"] {
+  background-color: #1f1f1f;
+  color: #e0e0e0;
+}
+
+body:not(.dark-mode) #daysSliderWrapper input[type="number"] {
+  background-color: #fff;
+  color: #000;
+}
+
+
+
 <div id="daysSliderWrapper" style="margin-top: 10px;">
   <label for="daysRange" style="font-size: 13px; font-weight: bold;">COB Days:</label>
   
