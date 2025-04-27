@@ -1,4 +1,23 @@
 function updateTableRows(days) {
+    const allRows = Array.from(document.getElementById('recordsTable').getElementsByTagName('tr'));
+    const dataRows = allRows.slice(2); // Пропускаме 2 заглавни реда
+    const n = dataRows.length;
+
+    const visibleCount = Math.max(days, 3); // Минимално 3 дни
+    const start = Math.max(0, n - visibleCount);
+
+    dataRows.forEach((tr, i) => {
+        tr.hidden = i < start;
+    });
+
+    // Заглавните редове винаги да са видими
+    allRows[0].hidden = false;
+    allRows[1].hidden = false;
+}
+
+
+
+function updateTableRows(days) {
     const rows = Array.from(
         document.getElementById('recordsTable')
             .getElementsByTagName('tr')
