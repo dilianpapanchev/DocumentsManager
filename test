@@ -1,44 +1,36 @@
 let elapsedChartInstance;
 
 function renderElapsedChart() {
-  // 1) Взимаме данните както досега
+  // --- вадим данните както досега ---
   const { dates, cobElapsed, rrElapsed } = getElapsedChartData();
 
-  // 2) Динамична височина: 20px на ден, min 200, max 800
+  // --- динамична височина (както вече имаш) ---
   const perDayHeight = 20;
   const minH = 200, maxH = 800;
-  const neededH = Math.min(
-    maxH,
-    Math.max(minH, dates.length * perDayHeight + 100)
-  );
-  document.querySelector('.chart-container').style.height = neededH + 'px';
+  const neededH = Math.min(maxH, Math.max(minH, dates.length * perDayHeight + 100));
+  document.getElementById('chartContainer').style.height = neededH + 'px';
 
-  // 3) Убиваме стария чарт
+  // --- нова ширина спрямо дни: 50px за ден (регулирай) ---
+  const perDayWidth = 50;
+  const minW = 400;  // минимум ширина
+  const neededW = Math.max(minW, dates.length * perDayWidth);
+  document.getElementById('chartContainer').style.width = neededW + 'px';
+
+  // --- унищожаваме стар чарт ---
   if (elapsedChartInstance) {
     elapsedChartInstance.destroy();
   }
 
-  // 4) Рендерваме новия
+  // --- рендер на Chart.js ---
   const ctx = document.getElementById("elapsedChart").getContext("2d");
   elapsedChartInstance = new Chart(ctx, {
     type: 'bar',
     data: {
       labels: dates,
       datasets: [
-        {
-          label: 'COB Elapsed',
-          data: cobElapsed,
-          backgroundColor: 'rgba(154,200,245,1)',
-          stack: 's1', order: 1
-        },
-        {
-          label: 'RR Elapsed',
-          data: rrElapsed,
-          backgroundColor: 'rgba(181,181,181,1)',
-          stack: 's1', order: 2
-        },
-        {
-          label: 'Limit (2:30)',
+        { label: 'COB Elapsed', data: cobElapsed, backgroundColor: 'rgba(154,200,245,1)', stack: 's1', order: 1 },
+        { label: 'RR Elapsed',  data: rrElapsed,  backgroundColor: 'rgba(181,181,181,1)', stack: 's1', order: 2 },
+        { label: 'Limit (2:30)',
           data: Array(dates.length).fill(2.5),
           type: 'line',
           borderColor: 'red',
@@ -57,12 +49,7 @@ function renderElapsedChart() {
         x: {
           stacked: true,
           ticks: {
-            autoSkip: false,
-            // показваме само ~10 етикета, разпределени равномерно
-            callback: (val, idx) => {
-              const step = Math.ceil(dates.length / 10);
-              return (idx % step === 0) ? dates[idx] : '';
-            },
+            autoSkip: false,       // изключваме скриването
             maxRotation: 45,
             minRotation: 45
           }
@@ -88,13 +75,10 @@ function renderElapsedChart() {
           color: getTextColor(),
           font: { size:13, weight:'bold' }
         },
-        legend: {
-          labels: { font: { size:13 } }
-        }
+        legend: { labels: { font: { size:13 } } }
       }
     },
     plugins: [{
-      // само общото време над всяка колона
       id: 'totalLabel',
       afterDatasetsDraw(chart) {
         const { ctx, data, scales } = chart;
@@ -104,7 +88,6 @@ function renderElapsedChart() {
         ctx.font = 'bold 11px sans-serif';
         ctx.textAlign = 'center';
         ctx.fillStyle = getTextColor();
-
         data.labels.forEach((_, i) => {
           const total = data.datasets[0].data[i] + data.datasets[1].data[i];
           if (total <= 0) return;
@@ -112,7 +95,6 @@ function renderElapsedChart() {
           const y = yScale.getPixelForValue(total) - 6;
           ctx.fillText(formatHHMM(total), x, y);
         });
-
         ctx.restore();
       }
     }]
