@@ -32,6 +32,41 @@ function getRecordsData() {
 
 
 
+
+function getRecordsData() {
+    const table = document.getElementById("recordsTable");
+    const rows = Array.from(table.getElementsByTagName("tr")).slice(2);
+    const maxDays = parseInt(document.getElementById("daysRange").value, 10) || 10;
+
+    const labels = [];
+    const recordsPerMinute = [];
+
+    for (let i = rows.length - 1; i >= 0 && labels.length < maxDays; i--) {
+        const cells = rows[i].getElementsByTagName("td");
+        if (cells.length >= 10) {
+            const date = cells[0].innerText.trim();
+            const elapsedStr = cells[3].innerText.trim();
+            const transactionsStr = cells[4].innerText.trim();
+
+            const elapsed = parseElapsedToMinutes(elapsedStr);
+            const transactions = parseInt(transactionsStr, 10);
+
+            if (date && elapsed > 0 && transactions > 0) {
+                labels.push(date);
+                recordsPerMinute.push(transactions / elapsed);
+            }
+        }
+    }
+
+    // Обръщаме реда на масивите
+    labels.reverse();
+    recordsPerMinute.reverse();
+
+    return { labels, recordsPerMinute };
+}
+
+
+
 function getTimingChartData() {
     const table = document.getElementById("recordsTable");
     const rows = Array.from(table.getElementsByTagName("tr")).slice(2);
