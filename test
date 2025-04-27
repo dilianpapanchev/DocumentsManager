@@ -1,6 +1,28 @@
 <div id="darkModeToggle" class="tool-button" title="Switch Dark Mode">
   <div class="toggle-thumb">
     <span class="icon" id="themeIcon">☀️</span>
+  </div>
+  <span id="themeText" style="margin-left: 8px;">Switch Dark</span>
+</div>
+
+const toggleBtn = document.getElementById('darkModeToggle');
+const icon = document.getElementById('themeIcon');
+const text = document.getElementById('themeText');
+
+toggleBtn.addEventListener('click', () => {
+  document.body.classList.toggle('dark-mode');
+  const dark = document.body.classList.contains('dark-mode');
+  icon.textContent = dark ? '🌙' : '☀️';
+  text.textContent = dark ? 'Switch Light' : 'Switch Dark';
+  updateChartsTheme?.();
+});
+
+
+
+
+<div id="darkModeToggle" class="tool-button" title="Switch Dark Mode">
+  <div class="toggle-thumb">
+    <span class="icon" id="themeIcon">☀️</span>
     <span id="themeText" style="margin-left: 5px;">Switch Dark</span>
   </div>
 </div>
