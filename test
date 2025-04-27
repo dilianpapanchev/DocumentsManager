@@ -1,3 +1,84 @@
+#darkModeToggle {
+  background-color: var(--toggle-bg-light);
+  display: flex;
+  align-items: center;
+  justify-content: start;
+  padding: 0 10px;
+}
+
+body.dark-mode #darkModeToggle {
+  background-color: var(--toggle-bg-dark);
+}
+
+#darkModeToggle .toggle-thumb {
+  width: 32px;
+  height: 32px;
+  background-color: var(--thumb-bg-light);
+  border-radius: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: transform 0.4s ease, background-color 0.4s ease;
+}
+
+body.dark-mode #darkModeToggle .toggle-thumb {
+  background-color: var(--thumb-bg-dark);
+  transform: translateX(60px); /* Преместване заедно с текста */
+}
+
+#darkModeToggle .icon {
+  font-size: 18px;
+  transition: transform 1s ease;
+}
+
+body.dark-mode #darkModeToggle .icon {
+  transform: rotate(360deg);
+}
+
+#darkModeToggle .toggle-text {
+  margin-left: 10px;
+  font-size: 14px;
+  font-weight: bold;
+  transition: color 0.3s ease;
+  color: #333;
+}
+
+body.dark-mode #darkModeToggle .toggle-text {
+  color: #eee;
+}
+
+
+
+const toggleBtn = document.getElementById('darkModeToggle');
+const icon = document.getElementById('themeIcon');
+const text = document.getElementById('themeText');
+
+toggleBtn.addEventListener('click', () => {
+  document.body.classList.toggle('dark-mode');
+  
+  if (document.body.classList.contains('dark-mode')) {
+    icon.textContent = '🌙';
+    text.textContent = 'Switch Light';
+  } else {
+    icon.textContent = '🌞';
+    text.textContent = 'Switch Dark';
+  }
+
+  updateChartsTheme?.();
+});
+
+
+
+<div id="darkModeToggle" class="tool-button" title="Switch Dark Mode">
+  <div class="toggle-thumb">
+    <span class="icon" id="themeIcon">🌞</span>
+  </div>
+  <span id="themeText" class="toggle-text">Switch Dark</span>
+</div>
+
+
+
+
 <div id="darkModeToggle" class="tool-button" title="Switch Dark Mode">
   <div class="toggle-thumb">
     <span class="icon" id="themeIcon">☀️</span>
