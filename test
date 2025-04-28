@@ -1,3 +1,78 @@
+<button id="exportCsvBtn" class="tool-button">📄 Export to CSV</button>
+
+<div id="csvOptions" class="csv-panel hidden">
+  <div class="csv-options-title">Select tables to export:</div>
+  <div class="csv-checkboxes">
+    <label><input type="checkbox" value="recordsTable" checked> Records Table</label>
+  </div>
+  <div class="csv-buttons">
+    <button id="exportSelectedBtn" class="small-button">✅ Export Selected</button>
+    <button id="cancelExportBtn" class="small-button">❌ Cancel</button>
+  </div>
+</div>
+
+
+.csv-panel {
+  position: absolute;
+  top: 110px; /* под "Export CSV" бутона */
+  left: 180px; /* изнася се вдясно */
+  background: var(--toggle-bg-light);
+  color: black;
+  padding: 10px;
+  border-radius: 10px;
+  box-shadow: 2px 4px 8px rgba(0,0,0,0.2);
+  z-index: 9999;
+  min-width: 180px;
+}
+
+body.dark-mode .csv-panel {
+  background: var(--toggle-bg-dark);
+  color: #f0f0f0;
+}
+
+.csv-options-title {
+  font-weight: bold;
+  font-size: 14px;
+  margin-bottom: 8px;
+}
+
+.csv-checkboxes {
+  text-align: left;
+  margin-bottom: 10px;
+}
+
+.csv-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.small-button {
+  background: var(--toggle-bg-light);
+  border: none;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 13px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.3s;
+}
+
+body.dark-mode .small-button {
+  background: var(--toggle-bg-dark);
+  color: #f0f0f0;
+}
+
+.small-button:hover {
+  opacity: 0.9;
+}
+
+.hidden {
+  display: none;
+}
+
+
+
 .csv-options-title {
   font-size: 13px;
   font-weight: bold;
