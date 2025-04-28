@@ -1,3 +1,30 @@
+function getCOBDataFromTable() {
+    const table = document.getElementById('recordsTable');
+    const rows = Array.from(table.getElementsByTagName('tr')).slice(2); // пропусни заглавката
+    const visibleRows = rows.filter(row => !row.hidden); // ВЗИМАШ САМО ВИДИМИТЕ редове
+
+    const labels = [];
+    const values = [];
+
+    for (const row of visibleRows) {
+        const cells = row.getElementsByTagName('td');
+        if (cells.length >= 5) {
+            const date = cells[0].innerText.trim();
+            const elapsedStr = cells[3].innerText.trim();
+            const elapsedSec = parseElapsedToSeconds(elapsedStr);
+
+            if (!isNaN(elapsedSec)) {
+                labels.push(date);
+                values.push(elapsedSec);
+            }
+        }
+    }
+
+    return { labels, values };
+}
+
+
+
 let cobChartInstance = null;
 
 function renderCOBChart() {
