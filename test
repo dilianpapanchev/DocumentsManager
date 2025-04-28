@@ -1,3 +1,90 @@
+.csv-options-title {
+  font-size: 13px;
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.csv-checkboxes {
+  text-align: left;
+  margin-bottom: 10px;
+}
+
+#csvOptions {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  background-color: var(--toggle-bg-light);
+  padding: 10px;
+  border-radius: 10px;
+}
+
+body.dark-mode #csvOptions {
+  background-color: var(--toggle-bg-dark);
+  color: #f0f0f0;
+}
+
+
+<button id="exportCsvBtn" class="tool-button">📄 Export to CSV</button>
+
+<div id="csvOptions" class="tool-button hidden">
+  <div class="csv-options-title">Select tables to export</div>
+  <div class="csv-checkboxes">
+    <label><input type="checkbox" value="recordsTable" checked> Records Table</label>
+    <!-- Ако искаш може да добавиш още чекбоксове -->
+  </div>
+  <button id="exportSelectedBtn" class="tool-button">✅ Export Selected</button>
+  <button id="cancelExportBtn" class="tool-button">❌ Cancel</button>
+</div>
+
+.hidden {
+  display: none;
+}
+
+const exportCsvBtn = document.getElementById('exportCsvBtn');
+const csvOptions = document.getElementById('csvOptions');
+const cancelExportBtn = document.getElementById('cancelExportBtn');
+const exportSelectedBtn = document.getElementById('exportSelectedBtn');
+
+exportCsvBtn.addEventListener('click', () => {
+  csvOptions.classList.toggle('hidden');
+});
+
+cancelExportBtn.addEventListener('click', () => {
+  csvOptions.classList.add('hidden');
+});
+
+exportSelectedBtn.addEventListener('click', () => {
+  const selectedTables = Array.from(document.querySelectorAll('.csv-checkboxes input:checked'))
+    .map(cb => cb.value);
+
+  selectedTables.forEach(tableId => {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+
+    let csv = [];
+    const rows = table.querySelectorAll('tr');
+    rows.forEach(row => {
+      let cols = row.querySelectorAll('td, th');
+      let rowData = [];
+      cols.forEach(col => {
+        let text = col.innerText.replace(/\n/g, ' ').trim();
+        rowData.push('"' + text.replace(/"/g, '""') + '"');
+      });
+      csv.push(rowData.join(','));
+    });
+
+    const blob = new Blob([csv.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    const reportDate = document.getElementById('reportDate')?.textContent.trim() || 'export';
+    link.download = `${reportDate}_${tableId}.csv`;
+    link.click();
+  });
+
+  csvOptions.classList.add('hidden');
+});
+
+
 <button id="exportCsvBtn" class="tool-button">Export CSV</button>
 
 
