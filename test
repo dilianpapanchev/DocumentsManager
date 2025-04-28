@@ -1,3 +1,50 @@
+document.addEventListener('DOMContentLoaded', () => {
+    const slider = document.getElementById("daysRange");
+    const input = document.getElementById("daysInput");
+
+    function syncDaysFromSlider() {
+        input.value = slider.value;
+
+        updateContainerWidth(slider.value);
+        updateTableRows(slider.value);
+    }
+
+    // Слагаме по подразбиране 10
+    slider.value = 10;
+    input.value = 10;
+    updateTableRows(10);
+
+    // Връзка между слайдера и инпута
+    slider.addEventListener('input', syncDaysFromSlider);
+    input.addEventListener('input', () => {
+        let value = parseInt(input.value, 10);
+        if (isNaN(value) || value < 3) value = 3;
+        if (value > 31) value = 31;
+        slider.value = value;
+        syncDaysFromSlider();
+    });
+});
+
+function updateTableRows(days) {
+    const allRows = getAllRows();   // Функция, която връща всички <tr>
+    const dataRows = getDataRows(); // Функция, която връща само валидните редове (без хедъра)
+    const n = dataRows.length;
+
+    const visibleCount = Math.max(days, 3);
+    const start = Math.max(0, n - visibleCount);
+
+    allRows.forEach((tr, i) => {
+        if (i < 2) {
+            tr.hidden = false; // Показва заглавията
+        } else {
+            tr.hidden = (i - 2) < start ? false : true;
+        }
+    });
+}
+
+
+
+
 function updateTableRows(days) {
   const table = document.getElementById('recordsTable');
   if (!table) return;
