@@ -1,3 +1,31 @@
+function getRecordsData() {
+    const table = document.getElementById('recordsTable');
+    const rows = Array.from(table.getElementsByTagName('tr')).slice(2);
+    const visibleRows = rows.filter(row => !row.hidden); // само видимите редове
+
+    const labels = [];
+    const recordsPerMinute = [];
+
+    for (const row of visibleRows) {
+        const cells = row.getElementsByTagName('td');
+        if (cells.length >= 5) {
+            const date = cells[0].innerText.trim();
+            const elapsedTime = parseTimeToMinutes(cells[3].innerText.trim());
+            const transactions = parseInt(cells[4].innerText.trim(), 10);
+
+            if (elapsedTime > 0 && !isNaN(transactions)) {
+                labels.push(date);
+                recordsPerMinute.push(transactions / elapsedTime);
+            }
+        }
+    }
+
+    return { labels, recordsPerMinute };
+}
+
+
+
+
 function renderIDChart() {
     const { labels, recordsPerMinute } = getRecordsData();
     const ctx = document.getElementById('recordChart').getContext('2d');
