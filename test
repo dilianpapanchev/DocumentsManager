@@ -1,3 +1,55 @@
+function getRecordsData() {
+    const table = document.getElementById('recordsTable');
+    const rows = Array.from(table.getElementsByTagName('tr')).filter(row => !row.hidden);
+
+    let labels = [];
+    let recordsPerMinute = [];
+
+    for (let i = 2; i < rows.length; i++) {
+        const cells = rows[i].getElementsByTagName('td');
+        if (cells.length === 5) {
+            const date = cells[0].innerText;
+            const elapsedTime = parseTimeToMinutes(cells[3].innerText);
+            const transactions = parseInt(cells[4].innerText, 10);
+
+            if (elapsedTime > 0) {
+                labels.push(date);
+                recordsPerMinute.push(transactions / elapsedTime);
+            }
+        }
+    }
+
+    return [labels, recordsPerMinute];
+}
+
+
+
+function getCOBDataFromTable() {
+    const table = document.getElementById('recordsTable');
+    const rows = Array.from(table.getElementsByTagName('tr')).filter(row => !row.hidden);
+
+    let labels = [];
+    let values = [];
+
+    for (let i = 2; i < rows.length; i++) {
+        const cells = rows[i].getElementsByTagName('td');
+        if (cells.length >= 4) {
+            const date = cells[0].innerText;
+            const elapsedStr = cells[3].innerText.trim();
+            const elapsedSec = parseElapsedToSeconds(elapsedStr);
+            if (!isNaN(elapsedSec)) {
+                labels.push(date);
+                values.push(elapsedSec);
+            }
+        }
+    }
+
+    return [labels, values];
+}
+
+
+
+
 document.addEventListener("DOMContentLoaded", () => {
     const slider = document.getElementById("daysRange");
     const input = document.getElementById("daysInput");
