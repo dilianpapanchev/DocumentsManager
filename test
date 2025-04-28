@@ -1,3 +1,102 @@
+<script>
+const toggleBtn = document.getElementById('darkModeToggle');
+const icon = document.getElementById('themeIcon');
+
+toggleBtn.addEventListener('click', () => {
+    document.body.classList.toggle('dark-mode');
+    icon.textContent = document.body.classList.contains('dark-mode') ? '🌙' : '☀️';
+    updateChartsTheme?.();
+});
+
+// --- Export CSV Logic ---
+const exportCsvBtn = document.getElementById('exportCsvBtn');
+const csvOptions = document.getElementById('csvOptions');
+const cancelExportBtn = document.getElementById('cancelExportBtn');
+const exportSelectedBtn = document.getElementById('exportSelectedBtn');
+const exportAllBtn = document.getElementById('exportAllBtn');
+
+exportCsvBtn.addEventListener('click', () => {
+    csvOptions.classList.remove('hidden');
+});
+
+cancelExportBtn.addEventListener('click', () => {
+    csvOptions.classList.add('hidden');
+});
+
+exportSelectedBtn.addEventListener('click', () => {
+    const selectedTables = Array.from(document.querySelectorAll('.csv-checkboxes input:checked'));
+    if (selectedTables.length === 0) return;
+
+    selectedTables.forEach(cb => {
+        const tableId = cb.value;
+        const table = document.getElementById(tableId);
+        if (!table) return;
+
+        let csvRows = [];
+        const rows = table.querySelectorAll('tr');
+        rows.forEach(row => {
+            const cols = row.querySelectorAll('td, th');
+            const rowData = [];
+            cols.forEach(col => {
+                let text = col.innerText.replace(/\n/g, ' ').trim();
+                rowData.push('"' + text.replace(/"/g, '""') + '"');
+            });
+            csvRows.push(rowData.join(','));
+        });
+
+        const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' });
+        const link = document.createElement('a');
+        const reportDate = document.getElementById('reportDate')?.textContent.trim() || 'export';
+        link.href = URL.createObjectURL(blob);
+        link.download = `${reportDate}_${tableId}.csv`;
+        link.click();
+    });
+
+    csvOptions.classList.add('hidden');
+});
+
+// --- Export All Tables to One CSV ---
+exportAllBtn.addEventListener('click', () => {
+    const allCheckboxes = document.querySelectorAll('.csv-checkboxes input');
+    let allCsv = [];
+
+    allCheckboxes.forEach(cb => {
+        const tableId = cb.value;
+        const table = document.getElementById(tableId);
+        if (!table) return;
+
+        // Добавяме име на таблицата
+        allCsv.push(`=== ${tableId} ===`);
+
+        const rows = table.querySelectorAll('tr');
+        rows.forEach(row => {
+            const cols = row.querySelectorAll('td, th');
+            const rowData = [];
+            cols.forEach(col => {
+                let text = col.innerText.replace(/\n/g, ' ').trim();
+                rowData.push('"' + text.replace(/"/g, '""') + '"');
+            });
+            allCsv.push(rowData.join(','));
+        });
+
+        allCsv.push(''); // Празен ред между таблиците
+    });
+
+    const blob = new Blob([allCsv.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const reportDate = document.getElementById('reportDate')?.textContent.trim() || 'export';
+    link.href = URL.createObjectURL(blob);
+    link.download = `${reportDate}_all_tables.csv`;
+    link.click();
+
+    csvOptions.classList.add('hidden');
+});
+</script>
+
+
+
+
+
 <div class="csv-buttons">
   <button id="exportSelectedBtn" class="small-button">✅ Export Selected</button>
   <button id="exportAllBtn" class="small-button">⬇️ Export All to Single CSV</button>
