@@ -1,3 +1,127 @@
+window.onload = function() {
+    renderIDChart();
+    renderCOBChart();
+    filterRecordsTable(10);
+};
+
+
+
+
+const daysRange = document.getElementById('daysRange');
+daysRange.addEventListener('input', () => {
+    const days = parseInt(daysRange.value, 10);
+    document.getElementById('daysInput').value = days;
+
+    filterRecordsTable(days);
+    renderIDChart();
+    renderCOBChart();
+});
+
+const daysInput = document.getElementById('daysInput');
+daysInput.addEventListener('input', () => {
+    let days = parseInt(daysInput.value, 10);
+    if (isNaN(days) || days < 3) days = 3;
+    if (days > 31) days = 31;
+
+    daysRange.value = days;
+    document.getElementById('daysInput').value = days;
+
+    filterRecordsTable(days);
+    renderIDChart();
+    renderCOBChart();
+});
+
+
+
+function getCOBDataFromTable() {
+    const table = document.getElementById('recordsTable');
+    const rows = table.getElementsByTagName('tr');
+    const labels = [];
+    const values = [];
+
+    for (let i = 1; i < rows.length; i++) {
+        if (rows[i].style.display === 'none') continue; // ново!
+        const cells = rows[i].getElementsByTagName('td');
+        if (cells.length < 5) continue;
+
+        const date = cells[0].innerText.trim();
+        const elapsedSec = parseElapsedToSeconds(cells[3].innerText.trim());
+
+        if (elapsedSec) {
+            labels.push(date);
+            values.push(elapsedSec);
+        }
+    }
+
+    return { labels, values };
+}
+
+
+
+function getRecordsData() {
+    const table = document.getElementById('recordsTable');
+    const rows = table.getElementsByTagName('tr');
+    const labels = [];
+    const recordsPerMinute = [];
+
+    for (let i = 1; i < rows.length; i++) {
+        if (rows[i].style.display === 'none') continue; // ново!
+        const cells = rows[i].getElementsByTagName('td');
+        if (cells.length < 5) continue;
+
+        const date = cells[0].innerText.trim();
+        const elapsedTime = parseInt(cells[3].innerText.trim(), 10);
+        const transactions = parseInt(cells[4].innerText.trim(), 10);
+
+        if (elapsedTime > 0) {
+            labels.push(date);
+            recordsPerMinute.push(transactions / elapsedTime);
+        }
+    }
+
+    return { labels, recordsPerMinute };
+}
+
+
+function filterRecordsTable(days) {
+    const table = document.getElementById('recordsTable');
+    const rows = table.getElementsByTagName('tr');
+    const today = new Date();
+    let count = 0;
+
+    for (let i = 1; i < rows.length; i++) { // Прескачаме заглавния ред
+        const cell = rows[i].getElementsByTagName('td')[0];
+        if (!cell) continue;
+
+        const dateStr = cell.innerText.trim();
+        if (dateStr.length !== 8) {
+            rows[i].style.display = 'none';
+            continue;
+        }
+
+        const year = parseInt(dateStr.substring(0, 4), 10);
+        const month = parseInt(dateStr.substring(4, 6), 10) - 1;
+        const day = parseInt(dateStr.substring(6, 8), 10);
+
+        const rowDate = new Date(year, month, day);
+
+        const diffTime = today - rowDate;
+        const diffDays = diffTime / (1000 * 60 * 60 * 24);
+
+        if (diffDays <= days - 1) {
+            rows[i].style.display = '';
+            count++;
+        } else {
+            rows[i].style.display = 'none';
+        }
+    }
+}
+
+
+
+
+
+
 function renderCOBChart() {
     const allLabels = getCOBDataFromTable().labels;
     const allValues = getCOBDataFromTable().values;
