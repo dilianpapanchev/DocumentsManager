@@ -1,3 +1,60 @@
+function getRecordsData() {
+  const table = document.getElementById('recordsTable');
+  const rows = Array.from(table.getElementsByTagName('tr')).slice(2);
+  const maxDays = parseInt(document.getElementById('daysRange').value, 10) || 10;
+
+  let labels = [];
+  let recordsPerMinute = [];
+
+  for (let i = rows.length - 1; i >= 0 && labels.length < maxDays; i--) {
+    const cells = rows[i].getElementsByTagName('td');
+    if (cells.length !== 5) continue;
+
+    const date = cells[0].innerText.trim();
+    const elapsedTime = parseTimeToMinutes(cells[3].innerText);
+    const transactions = parseInt(cells[4].innerText, 10);
+
+    if (elapsedTime > 0) {
+      labels.push(date);
+      recordsPerMinute.push(transactions / elapsedTime);
+    }
+  }
+
+  return {
+    labels: labels.reverse(),
+    recordsPerMinute: recordsPerMinute.reverse()
+  };
+}
+
+function getCOBDataFromTable() {
+  const table = document.getElementById('recordsTable');
+  const rows = Array.from(table.getElementsByTagName('tr')).slice(2);
+  const maxDays = parseInt(document.getElementById('daysRange').value, 10) || 10;
+
+  let labels = [];
+  let values = [];
+
+  for (let i = rows.length - 1; i >= 0 && labels.length < maxDays; i--) {
+    const cells = rows[i].getElementsByTagName('td');
+    if (cells.length !== 5) continue;
+
+    const date = cells[0].innerText.trim();
+    const elapsedDesc = cells[3].innerText.trim();
+    const elapsedSec = parseElapsedToSeconds(elapsedDesc);
+
+    if (!isNaN(elapsedSec)) {
+      labels.push(date);
+      values.push(elapsedSec);
+    }
+  }
+
+  return {
+    labels: labels.reverse(),
+    values: values.reverse()
+  };
+}
+
+
 <script>
 // helper за стойност на слайдъра с default 10, min 3, max 31
 function getDays() {
