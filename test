@@ -1,3 +1,40 @@
+document.addEventListener("DOMContentLoaded", () => {
+    const slider = document.getElementById("daysRange");
+    const input = document.getElementById("daysInput");
+
+    function updateAllViews(days) {
+        updateTableRows(days);
+        renderIDChart();
+        renderCOBChart();
+    }
+
+    // Стартово състояние - 10 дни
+    slider.value = 10;
+    input.value = 10;
+    updateAllViews(10);
+
+    // При движение на слайдъра
+    slider.addEventListener("input", () => {
+        const v = parseInt(slider.value, 10);
+        input.value = v;
+        updateAllViews(v);
+    });
+
+    // При промяна на инпут
+    input.addEventListener("input", () => {
+        let v = parseInt(input.value, 10);
+        if (isNaN(v)) v = 10;
+        if (v < 3) v = 3;
+        if (v > 31) v = 31;
+        input.value = v;
+        slider.value = v;
+        updateAllViews(v);
+    });
+});
+
+
+
+
 function getRecordsData() {
   const table = document.getElementById('recordsTable');
   const rows = Array.from(table.getElementsByTagName('tr')).slice(2);
