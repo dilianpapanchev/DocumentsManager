@@ -4,6 +4,33 @@ function updateTableRows(days) {
   
   const rows = Array.from(table.getElementsByTagName('tr')).slice(2); // Пропускаме заглавията
   const totalRows = rows.length;
+  const visibleCount = Math.min(Math.max(days, 3), totalRows);
+  const start = totalRows - visibleCount;
+
+  rows.forEach((tr, index) => {
+    tr.hidden = index < start ? false : true;
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const slider = document.getElementById('daysRange');
+  const input = document.getElementById('daysInput');
+  
+  if (slider) slider.value = 10;
+  if (input) input.value = 10;
+
+  updateTableRows(10);
+});
+
+
+
+
+function updateTableRows(days) {
+  const table = document.getElementById('recordsTable');
+  if (!table) return;
+  
+  const rows = Array.from(table.getElementsByTagName('tr')).slice(2); // Пропускаме заглавията
+  const totalRows = rows.length;
   const visibleCount = Math.min(Math.max(days, 3), totalRows); // НЕ повече от редовете
   const start = totalRows - visibleCount;
 
