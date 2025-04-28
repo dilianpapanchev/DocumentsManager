@@ -1,3 +1,246 @@
+// Взимане на всички редове от таблицата
+function getNewAllRows() {
+    return Array.from(document.getElementById('recordsTable').getElementsByTagName('tr'));
+}
+
+// Обновяване на видимите редове според избраните дни
+function updateNewTableRows(days) {
+    const allRows = getNewAllRows();
+    const dataRows = allRows.slice(2); // пропускаме заглавните редове
+
+    const visibleCount = Math.max(days, 3);
+    const start = Math.max(0, dataRows.length - visibleCount);
+
+    dataRows.forEach((tr, i) => {
+        tr.hidden = !(i >= start);
+    });
+}
+
+// Извличане на данни за COB графиката
+function getNewCOBData() {
+    const table = document.getElementById('recordsTable');
+    const rows = Array.from(table.getElementsByTagName('tr')).slice(2);
+
+    const maxDays = parseInt(document.getElementById('daysRange').value, 10) || 10;
+    const labels = [];
+    const values = [];
+
+    for (let i = rows.length - 1; i >= 0 && labels.length < maxDays; i--) {
+        const cells = rows[i].getElementsByTagName('td');
+        if (cells.length < 8) continue;
+
+        const date = cells[0].innerText.trim();
+        const elapsed = cells[3].innerText.trim();
+
+        if (date && elapsed) {
+            labels.push(date);
+            values.push(parseElapsedToSeconds(elapsed));
+        }
+    }
+
+    return {
+        labels: labels.reverse(),
+        values: values.reverse()
+    };
+}
+
+// Извличане на данни за ID графиката
+function getNewIDData() {
+    const table = document.getElementById('recordsTable');
+    const rows = Array.from(table.getElementsByTagName('tr')).slice(2);
+
+    const maxDays = parseInt(document.getElementById('daysRange').value, 10) || 10;
+    const labels = [];
+    const recordsPerMinute = [];
+
+    for (let i = rows.length - 1; i >= 0 && labels.length < maxDays; i--) {
+        const cells = rows[i].getElementsByTagName('td');
+        if (cells.length < 8) continue;
+
+        const date = cells[0].innerText.trim();
+        const elapsedStr = cells[3].innerText.trim();
+        const recordsStr = cells[4].innerText.trim();
+
+        if (date && elapsedStr && recordsStr) {
+            const elapsedMinutes = parseElapsedToSeconds(elapsedStr) / 60;
+            const records = parseInt(recordsStr, 10);
+
+            if (elapsedMinutes > 0 && !isNaN(records)) {
+                labels.push(date);
+                recordsPerMinute.push(records / elapsedMinutes);
+            }
+        }
+    }
+
+    return {
+        labels: labels.reverse(),
+        recordsPerMinute: recordsPerMinute.reverse()
+    };
+}
+
+// Помощна функция за парсване на време
+function parseElapsedToSeconds(timeStr) {
+    const parts = timeStr.split(':');
+    if (parts.length !== 3) return 0;
+    const hours = parseInt(parts[0], 10);
+    const minutes = parseInt(parts[1], 10);
+    const seconds = parseInt(parts[2], 10);
+    return hours * 3600 + minutes * 60 + seconds;
+}
+
+// Рендериране на новата COB графика
+let newCobChartInstance = null;
+
+function renderNewCobChart() {
+    const { labels, values } = getNewCOBData();
+
+    const canvas = document.getElementById('cobChart');
+    const ctx = canvas.getContext('2d');
+
+    if (newCobChartInstance) {
+        newCobChartInstance.destroy();
+    }
+
+    newCobChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'COB Elapsed',
+                data: values,
+                backgroundColor: 'rgba(154, 208, 245, 1)',
+                borderColor: 'rgba(154, 208, 245, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'COB Elapsed Time',
+                    color: getTextColor(),
+                    font: {
+                        size: 13,
+                        weight: 'bold'
+                    }
+                },
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: value => formatSecondsToHMS(value)
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Рендериране на новата ID графика
+let newIdChartInstance = null;
+
+function renderNewIdChart() {
+    const { labels, recordsPerMinute } = getNewIDData();
+
+    const canvas = document.getElementById('recordChart');
+    const ctx = canvas.getContext('2d');
+
+    if (newIdChartInstance) {
+        newIdChartInstance.destroy();
+    }
+
+    newIdChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Records per Minute',
+                data: recordsPerMinute,
+                backgroundColor: 'rgba(54, 162, 235, 1)',
+                borderColor: 'rgba(54, 162, 235, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                title: {
+                    display: true,
+                    text: 'Records per Minute',
+                    color: getTextColor(),
+                    font: {
+                        size: 13,
+                        weight: 'bold'
+                    }
+                },
+                legend: {
+                    display: false
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true
+                }
+            }
+        }
+    });
+}
+
+// Форматиране на секунди към HH:MM:SS
+function formatSecondsToHMS(seconds) {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+// Функция за синхронизация на слайдера
+function syncNewDaysFromSlider() {
+    const slider = document.getElementById('daysRange');
+    const input = document.getElementById('daysInput');
+    const value = parseInt(slider.value, 10);
+
+    input.value = value;
+    updateNewTableRows(value);
+    renderNewCobChart();
+    renderNewIdChart();
+}
+
+// Функция за синхронизация от input box
+function syncNewDaysFromInput() {
+    const slider = document.getElementById('daysRange');
+    const input = document.getElementById('daysInput');
+    let value = parseInt(input.value, 10);
+
+    if (isNaN(value)) value = 10;
+    if (value < 3) value = 3;
+    if (value > 31) value = 31;
+
+    input.value = value;
+    slider.value = value;
+    updateNewTableRows(value);
+    renderNewCobChart();
+    renderNewIdChart();
+}
+
+// Добавяне на слушатели
+document.getElementById('daysRange').addEventListener('input', syncNewDaysFromSlider);
+document.getElementById('daysInput').addEventListener('input', syncNewDaysFromInput);
+
+// Стартиране първоначално
+document.addEventListener('DOMContentLoaded', () => {
+    syncNewDaysFromSlider();
+});
+
+
+
 window.onload = function() {
     renderIDChart();
     renderCOBChart();
