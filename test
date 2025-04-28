@@ -1,3 +1,101 @@
+function renderCOBChart() {
+    const allLabels = getCOBDataFromTable().labels;
+    const allValues = getCOBDataFromTable().values;
+
+    const days = parseInt(document.getElementById('daysRange').value, 10) || 10;
+
+    // Вземаме последните N дни
+    const labels = allLabels.slice(-days);
+    const values = allValues.slice(-days);
+    const trend = calculateTrendline(values);
+
+    const canvas = document.getElementById('cobChart');
+    const ctx = setupCanvas(canvas, 500, 500);
+    const dark = document.body.classList.contains('dark-mode');
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'COB Elapsed',
+                    data: values,
+                    backgroundColor: 'rgba(154, 208, 245, 1)',
+                    borderColor: 'rgba(154, 208, 245, 1)',
+                    borderWidth: 1,
+                    order: 1,
+                },
+                {
+                    label: 'Trend Line',
+                    data: trend,
+                    type: 'line',
+                    borderColor: 'red',
+                    borderDash: [5, 5],
+                    borderWidth: 2,
+                    fill: false,
+                    pointRadius: 0,
+                    tension: 0,
+                    order: 0,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: {
+                    display: true,
+                    labels: {
+                        color: getTextColor(),
+                    }
+                },
+                title: {
+                    display: true,
+                    text: 'COB Elapsed Time & Trend',
+                    color: getTextColor(),
+                    font: {
+                        size: 13,
+                        weight: 'bold'
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            const val = context.raw;
+                            return `${context.dataset.label}: ${formatSecondsToHMS(val)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function (value) {
+                            return formatSecondsToHMS(value);
+                        }
+                    },
+                    title: {
+                        display: false,
+                        text: 'Elapsed Time (HH:mm:ss)'
+                    }
+                }
+            },
+            layout: {
+                padding: { top: 10, right: 20 }
+            }
+        }
+    });
+}
+
+
+document.getElementById('daysRange').addEventListener('input', () => {
+    renderCOBChart();
+});
+
+
+
 <script>
 const toggleBtn = document.getElementById('darkModeToggle');
 const icon = document.getElementById('themeIcon');
