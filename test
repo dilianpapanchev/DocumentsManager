@@ -1,3 +1,67 @@
+function renderIDChart() {
+    const { labels, recordsPerMinute } = getRecordsData();
+    const ctx = document.getElementById('recordChart').getContext('2d');
+
+    new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Records Per Minute',
+                data: recordsPerMinute,
+                backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                borderColor: 'rgba(255, 99, 132, 1)',
+                borderWidth: 1,
+                hoverBorderWidth: 3
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    stacked: true,
+                    ticks: {
+                        font: { size: 13 },
+                        color: '#333'
+                    }
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    ticks: {
+                        font: { size: 13 },
+                        color: '#333'
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false,
+                    labels: {
+                        font: { size: 13, weight: 'bold' },
+                        color: '#444'
+                    }
+                },
+                title: {
+                    display: true,
+                    text: 'Records Processed per Minute',
+                    font: { size: 13, weight: 'bold' },
+                    color: '#222'
+                }
+            },
+            animation: {
+                duration: 1500,
+                easing: 'easeOutBounce'
+            }
+        }
+    });
+}
+
+
+
+
+
 function getCOBDataFromTable() {
     const table = document.getElementById('recordsTable');
     const rows = Array.from(table.getElementsByTagName('tr')).slice(2); // пропусни заглавката
