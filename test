@@ -1,3 +1,59 @@
+/**
+ * Променя ширината на контейнера на графиките
+ * спрямо броя дни:
+ *   3–10  дни → клас w-0-10
+ *  11–20  дни → клас w-11-20
+ *  21–31+ дни → клас w-21-plus
+ */
+function updateContainerWidth(days) {
+  const ctr = document.getElementById("chartContainer");
+  if (!ctr) return;
+  // махаме всички предишни
+  ctr.classList.remove("w-0-10", "w-11-20", "w-21-plus");
+  // слагаме новия
+  if (days <= 10) {
+    ctr.classList.add("w-0-10");
+  }
+  else if (days <= 20) {
+    ctr.classList.add("w-11-20");
+  }
+  else {
+    ctr.classList.add("w-21-plus");
+  }
+}
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  const slider = document.getElementById("daysRange");
+  const input  = document.getElementById("daysInput");
+
+  function syncSliderAndInput(value) {
+    // ограничаваме 3–31
+    const v = Math.max(3, Math.min(31, parseInt(value, 10) || 10));
+    slider.value = v;
+    input.value  = v;
+
+    // 1) скриваме/показваме редове
+    updateTableRows(v);
+    // 2) преизчертаваме графиките
+    renderIDsChart();
+    renderCOBChart();
+    renderCPUChart();
+    // 3) настройваме ширината
+    updateContainerWidth(v);
+  }
+
+  // слушаме промени и от двата контрола
+  slider.addEventListener("input", () => syncSliderAndInput(slider.value));
+  input .addEventListener("input", () => syncSliderAndInput(input.value ));
+
+  // първоначално – 10 дни
+  syncSliderAndInput(10);
+});
+
+
+
+
 // 1) Взимаме само видимите (нескрити) данни от таблцата
 function getCOBDataFromTable() {
   const table = document.getElementById('recordsTable');
