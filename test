@@ -1,4 +1,30 @@
 function updateTableRows(days) {
+  const rows = Array.from(document.getElementById('recordsTable').getElementsByTagName('tr')).slice(2); // Пропускаме заглавията
+  const visibleCount = Math.max(days, 3); // Минимум 3 дена
+  const start = Math.max(0, rows.length - visibleCount);
+
+  rows.forEach((tr, i) => {
+    tr.hidden = i < start ? false : true;
+  });
+}
+
+// При зареждане на страницата
+document.addEventListener('DOMContentLoaded', () => {
+  const slider = document.getElementById('daysRange');
+  if (slider) {
+    updateTableRows(parseInt(slider.value, 10) || 10);
+    
+    slider.addEventListener('input', () => {
+      const days = parseInt(slider.value, 10) || 10;
+      updateTableRows(days);
+    });
+  }
+});
+
+
+
+
+function updateTableRows(days) {
   const rows = Array.from(document.getElementById('recordsTable').getElementsByTagName('tr')).slice(2); // пропускаме header-ите
   const visibleCount = Math.max(days, 3); // минимум 3 дена видими
   const start = Math.max(0, rows.length - visibleCount);
