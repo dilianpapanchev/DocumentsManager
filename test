@@ -1,3 +1,28 @@
+function updateTableRows(days) {
+  const rows = Array.from(document.getElementById('recordsTable').getElementsByTagName('tr')).slice(2); // пропускаме header-ите
+  const visibleCount = Math.max(days, 3); // минимум 3 дена видими
+  const start = Math.max(0, rows.length - visibleCount);
+
+  rows.forEach((tr, i) => {
+    if (i >= start) {
+      tr.hidden = false;
+    } else {
+      tr.hidden = true;
+    }
+  });
+}
+
+
+const slider = document.getElementById('daysRange');
+slider.addEventListener('input', () => {
+  const days = parseInt(slider.value, 10) || 10;
+  updateTableRows(days);
+});
+
+
+
+
+
 // helper за да вземем стойността на слайдера (и да имаме винаги поне 10)
 function getMaxDays() {
   return Math.max(10, parseInt(document.getElementById('daysRange').value, 10) || 10);
