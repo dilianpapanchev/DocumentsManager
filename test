@@ -1,3 +1,56 @@
+document.getElementById("exportCsvButton").addEventListener("click", () => {
+    const table = document.getElementById("recordsTable");
+    if (!table) {
+        alert("No table found to export.");
+        return;
+    }
+
+    let csv = [];
+    const rows = table.querySelectorAll("tr");
+
+    rows.forEach(row => {
+        const cols = row.querySelectorAll("td, th");
+        const rowData = Array.from(cols).map(col => `"${col.innerText.trim()}"`);
+        csv.push(rowData.join(","));
+    });
+
+    const csvContent = csv.join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+    link.setAttribute("download", `Export_${today}.csv`);
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+});
+
+
+#exportCsvButton {
+    margin-top: 10px;
+    padding: 8px 15px;
+    font-size: 14px;
+    border-radius: 20px;
+    border: none;
+    cursor: pointer;
+    transition: background 0.3s, color 0.3s;
+    background: var(--main-color);
+    color: white;
+}
+
+body.dark-mode #exportCsvButton {
+    background: var(--hover-color);
+    color: white;
+}
+
+
+<button id="exportCsvButton" class="tool-button">Export CSV</button>
+
+
+
 function getChartTextColor() {
     return document.body.classList.contains('dark-mode') ? '#f0f0f0' : '#111';
 }
