@@ -1,3 +1,44 @@
+function getChartTextColor() {
+    return document.body.classList.contains('dark-mode') ? '#f0f0f0' : '#111';
+}
+
+
+function updateChartsTheme() {
+    if (elapsedChartInstance) {
+        elapsedChartInstance.options.scales.x.ticks.color = getChartTextColor();
+        elapsedChartInstance.options.scales.y.ticks.color = getChartTextColor();
+        elapsedChartInstance.options.plugins.legend.labels.color = getChartTextColor();
+        elapsedChartInstance.options.plugins.title.color = getChartTextColor();
+        elapsedChartInstance.update();
+    }
+
+    if (timingChartInstance) {
+        timingChartInstance.options.scales.x.ticks.color = getChartTextColor();
+        timingChartInstance.options.scales.y.ticks.color = getChartTextColor();
+        timingChartInstance.options.plugins.legend.labels.color = getChartTextColor();
+        timingChartInstance.options.plugins.title.color = getChartTextColor();
+        timingChartInstance.update();
+    }
+
+    if (recordsChartInstance) {
+        recordsChartInstance.options.scales.x.ticks.color = getChartTextColor();
+        recordsChartInstance.options.scales.y.ticks.color = getChartTextColor();
+        recordsChartInstance.options.plugins.legend.labels.color = getChartTextColor();
+        recordsChartInstance.options.plugins.title.color = getChartTextColor();
+        recordsChartInstance.update();
+    }
+}
+
+
+toggleBtn.addEventListener('click', () => {
+    document.body.classList.toggle('dark-mode');
+    icon.textContent = document.body.classList.contains('dark-mode') ? '🌙' : '🌞';
+    updateChartsTheme();
+});
+
+
+
+
 #daysLabel {
     font-size: 13px;
     font-weight: bold;
