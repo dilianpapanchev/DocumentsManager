@@ -1,3 +1,72 @@
+let cobChartInstance = null;
+
+function renderCOBChart() {
+    if (cobChartInstance) {
+        cobChartInstance.destroy();
+    }
+
+    const { labels, values } = getCOBDataFromTable();
+    const trend = calculateTrendline(values);
+
+    const canvas = document.getElementById('cobChart');
+    const ctx = setupCanvas(canvas, 500, 500);
+
+    cobChartInstance = new Chart(ctx, {
+        // както горе
+    });
+}
+
+
+
+let cobChartInstance = null;
+
+function renderCOBChart() {
+    if (cobChartInstance) {
+        cobChartInstance.destroy();
+    }
+
+    const { labels, values } = getCOBDataFromTable();
+    const trend = calculateTrendline(values);
+
+    const canvas = document.getElementById('cobChart');
+    const ctx = setupCanvas(canvas, 500, 500);
+
+    cobChartInstance = new Chart(ctx, {
+        // както горе
+    });
+}
+
+
+function getCOBDataFromTable() {
+    const table = document.getElementById('recordsTable');
+    const rows = table.getElementsByTagName('tr');
+    const slider = document.getElementById('daysRange');
+    const maxDays = parseInt(slider.value, 10) || 10;
+
+    const labels = [];
+    const values = [];
+
+    const dataRows = Array.from(rows).slice(2); // Пропускаме заглавието
+    const selectedRows = dataRows.slice(-maxDays); // Вземаме последните N реда
+
+    for (const row of selectedRows) {
+        const cells = row.getElementsByTagName('td');
+        if (cells.length >= 5) {
+            const date = cells[0].innerText.trim();
+            const elapsedStr = cells[3].innerText.trim();
+            const elapsedSec = parseElapsedToSeconds(elapsedStr);
+            if (!isNaN(elapsedSec)) {
+                labels.push(date);
+                values.push(elapsedSec);
+            }
+        }
+    }
+
+    return { labels, values };
+}
+
+
+
 function getCOBDataFromTable() {
     const table = document.getElementById('recordsTable');
     if (!table) return { labels: [], values: [] };
