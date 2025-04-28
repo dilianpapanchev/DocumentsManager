@@ -1,4 +1,52 @@
 function updateTableRows(days) {
+  const table = document.getElementById('recordsTable');
+  if (!table) return;
+  const rows = Array.from(table.getElementsByTagName('tr')).slice(2); // без заглавията
+  const visibleCount = Math.max(days, 3);
+  const start = Math.max(0, rows.length - visibleCount);
+
+  rows.forEach((tr, i) => {
+    tr.hidden = i < start ? false : true;
+  });
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const slider = document.getElementById('daysRange');
+  const input = document.getElementById('daysInput');
+
+  function syncDaysFromSlider() {
+    input.value = slider.value;
+    updateTableRows(parseInt(slider.value, 10) || 10);
+    renderIDChart();
+    renderCOBChart();
+  }
+
+  function syncDaysFromInput() {
+    let value = parseInt(input.value, 10);
+    if (isNaN(value)) value = 10;
+    if (value < 3) value = 3;
+    if (value > 31) value = 31;
+    input.value = value;
+    slider.value = value;
+    updateTableRows(value);
+    renderIDChart();
+    renderCOBChart();
+  }
+
+  // Първоначално показваме 10 дни
+  updateTableRows(10);
+
+  // Закачаме слушатели за промяна
+  slider.addEventListener('input', syncDaysFromSlider);
+  input.addEventListener('input', syncDaysFromInput);
+});
+
+
+
+
+
+
+function updateTableRows(days) {
   const rows = Array.from(document.getElementById('recordsTable').getElementsByTagName('tr')).slice(2); // Пропускаме заглавията
   const visibleCount = Math.max(days, 3); // Минимум 3 дена
   const start = Math.max(0, rows.length - visibleCount);
