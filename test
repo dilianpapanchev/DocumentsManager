@@ -1,3 +1,29 @@
+function getCOBDataFromTable() {
+    const table = document.getElementById('recordsTable');
+    if (!table) return { labels: [], values: [] };
+
+    const days = parseInt(document.getElementById('daysRange').value, 10) || 10;
+    const rows = Array.from(table.getElementsByTagName('tr')).slice(2);
+    const totalRows = rows.length;
+
+    const visibleRows = rows.slice(-days); // Последните "days" реда
+    const labels = [];
+    const values = [];
+
+    visibleRows.forEach(row => {
+        const cells = row.getElementsByTagName('td');
+        if (cells.length >= 2) {
+            labels.push(cells[0].innerText.trim());        // Дата
+            values.push(parseElapsedTime(cells[1].innerText.trim())); // Време в секунди
+        }
+    });
+
+    return { labels, values };
+}
+
+
+
+
 function renderCOBChart() {
     const { labels, values } = getCOBDataFromTable(); // Взимаме данните от таблицата
     const trend = calculateTrendline(values);         // Изчисляваме тренд линията
