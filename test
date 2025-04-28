@@ -1,3 +1,76 @@
+<script>
+  // helper-и, ако вече нямаш такива:
+  function getAllRows() {
+    return Array.from(document
+      .getElementById("recordsTable")
+      .getElementsByTagName("tr"));
+  }
+
+  function getDataRows() {
+    // Пропускаме първите 2 (header-и)
+    return getAllRows().slice(2);
+  }
+
+  // Точно твоето почистване на редовете
+  function updateTableRows(days) {
+    const minRows = 3;
+    const allRows = getAllRows();
+    const dataRows = getDataRows();
+    const total = dataRows.length;
+
+    // брой, който искаме да показваме
+    const count = Math.max(minRows, Math.min(days, total));
+    // индекс в dataRows, от който започваме да показваме
+    const firstToShow = total - count;
+
+    // винаги показваме заглавните 2 реда
+    allRows[0].hidden = false;
+    allRows[1].hidden = false;
+
+    dataRows.forEach((tr, i) => {
+      tr.hidden = i < firstToShow;
+    });
+  }
+
+  // Синхронизация slider ↔ input и initial load
+  document.addEventListener("DOMContentLoaded", () => {
+    const slider = document.getElementById("daysRange");
+    const input  = document.getElementById("daysInput");
+
+    // По подразбиране 10 дни
+    slider.value = 10;
+    input.value  = 10;
+    updateTableRows(10);
+
+    // когато мърдаме слайдера
+    slider.addEventListener("input", () => {
+      const v = parseInt(slider.value, 10);
+      input.value = v;
+      updateTableRows(v);
+
+      // ако искаш да презареждаш и графиките:
+      renderIDsChart();
+      renderCOBChart();
+    });
+
+    // когато променим ръчно в полето
+    input.addEventListener("input", () => {
+      let v = parseInt(input.value, 10);
+      if (isNaN(v) || v < 3)  v = 3;
+      if (v > 31)             v = 31;
+      input.value  = v;
+      slider.value = v;
+      updateTableRows(v);
+
+      renderIDsChart();
+      renderCOBChart();
+    });
+  });
+</script>
+
+
+
+
 document.addEventListener('DOMContentLoaded', () => {
     const slider = document.getElementById("daysRange");
     const input = document.getElementById("daysInput");
