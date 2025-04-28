@@ -1,3 +1,62 @@
+<button id="exportCsvBtn" class="tool-button">Export CSV</button>
+
+
+document.getElementById('exportCsvBtn').addEventListener('click', () => {
+  document.getElementById('csvExportModal').classList.remove('hidden');
+});
+
+document.getElementById('cancelExportBtn').addEventListener('click', () => {
+  document.getElementById('csvExportModal').classList.add('hidden');
+});
+
+document.getElementById('exportSelectedBtn').addEventListener('click', () => {
+  const selectedTables = Array.from(document.querySelectorAll('.modal-checkboxes input:checked'))
+    .map(cb => cb.value);
+
+  selectedTables.forEach(tableId => {
+    const table = document.getElementById(tableId);
+    if (!table) return;
+
+    let csv = [];
+    const rows = table.querySelectorAll('tr');
+    rows.forEach(row => {
+      let cols = row.querySelectorAll('td, th');
+      let rowData = [];
+      cols.forEach(col => {
+        let text = col.innerText.replace(/\n/g, ' ').trim();
+        rowData.push('"' + text.replace(/"/g, '""') + '"');
+      });
+      csv.push(rowData.join(','));
+    });
+
+    const blob = new Blob([csv.join('\n')], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    link.href = URL.createObjectURL(blob);
+    const reportDate = document.getElementById('reportDate')?.textContent.trim() || 'export';
+    link.download = `${reportDate}_${tableId}.csv`;
+    link.click();
+  });
+
+  document.getElementById('csvExportModal').classList.add('hidden');
+});
+
+
+<!-- CSV Export Modal -->
+<div id="csvExportModal" class="modal hidden">
+  <div class="modal-content">
+    <h3>Select tables to export</h3>
+    <div class="modal-checkboxes">
+      <label><input type="checkbox" value="recordsTable" checked> Records Table</label>
+      <!-- Ако имаш още таблици добавяш тук -->
+    </div>
+    <button id="exportSelectedBtn" class="tool-button">Export Selected</button>
+    <button id="cancelExportBtn" class="tool-button">Cancel</button>
+  </div>
+</div>
+
+
+
+
 document.getElementById("exportCsvButton").addEventListener("click", () => {
     const table = document.getElementById("recordsTable");
     if (!table) {
