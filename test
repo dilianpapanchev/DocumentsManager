@@ -1,4 +1,137 @@
 <script>
+// helper за стойност на слайдъра с default 10, min 3, max 31
+function getDays() {
+  const v = parseInt(document.getElementById('daysRange').value, 10);
+  if (isNaN(v) || v < 3) return 3;
+  if (v > 31) return 31;
+  return v;
+}
+
+// --------- за Records per Minute графиката ---------
+function getRecordsData() {
+  const days = getDays();
+  const table = document.getElementById('recordsTable');
+  const rows = Array.from(table.getElementsByTagName('tr')).slice(2); // skip заглавия
+  const labels = [];
+  const recordsPerMinute = [];
+
+  rows.forEach(tr => {
+    const cells = tr.getElementsByTagName('td');
+    if (cells.length === 5) {
+      const date = cells[0].innerText.trim();
+      const elapsed = parseTimeToMinutes(cells[3].innerText.trim());
+      const tx = parseInt(cells[4].innerText.trim(), 10);
+      if (elapsed > 0) {
+        labels.push(date);
+        recordsPerMinute.push(tx / elapsed);
+      }
+    }
+  });
+
+  // slice последните N елемента
+  const total = labels.length;
+  const start = Math.max(0, total - days);
+  return {
+    labels: labels.slice(start),
+    recordsPerMinute: recordsPerMinute.slice(start)
+  };
+}
+
+function renderIDsChart() {
+  const { labels, recordsPerMinute } = getRecordsData();
+  const ctx = document.getElementById('recordsChart').getContext('2d');
+  if (recordsChartInstance) recordsChartInstance.destroy();
+  recordsChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Records Per Minute',
+        data: recordsPerMinute,
+        /* останалите настройки по твой вкус */
+      }]
+    },
+    options: {
+      // ...
+    }
+  });
+}
+
+// --------- за COB elapsed графиката ---------
+function getCOBDataFromTable() {
+  const days = getDays();
+  const table = document.getElementById('recordsTable');
+  const rows = Array.from(table.getElementsByTagName('tr')).slice(1); // skip заглавния ред
+  const labels = [];
+  const values = [];
+
+  rows.forEach(tr => {
+    const cells = tr.getElementsByTagName('td');
+    if (cells.length >= 4) {
+      const date = cells[0].innerText.trim();
+      const elapsedSec = parseElapsedToSeconds(cells[3].innerText.trim());
+      if (!isNaN(elapsedSec)) {
+        labels.push(date);
+        values.push(elapsedSec);
+      }
+    }
+  });
+
+  const total = labels.length;
+  const start = Math.max(0, total - days);
+  return {
+    labels: labels.slice(start),
+    values: values.slice(start)
+  };
+}
+
+function renderCOBChart() {
+  const { labels, values } = getCOBDataFromTable();
+  const trend = calculateTrendLine(values);
+  const canvas = document.getElementById('cobChart');
+  const ctx = setupCanvas(canvas, 500, 500);
+  if (cobChartInstance) cobChartInstance.destroy();
+  cobChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: 'COB Elapsed', data: values /* ... */ },
+        { label: 'Trend Line', data: trend, type: 'line' /* ... */ }
+      ]
+    },
+    options: {
+      // ...
+    }
+  });
+}
+
+// при всяка промяна на слайдъра
+document.getElementById('daysRange').addEventListener('input', () => {
+  document.getElementById('daysInput').value = getDays();
+  updateTableRows(getDays());
+  renderIDsChart();
+  renderCOBChart();
+  // ... евентуално и другите графики
+});
+
+// при зареждане по подразбиране
+window.addEventListener('DOMContentLoaded', () => {
+  const def = 10;
+  document.getElementById('daysRange').value = def;
+  document.getElementById('daysInput').value = def;
+  updateTableRows(def);
+  renderIDsChart();
+  renderCOBChart();
+  // ...
+});
+</script>
+
+
+
+
+
+<script>
   // helper-и, ако вече нямаш такива:
   function getAllRows() {
     return Array.from(document
