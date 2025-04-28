@@ -1,3 +1,208 @@
+// helper за да вземем стойността на слайдера (и да имаме винаги поне 10)
+function getMaxDays() {
+  return Math.max(10, parseInt(document.getElementById('daysRange').value, 10) || 10);
+}
+
+// 1) адаптирана getRecordsData(), връща само последните N дни
+function getRecordsData() {
+  const table = document.getElementById('recordsTable');
+  // пропускаме първите два <tr> (header-ите)
+  const allRows = Array.from(table.getElementsByTagName('tr')).slice(2);
+  const maxDays = getMaxDays();
+
+  const labels = [];
+  const recordsPerMinute = [];
+
+  // взимаме последните maxDays реда (обратен ред за удобно попълване)
+  const rows = allRows.slice(-maxDays).reverse();
+
+  rows.forEach(row => {
+    const cells = row.getElementsByTagName('td');
+    if (cells.length < 5) return;
+    const date = cells[0].innerText.trim();
+    const elapsed = parseTimeToMinutes(cells[3].innerText);
+    const tx = parseInt(cells[4].innerText, 10);
+    if (elapsed > 0) {
+      labels.push(date);
+      recordsPerMinute.push(tx / elapsed);
+    }
+  });
+
+  return { labels, recordsPerMinute };
+}
+
+// 2) адаптирана getCOBDataFromTable(), връща само последните N дни
+function getCOBDataFromTable() {
+  const table = document.getElementById('recordsTable');
+  // пропускаме само заглавния <tr>
+  const allRows = Array.from(table.getElementsByTagName('tr')).slice(1);
+  const maxDays = getMaxDays();
+
+  const labels = [];
+  const values = [];
+
+  // взимаме последните maxDays реда
+  const rows = allRows.slice(-maxDays).reverse();
+
+  rows.forEach(row => {
+    const cells = row.getElementsByTagName('td');
+    if (cells.length < 4) return;
+    const date = cells[0].innerText.trim();
+    const elapsedStr = cells[3].innerText.trim();
+    const elapsedSec = parseElapsedToSeconds(elapsedStr);
+    if (!isNaN(elapsedSec)) {
+      labels.push(date);
+      values.push(elapsedSec);
+    }
+  });
+
+  return { labels, values };
+}
+
+
+// 3) renderIDsChart() – вече ползва dynamic getRecordsData()
+let recordsChartInstance = null;
+function renderIDsChart() {
+  const { labels, recordsPerMinute } = getRecordsData();
+  const ctx = document.getElementById('recordsChart').getContext('2d');
+  if (recordsChartInstance) recordsChartInstance.destroy();
+  recordsChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Records Per Minute',
+        data: recordsPerMinute,
+        backgroundColor: ['rgba(255,99,132,0.6)', /* … */],
+        borderColor:     ['rgba(255,99,132,1)',   /* … */],
+        borderWidth: 2,
+        borderRadius: 15,
+        hoverBorderWidth: 3
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { stacked: true, ticks: { font: { size: 13 }, color: '#333' } },
+        y: { stacked: true, beginAtZero: true, ticks: { font: { size: 13 }, color: '#333' } }
+      },
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: 'Records Processed per minute',
+          font: { size: 13, weight: 'bold' },
+          color: getTextColor()
+        }
+      },
+      animation: { duration: 1500, easing: 'easeOutBounce' }
+    }
+  });
+}
+
+// 4) renderCOBChart() – вече ползва dynamic getCOBDataFromTable()
+let cobChartInstance = null;
+function renderCOBChart() {
+  const { labels, values } = getCOBDataFromTable();
+  const trend = calculateTrendLine(values);
+
+  const canvas = document.getElementById('cobChart');
+  const ctx = setupCanvas(canvas, 500, 500);
+
+  if (cobChartInstance) cobChartInstance.destroy();
+  cobChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'COB Elapsed',
+          data: values,
+          backgroundColor: 'rgba(154,208,245,1)',
+          borderColor:     'rgba(154,208,245,1)',
+          borderWidth: 1,
+          order: 1,
+          clip: false
+        },
+        {
+          label: 'Trend Line',
+          data: trend,
+          type: 'line',
+          borderColor: 'red',
+          borderDash: [5,5],
+          borderWidth: 2,
+          fill: false,
+          pointRadius: 0,
+          tension: 0,
+          order: 0
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: true },
+        title: {
+          display: true,
+          text: 'COB Elapsed Time & Trend',
+          color: getTextColor(),
+          font: { size: 13, weight: 'bold' }
+        },
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${formatSecondsToHMS(ctx.raw)}`
+          }
+        }
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          ticks: { callback: v => formatSecondsToHMS(v) }
+        }
+      },
+      layout: { padding: { top: 10, right: 20 } },
+      plugins: [{
+        id: 'barLabelsOnly',
+        afterDatasetsDraw(chart) {
+          const ctx2 = chart.ctx;
+          const meta = chart.getDatasetMeta(0);
+          const dark = document.body.classList.contains('dark-mode');
+          meta.data.forEach((bar, i) => {
+            const val = chart.data.datasets[0].data[i];
+            const label = formatSecondsToHMS(val);
+            const barHeight = bar.base - bar.y;
+            ctx2.save();
+            ctx2.font = `bold ${barHeight > 30 ? 12 : 10}px sans-serif`;
+            ctx2.textAlign = 'center';
+            ctx2.textBaseline = 'bottom';
+            ctx2.fillStyle = dark ? '#fff' : '#000';
+            ctx2.fillText(label, bar.x, bar.y - 6);
+            ctx2.restore();
+          });
+        }
+      }]
+    }
+  });
+}
+
+
+// 5) биндираме към slider-а да ре-рисува и двете
+document.getElementById('daysRange').addEventListener('input', () => {
+  renderElapsedChart();
+  renderTimingChart();
+  renderIDsChart();
+  renderCOBChart();
+  renderCPUChart();
+});
+
+// готово — само тези 5 блока добавяш/заместваш, останалото не се променя. 
+
+
+
+
+
 function syncDaysFromSlider() {
     const value = slider.value;
     updateTableRows(value);
