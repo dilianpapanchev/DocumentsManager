@@ -5,6 +5,93 @@ document.getElementById("exportCsvButton").addEventListener("click", () => {
         return;
     }
 
+    const headers = Array.from(table.querySelectorAll("thead th")).map(th => th.innerText.trim());
+
+    // Създаване на чекбокс прозорец
+    const checkboxContainer = document.createElement("div");
+    checkboxContainer.style.padding = "10px";
+    checkboxContainer.style.fontSize = "14px";
+
+    headers.forEach((header, index) => {
+        const label = document.createElement("label");
+        label.style.display = "block";
+        label.style.marginBottom = "5px";
+
+        const checkbox = document.createElement("input");
+        checkbox.type = "checkbox";
+        checkbox.value = index;
+        checkbox.checked = true; // По подразбиране всички са маркирани
+
+        label.appendChild(checkbox);
+        label.appendChild(document.createTextNode(` ${header}`));
+        checkboxContainer.appendChild(label);
+    });
+
+    const confirmButton = document.createElement("button");
+    confirmButton.textContent = "Export Selected";
+    confirmButton.style.marginTop = "10px";
+    confirmButton.className = "tool-button";
+
+    checkboxContainer.appendChild(confirmButton);
+
+    const modal = document.createElement("div");
+    modal.style.position = "fixed";
+    modal.style.top = "0";
+    modal.style.left = "0";
+    modal.style.width = "100%";
+    modal.style.height = "100%";
+    modal.style.background = "rgba(0,0,0,0.6)";
+    modal.style.display = "flex";
+    modal.style.justifyContent = "center";
+    modal.style.alignItems = "center";
+    modal.appendChild(checkboxContainer);
+    document.body.appendChild(modal);
+
+    confirmButton.addEventListener("click", () => {
+        const selectedIndexes = Array.from(checkboxContainer.querySelectorAll("input[type='checkbox']:checked")).map(cb => parseInt(cb.value, 10));
+
+        if (selectedIndexes.length === 0) {
+            alert("Please select at least one column.");
+            return;
+        }
+
+        let csv = [];
+        const rows = table.querySelectorAll("tr");
+
+        rows.forEach(row => {
+            const cols = row.querySelectorAll("td, th");
+            const selectedCols = Array.from(cols).filter((col, idx) => selectedIndexes.includes(idx));
+            const rowData = selectedCols.map(col => `"${col.innerText.trim()}"`);
+            csv.push(rowData.join(","));
+        });
+
+        const csvContent = csv.join("\n");
+        const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+        const url = URL.createObjectURL(blob);
+
+        const link = document.createElement("a");
+        link.setAttribute("href", url);
+        const today = new Date().toISOString().slice(0, 10).replace(/-/g, "");
+        link.setAttribute("download", `Export_${today}.csv`);
+        link.style.display = "none";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+
+        // Затваряне на модал прозореца
+        document.body.removeChild(modal);
+    });
+});
+
+
+
+document.getElementById("exportCsvButton").addEventListener("click", () => {
+    const table = document.getElementById("recordsTable");
+    if (!table) {
+        alert("No table found to export.");
+        return;
+    }
+
     let csv = [];
     const rows = table.querySelectorAll("tr");
 
