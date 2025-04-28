@@ -1,3 +1,48 @@
+<div class="csv-buttons">
+  <button id="exportSelectedBtn" class="small-button">✅ Export Selected</button>
+  <button id="exportAllBtn" class="small-button">⬇️ Export All to Single CSV</button>
+  <button id="cancelExportBtn" class="small-button">❌ Cancel</button>
+</div>
+
+
+const exportAllBtn = document.getElementById('exportAllBtn');
+
+exportAllBtn.addEventListener('click', () => {
+  const tables = document.querySelectorAll('.csv-checkboxes input');
+
+  let allCsv = [];
+
+  tables.forEach(cb => {
+    const tableId = cb.value;
+    const table = document.getElementById(tableId);
+    if (!table) return;
+
+    const rows = table.querySelectorAll('tr');
+    rows.forEach((row, rowIndex) => {
+      const cols = row.querySelectorAll('td, th');
+      const rowData = [];
+      cols.forEach(col => {
+        let text = col.innerText.replace(/\n/g, ' ').trim();
+        rowData.push('"' + text.replace(/"/g, '""') + '"');
+      });
+      allCsv.push(rowData.join(','));
+    });
+    allCsv.push(''); // празен ред между таблиците
+  });
+
+  const blob = new Blob([allCsv.join('\n')], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const reportDate = document.getElementById('reportDate')?.textContent.trim() || 'export';
+  link.href = URL.createObjectURL(blob);
+  link.download = `${reportDate}_all_tables.csv`;
+  link.click();
+
+  csvOptions.classList.add('hidden');
+});
+
+
+
+
 <button id="exportCsvBtn" class="tool-button">📄 Export to CSV</button>
 
 <div id="csvOptions" class="csv-panel hidden">
