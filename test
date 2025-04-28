@@ -1,3 +1,87 @@
+function renderCOBChart() {
+    const { labels, values } = getCOBDataFromTable(); // Взимаме данните от таблицата
+    const trend = calculateTrendline(values);         // Изчисляваме тренд линията
+    const canvas = document.getElementById('cobChart');
+    const ctx = setupCanvas(canvas, 500, 500);
+
+    if (window.cobChart) {
+        window.cobChart.destroy(); // унищожаваме старата графика ако има
+    }
+
+    window.cobChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'COB Elapsed',
+                    data: values,
+                    backgroundColor: 'rgba(154, 208, 245, 1)',
+                    borderColor: 'rgba(154, 208, 245, 1)',
+                    borderWidth: 1,
+                    clip: false,
+                },
+                {
+                    label: 'Trend Line',
+                    data: trend,
+                    type: 'line',
+                    borderColor: 'red',
+                    borderDash: [5, 5],
+                    borderWidth: 2,
+                    fill: false,
+                    pointRadius: 0,
+                    tension: 0,
+                    order: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                title: {
+                    display: true,
+                    text: 'COB Elapsed Time + Trend',
+                    color: getTextColor(),
+                    font: { size: 13, weight: 'bold' }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: (value) => formatSecondsToHMS(value),
+                        font: { size: 13 },
+                        color: '#333'
+                    },
+                    title: {
+                        display: true,
+                        text: 'Elapsed Time (HH:mm:ss)',
+                        font: { size: 13 },
+                        color: '#333'
+                    }
+                },
+                x: {
+                    ticks: {
+                        font: { size: 13 },
+                        color: '#333'
+                    }
+                }
+            },
+            layout: {
+                padding: { top: 10, right: 20 }
+            },
+            animation: {
+                duration: 1500,
+                easing: 'easeOutBounce'
+            }
+        }
+    });
+}
+
+
+
 if (window.id8Chart) window.id8Chart.destroy();
 
 
