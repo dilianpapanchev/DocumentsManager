@@ -1,3 +1,213 @@
+if (window.id8Chart) window.id8Chart.destroy();
+
+
+
+
+
+function renderCOBChart() {
+    const { labels, values } = getCOBDataFromTable();
+    const trend = calculateTrendline(values);
+    const canvas = document.getElementById('cobChart');
+    const ctx = setupCanvas(canvas, 500, 500);
+
+    if (window.cobChart) {
+        window.cobChart.destroy();
+    }
+
+    window.cobChart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'COB Elapsed',
+                    data: values,
+                    backgroundColor: 'rgba(154, 208, 245, 1)',
+                    borderColor: 'rgba(154, 208, 245, 1)',
+                    borderWidth: 1,
+                    clip: false,
+                },
+                {
+                    label: 'Trend Line',
+                    data: trend,
+                    type: 'line',
+                    borderColor: 'red',
+                    borderDash: [5, 5],
+                    borderWidth: 2,
+                    fill: false,
+                    pointRadius: 0,
+                    tension: 0,
+                    order: 0,
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: false },
+                title: {
+                    display: true,
+                    text: 'COB Elapsed Time + Trend',
+                    color: getTextColor(),
+                    font: { size: 13, weight: 'bold' }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: value => formatSecondsToHMS(value)
+                    },
+                    title: {
+                        display: true,
+                        text: 'Elapsed Time (HH:mm:ss)'
+                    }
+                }
+            }
+        }
+    });
+}
+
+
+
+
+function getCOBDataFromTable() {
+    const table = document.getElementById('recordsTable');
+    const rows = Array.from(table.getElementsByTagName('tr')).slice(2);
+    const maxDays = parseInt(document.getElementById('daysRange').value, 10) || 10;
+
+    let labels = [];
+    let values = [];
+
+    const selectedRows = rows.slice(-maxDays);
+
+    selectedRows.forEach(row => {
+        const cells = row.getElementsByTagName('td');
+        if (cells.length >= 5) {
+            const date = cells[0].innerText.trim();
+            const elapsed = parseElapsedToSeconds(cells[3].innerText.trim());
+            if (elapsed > 0) {
+                labels.push(date);
+                values.push(elapsed);
+            }
+        }
+    });
+
+    return { labels, values };
+}
+
+
+
+
+function renderID8Chart() {
+    const { labels, recordsPerMinute } = getRecordsData();
+    const ctx = document.getElementById('recordsChart').getContext('2d');
+
+    if (window.id8Chart) {
+        window.id8Chart.destroy();
+    }
+
+    window.id8Chart = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Records Per Minute',
+                data: recordsPerMinute,
+                backgroundColor: 'rgba(255, 99, 132, 0.6)',
+                borderColor: 'rgba(255, 99, 132, 1)',
+                borderWidth: 1,
+                hoverBorderWidth: 3,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    stacked: true,
+                    ticks: { font: { size: 13 }, color: '#333' }
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    ticks: { font: { size: 13 }, color: '#333' }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                title: {
+                    display: true,
+                    text: 'Records Processed per Minute',
+                    font: { size: 13, weight: 'bold' },
+                    color: '#222'
+                }
+            },
+            animation: {
+                duration: 1500,
+                easing: 'easeOutBounce'
+            }
+        }
+    });
+}
+
+
+
+
+function getRecordsData() {
+    const table = document.getElementById('recordsTable');
+    const rows = Array.from(table.getElementsByTagName('tr')).slice(2); // Пропускаме заглавията
+    const maxDays = parseInt(document.getElementById('daysRange').value, 10) || 10;
+
+    let labels = [];
+    let recordsPerMinute = [];
+
+    const selectedRows = rows.slice(-maxDays); // Вземаме последните N реда
+
+    selectedRows.forEach(row => {
+        const cells = row.getElementsByTagName('td');
+        if (cells.length >= 5) {
+            const date = cells[0].innerText.trim();
+            const elapsed = parseTimeToMinutes(cells[3].innerText.trim());
+            const transactions = parseInt(cells[4].innerText.trim(), 10);
+
+            if (elapsed > 0) {
+                labels.push(date);
+                recordsPerMinute.push(transactions / elapsed);
+            }
+        }
+    });
+
+    return { labels, recordsPerMinute };
+}
+
+
+
+
+document.addEventListener('DOMContentLoaded', () => {
+    const slider = document.getElementById('daysRange');
+    const input = document.getElementById('daysInput');
+
+    function syncSliderAndInput(value) {
+        const v = Math.max(3, Math.min(31, parseInt(value, 10) || 10));
+        slider.value = v;
+        input.value = v;
+        updateTableRows(v);
+        renderID8Chart();
+        renderCOBChart();
+        renderCPUChart();
+    }
+
+    slider.addEventListener('input', () => syncSliderAndInput(slider.value));
+    input.addEventListener('input', () => syncSliderAndInput(input.value));
+
+    // При първоначално зареждане
+    syncSliderAndInput(10);
+});
+
+
+
 <script>
 document.addEventListener('DOMContentLoaded', () => {
     const slider = document.getElementById('daysRange');
