@@ -1,3 +1,100 @@
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const slider = document.getElementById('daysRange');
+    const input = document.getElementById('daysInput');
+
+    function syncSliderAndInput(value) {
+        const v = Math.max(3, Math.min(31, parseInt(value, 10) || 10));
+        slider.value = v;
+        input.value = v;
+        updateTableRows(v);
+        renderID8Chart();
+        renderCOBChart();
+        renderCPUChart();
+    }
+
+    slider.addEventListener('input', () => syncSliderAndInput(slider.value));
+    input.addEventListener('input', () => syncSliderAndInput(input.value));
+
+    // При първоначално зареждане
+    syncSliderAndInput(10);
+});
+
+function getRecordsData() {
+    const table = document.getElementById('recordsTable');
+    const rows = Array.from(table.getElementsByTagName('tr')).slice(2);
+    const maxDays = parseInt(document.getElementById('daysRange').value, 10) || 10;
+    
+    const labels = [];
+    const recordsPerMinute = [];
+
+    for (let i = Math.max(rows.length - maxDays, 0); i < rows.length; i++) {
+        const cells = rows[i].getElementsByTagName('td');
+        if (cells.length === 5) {
+            const date = cells[0].innerText.trim();
+            const elapsed = parseTimeToMinutes(cells[3].innerText.trim());
+            const transactions = parseInt(cells[4].innerText.trim(), 10);
+
+            if (elapsed > 0) {
+                labels.push(date);
+                recordsPerMinute.push(transactions / elapsed);
+            }
+        }
+    }
+
+    return { labels, recordsPerMinute };
+}
+
+function getCOBDataFromTable() {
+    const table = document.getElementById('recordsTable');
+    const rows = Array.from(table.getElementsByTagName('tr')).slice(2);
+    const maxDays = parseInt(document.getElementById('daysRange').value, 10) || 10;
+
+    const labels = [];
+    const values = [];
+
+    for (let i = Math.max(rows.length - maxDays, 0); i < rows.length; i++) {
+        const cells = rows[i].getElementsByTagName('td');
+        if (cells.length > 3) {
+            const date = cells[0].innerText.trim();
+            const elapsed = parseElapsedToSeconds(cells[3].innerText.trim());
+            if (elapsed > 0) {
+                labels.push(date);
+                values.push(elapsed);
+            }
+        }
+    }
+
+    return { labels, values };
+}
+
+function getCPUData() {
+    const table = document.getElementById('cpuTable');
+    const rows = Array.from(table.getElementsByTagName('tr')).slice(2);
+    const maxDays = parseInt(document.getElementById('daysRange').value, 10) || 10;
+
+    const labels = [];
+    const userUsage = [];
+    const systemUsage = [];
+    const idleUsage = [];
+
+    for (let i = Math.max(rows.length - maxDays, 0); i < rows.length; i++) {
+        const cells = rows[i].getElementsByTagName('td');
+        if (cells.length === 4) {
+            labels.push(cells[0].innerText.trim());
+            userUsage.push(parseFloat(cells[1].innerText));
+            systemUsage.push(parseFloat(cells[2].innerText));
+            idleUsage.push(parseFloat(cells[3].innerText));
+        }
+    }
+
+    return { labels, userUsage, systemUsage, idleUsage };
+}
+</script>
+
+
+
+
 function getRecordsData() {
     const table = document.getElementById('recordsTable');
     const rows = Array.from(table.getElementsByTagName('tr')).filter(row => !row.hidden);
