@@ -23,6 +23,220 @@ syncDaysFromSlider();
 
 
 
+
+let idChartInstance = null;
+let cobChartInstance = null;
+
+function renderIDChart() {
+    const { labels, recordsPerMinute } = getFilteredRecordsData();
+    const ctx = document.getElementById('recordsChart').getContext('2d');
+
+    if (idChartInstance) idChartInstance.destroy();
+
+    idChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Records Per Minute',
+                data: recordsPerMinute,
+                backgroundColor: 'rgba(154, 208, 245, 1)',
+                borderColor: 'rgba(154, 208, 245, 1)',
+                borderWidth: 1
+            }]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { display: false },
+                title: {
+                    display: true,
+                    text: 'Records Processed per Minute',
+                    color: getTextColor(),
+                    font: { size: 13, weight: 'bold' }
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    ticks: { font: { size: 13 }, color: '#333' }
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    ticks: { font: { size: 13 }, color: '#333' }
+                }
+            },
+            animation: { duration: 1500, easing: 'easeOutBounce' }
+        }
+    });
+}
+
+function renderCOBChart() {
+    const { labels, elapsedValues } = getFilteredCOBData();
+    const trend = calculateTrendline(elapsedValues);
+    const ctx = document.getElementById('cobChart').getContext('2d');
+
+    if (cobChartInstance) cobChartInstance.destroy();
+
+    cobChartInstance = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                {
+                    label: 'COB Elapsed',
+                    data: elapsedValues,
+                    backgroundColor: 'rgba(154, 208, 245, 1)',
+                    borderColor: 'rgba(154, 208, 245, 1)',
+                    borderWidth: 1,
+                    order: 1,
+                    clip: false
+                },
+                {
+                    label: 'Trend Line',
+                    data: trend,
+                    type: 'line',
+                    borderColor: 'red',
+                    borderDash: [5, 5],
+                    borderWidth: 2,
+                    fill: false,
+                    pointRadius: 0,
+                    tension: 0,
+                    order: 0
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { display: true },
+                title: {
+                    display: true,
+                    text: 'COB Elapsed Time & Trend',
+                    color: getTextColor(),
+                    font: { size: 13, weight: 'bold' }
+                },
+                tooltip: {
+                    callbacks: {
+                        label: function (context) {
+                            const val = context.raw;
+                            return `${context.dataset.label}: ${formatSecondsToHMS(val)}`;
+                        }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function (value) {
+                            return formatSecondsToHMS(value);
+                        }
+                    },
+                    title: {
+                        display: false,
+                        text: 'Elapsed Time (HH:mm:ss)'
+                    }
+                }
+            },
+            layout: { padding: { top: 10, right: 20 } }
+        }
+    });
+}
+
+
+
+
+
+function updateTableRows(days) {
+    const allRows = Array.from(document.getElementById('recordsTable').getElementsByTagName('tr'));
+    const dataRows = allRows.slice(1); // без заглавния ред
+
+    const visibleCount = Math.max(days, 3);
+    const start = Math.max(dataRows.length - visibleCount, 0);
+
+    dataRows.forEach((tr, i) => {
+        tr.hidden = (i < start);
+    });
+}
+
+function getFilteredRecordsData() {
+    const table = document.getElementById('recordsTable');
+    const rows = Array.from(table.getElementsByTagName('tr')).slice(1); // без заглавния ред
+    const maxDays = parseInt(document.getElementById('daysRange').value, 10) || 10;
+
+    let labels = [];
+    let recordsPerMinute = [];
+
+    for (let i = rows.length - 1; i >= 0 && labels.length < maxDays; i--) {
+        const cells = rows[i].getElementsByTagName("td");
+        if (cells.length >= 5) {
+            const date = cells[0].innerText.trim();
+            const elapsedTime = parseTimeToMinutes(cells[3].innerText.trim());
+            const transactions = parseInt(cells[4].innerText.trim(), 10);
+            if (elapsedTime) {
+                labels.push(date);
+                recordsPerMinute.push(transactions / elapsedTime);
+            }
+        }
+    }
+
+    return { labels: labels.reverse(), recordsPerMinute: recordsPerMinute.reverse() };
+}
+
+function getFilteredCOBData() {
+    const table = document.getElementById('recordsTable');
+    const rows = Array.from(table.getElementsByTagName('tr')).slice(1); // без заглавния ред
+    const maxDays = parseInt(document.getElementById('daysRange').value, 10) || 10;
+
+    let labels = [];
+    let elapsedValues = [];
+
+    for (let i = rows.length - 1; i >= 0 && labels.length < maxDays; i--) {
+        const cells = rows[i].getElementsByTagName("td");
+        if (cells.length >= 5) {
+            const date = cells[0].innerText.trim();
+            const elapsed = parseElapsedToSeconds(cells[3].innerText.trim());
+            if (!isNaN(elapsed)) {
+                labels.push(date);
+                elapsedValues.push(elapsed);
+            }
+        }
+    }
+
+    return { labels: labels.reverse(), elapsedValues: elapsedValues.reverse() };
+}
+
+
+
+
+function syncDaysFromSlider() {
+    const value = slider.value;
+    updateTableRows(value);
+    renderIDChart();
+    renderCOBChart();
+}
+
+function syncDaysFromInput() {
+    let value = parseInt(input.value, 10);
+    if (isNaN(value)) value = 10;
+    if (value < 3) value = 3;
+    if (value > 31) value = 31;
+    input.value = value;
+    slider.value = value;
+    syncDaysFromSlider();
+}
+
+slider.addEventListener('input', syncDaysFromSlider);
+input.addEventListener('input', syncDaysFromInput);
+
+// при зареждане:
+syncDaysFromSlider();
+
+
+
 let idChartInstance = null;
 let cobChartInstance = null;
 
