@@ -1,3 +1,81 @@
+upload() {
+  (( $# >= 1 )) || die "Missing <pattern| -all> for upload"
+  local pattern=$1; shift
+  local dest=${1:-$REMOTE_DIR}
+
+  # определяме списък от файлове
+  local files=()
+  if [[ $pattern == "-all" ]]; then
+    files=( "$UPLOAD_DIR"/* )
+  else
+    files=( "$UPLOAD_DIR"/$pattern )
+  fi
+
+  (( ${#files[@]} > 0 )) || die "No matching files for '$pattern' in $UPLOAD_DIR"
+
+  for src in "${files[@]}"; do
+    [[ -f $src ]] || continue
+    [[ -r $src ]] || { echo_info "Skipping unreadable: ${src##*/}"; continue; }
+    dzdo test -d "$dest"   || die "Destination not found: $dest"
+    dzdo test -w "$dest"   || die "No write permission: $dest"
+
+    local name=${src##*/}
+    show_table  "Upload" "$UPLOAD_DIR" "$name" "$dest"
+    echo_info "Uploading '$name' → '$dest/'"
+
+    local tmpf
+    tmpf=$(mktemp "/tmp/${name}.XXXXXX") || die "Cannot create temp file"
+    cp "$src" "$tmpf"
+    dzdo chown "$USER_NAME":"$USER_NAME" "$tmpf"
+    dzdo chmod 770 "$tmpf"
+    dzdo mv "$tmpf" "$dest/$name"
+
+    echo_info "Upload complete: '$name'"
+  done
+}
+
+download() {
+  (( $# >= 1 )) || die "Missing <pattern| -all> for download"
+  local pattern=$1; shift
+  local srcd=${1:-$REMOTE_DIR}
+
+  # определяме списък от отдалечени файлове
+  local remotes=()
+  if [[ $pattern == "-all" ]]; then
+    remotes=( "$srcd"/* )
+  else
+    remotes=( "$srcd"/$pattern )
+  fi
+
+  (( ${#remotes[@]} > 0 )) || die "No matching files for '$pattern' in $srcd"
+
+  for remote in "${remotes[@]}"; do
+    [[ -f $remote ]] || continue
+    dzdo test -r "$remote" || { echo_info "Skipping unreadable: ${remote##*/}"; continue; }
+
+    local name=${remote##*/}
+    local date_dir=$(date '+%Y%m%d')
+    local dest="$DOWNLOAD_BASE/$USER_NAME/$date_dir"
+    mkdir -p "$dest"
+    [[ -w $dest ]] || die "No write permission: $dest"
+
+    show_table  "Download" "$srcd" "$name" "$dest"
+    echo_info "Downloading '$name' → '$dest/'"
+
+    local tmpf
+    tmpf=$(mktemp "/tmp/${name}.XXXXXX") || die "Cannot create temp file"
+    dzdo cp "$remote" "$tmpf"
+    dzdo chown "$USER_NAME":"$USER_NAME" "$tmpf"
+    dzdo chmod 770 "$tmpf"
+    mv "$tmpf" "$dest/$name"
+
+    echo_info "Download complete: '$name'"
+  done
+}
+
+
+
+
 #!/usr/bin/env bash
 set -euo pipefail
 shopt -s globstar nullglob
