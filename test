@@ -1,3 +1,27 @@
+COB Analyser is a lightweight, browser-based tool designed to help operations and development teams monitor and troubleshoot their overnight batch processes (“Close-Of-Business” or COB runs). Its main goals are to:
+	1.	Collect and display key COB metrics
+	•	Start & Stop Times for each day’s batch run
+	•	Elapsed Duration (how long the entire COB took)
+	•	Throughput (records or transactions processed per minute)
+	•	CPU Usage across USER, SYSTEM and IDLE time slices during the run
+	•	Batch Health Checks (e.g. detecting missing or unusually slow batches, or unexpected application restarts)
+	2.	Provide configurable historical views
+	•	A slider lets you choose how many days of history to display (from 3 up to 31), defaulting to the last 10 days
+	•	Tables and charts automatically update whenever you move the slider, so you can zoom in on a recent window or zoom out to see longer trends
+	3.	Visualize trends at a glance
+	•	Bar charts for throughput (records per minute) and COB durations
+	•	A trend-line overlay on the duration chart to highlight whether your nightly runs are speeding up or slowing down over time
+	•	A line chart for CPU usage, so you can spot spikes in user/system load or shifts in idle time
+	4.	Flag anomalies and export data
+	•	Automatic warnings for missing batches, slow batches, and restarts during COB
+	•	One-click export of any table to CSV, plus the ability to download chart images for reporting
+
+By combining automatic data extraction, interactive filtering, and clear visualizations, COB Analyser makes it easy to detect performance regressions, capacity bottlenecks, or configuration issues—without manual spreadsheet work every morning.
+
+
+
+
+
 upload() {
   (( $# >= 1 )) || die "Missing <pattern| -all> for upload"
   local pattern=$1; shift
