@@ -1,3 +1,46 @@
+function getEOMAnnotationsWithHeights(records, labels) {
+    const annotations = {};
+    for (let i = 0; i < labels.length - 1; i++) {
+        const current = labels[i];
+        const next = labels[i + 1];
+
+        if (current.substring(0, 6) !== next.substring(0, 6)) {
+            const yVal = records[i] || 0;
+            annotations[`line-eom-${i}`] = {
+                type: 'line',
+                scaleID: 'x',
+                value: current,
+                borderColor: 'orange',
+                borderWidth: 2,
+                borderDash: [6, 4]
+            };
+
+            annotations[`text-eom-${i}`] = {
+                type: 'label',
+                xValue: current,
+                yValue: yVal,
+                backgroundColor: 'transparent',
+                content: ['EOM'],
+                font: {
+                    size: 12,
+                    weight: 'bold'
+                },
+                color: 'orange',
+                textAlign: 'center',
+                position: 'start',
+                xAdjust: 0,
+                yAdjust: -Math.max(20, Math.min(yVal * 0.05, 40)), // динамично позициониране
+                rotation: 0
+            };
+        }
+    }
+    return annotations;
+}
+
+
+
+
+
 function renderIDsChart() {
     const ctx = document.getElementById("recordsChart").getContext("2d");
     const { labels, recordsPerMinute } = getRecordsData();
