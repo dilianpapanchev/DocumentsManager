@@ -1,3 +1,113 @@
+// make sure you’ve imported & registered both Chart.js and chartjs-plugin-annotation before this runs
+// e.g.:
+//   import { Chart, BarController, BarElement, CategoryScale, LinearScale, Title } from 'chart.js';
+//   import annotationPlugin from 'chartjs-plugin-annotation';
+//   Chart.register(BarController, BarElement, CategoryScale, LinearScale, Title, annotationPlugin);
+
+let recordsChartInstance;
+
+function renderRecordsChart() {
+  // 1) pull your data
+  const { labels, recordsPerMinute } = getRecordsData();  // your existing extractor
+
+  // 2) destroy previous chart
+  if (recordsChartInstance) recordsChartInstance.destroy();
+
+  // 3) create new one
+  const ctx = document.getElementById('recordsChart').getContext('2d');
+  recordsChartInstance = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [{
+        label: 'Records Per Minute',
+        data: recordsPerMinute,
+        backgroundColor: 'rgba(54,162,235,0.6)',
+        borderColor:   'rgba(54,162,235,1)',
+        borderWidth: 1
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: { 
+          stacked: true,
+          ticks: { font: { size: 13 }, color: '#333' }
+        },
+        y: {
+          stacked: true,
+          beginAtZero: true,
+          ticks: { font: { size: 13 }, color: '#333' }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        title: {
+          display: true,
+          text: 'Records Processed per minute',
+          font: { size: 14, weight: 'bold' },
+          color: '#222'
+        },
+        annotation: {
+          // ask our helper to build a map of annotations:
+          annotations: buildEOMAnnotations(recordsChartInstance)
+        }
+      }
+    }
+  });
+}
+
+/**
+ * Walks the chart’s labels and data, finds month-breaks
+ * and returns a map of annotation configs for line + label.
+ */
+function buildEOMAnnotations(chart) {
+  const ann = {};
+  const labels = chart.data.labels;
+  const data   = chart.data.datasets[0].data;
+  const yScale = chart.scales.y;
+
+  labels.forEach((lbl, i) => {
+    const next = labels[i + 1];
+    // compare YYYYMM prefix of this vs next
+    if (next && lbl.slice(0,6) !== next.slice(0,6)) {
+      // vertical dashed line
+      ann[`eomLine${i}`] = {
+        type: 'line',
+        scaleID: 'x',
+        value: lbl,
+        borderColor: 'orange',
+        borderWidth: 2,
+        borderDash: [6,4],
+        borderDashOffset: 2
+      };
+      // label at the top
+      ann[`eomLabel${i}`] = {
+        type: 'label',
+        xScaleID: 'x',
+        xValue: lbl,
+        yScaleID: 'y',
+        yValue: yScale.max,     // attach to top of the scale
+        content: ['EOM'],
+        font: { size: 12, weight: 'bold' },
+        color: 'orange',
+        textAlign: 'center',
+        backgroundColor: 'transparent',
+        yAdjust: -8             // shift up 8px from top
+      };
+    }
+  });
+
+  return ann;
+}
+
+// call on load / whenever you update your table
+renderRecordsChart();
+
+
+
+
 function getEOMAnnotationsWithHeights(records, labels) {
     const annotations = {};
     for (let i = 0; i < labels.length - 1; i++) {
