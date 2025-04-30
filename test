@@ -1,3 +1,48 @@
+function getEOMAnnotations(labels) {
+  const eomAnnotations = [];
+
+  for (let i = 1; i < labels.length; i++) {
+    const prev = labels[i - 1].slice(0, 6); // YYYYMM
+    const curr = labels[i].slice(0, 6);
+    if (prev !== curr) {
+      const eomDate = labels[i - 1];
+      eomAnnotations.push({
+        type: 'line',
+        scaleID: 'x',
+        value: eomDate,
+        borderColor: 'black',
+        borderWidth: 2,
+        borderDash: [4, 4],
+        label: {
+          display: true,
+          content: 'EOM',
+          position: 'start',
+          color: 'black',
+          font: {
+            size: 11,
+            weight: 'bold'
+          },
+          rotation: -90
+        }
+      });
+    }
+  }
+
+  return eomAnnotations;
+}
+
+plugins: {
+  annotation: {
+    annotations: getEOMAnnotations(labels)
+  },
+  title: {
+    display: true,
+    text: 'COB & RR Times vs Cutoff Threshold',
+    font: { size: 13, weight: 'bold' }
+  }
+}
+
+
 #!/usr/bin/env python3
 import random
 import string
