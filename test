@@ -1,3 +1,46 @@
+function getEOMAnnotations(labels, yData) {
+  const annotations = {};
+  const topY = Math.max(...yData);  // използваме масива от стойности
+
+  for (let i = 0; i < labels.length - 1; i++) {
+    const current = labels[i];
+    const next = labels[i + 1];
+
+    if (current.substring(0, 6) !== next.substring(0, 6)) {
+      annotations[`line-eom-${i}`] = {
+        type: 'line',
+        scaleID: 'x',
+        value: current,
+        borderColor: 'orange',
+        borderWidth: 2,
+        borderDash: [6, 4]
+      };
+
+      annotations[`text-eom-${i}`] = {
+        type: 'label',
+        xValue: current,
+        yValue: topY + 30,
+        backgroundColor: 'transparent',
+        content: ['EOM'],
+        font: {
+          size: 12,
+          weight: 'bold'
+        },
+        color: 'orange',
+        textAlign: 'center',
+        position: 'start',
+        xAdjust: 0,
+        yAdjust: 0,
+        rotation: 0
+      };
+    }
+  }
+
+  return annotations;
+}
+
+
+
 function getEOMAnnotations(labels, chart) {
   const annotations = {};
   const topY = Math.max(...chart.data.datasets[0].data);  // най-високата стойност по Y
