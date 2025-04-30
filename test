@@ -1,3 +1,67 @@
+#!/usr/bin/env python3
+import random
+import string
+
+def password_generator(length=16,
+                       use_special=True,
+                       use_upper=True,
+                       use_lower=True,
+                       use_digits=True):
+    """Generate a random password."""
+    chars = ""
+    if use_lower:
+        chars += string.ascii_lowercase
+    if use_upper:
+        chars += string.ascii_uppercase
+    if use_digits:
+        chars += string.digits
+    if use_special:
+        chars += string.punctuation
+
+    if not chars:
+        raise ValueError("You must choose at least one type of symbol!")
+
+    return "".join(random.choice(chars) for _ in range(length))
+
+
+def ask_user():
+    """Prompt the user for options and print out the password."""
+    try:
+        length = int(input("How many characters should the password be? "))
+        if length < 1:
+            print("Length must be a positive integer.")
+            return
+    except ValueError:
+        print("Please enter a valid number!")
+        return
+
+    use_special = input("Include special characters? (y/n): ").strip().lower() == "y"
+    use_upper   = input("Include uppercase letters? (y/n): ").strip().lower() == "y"
+    use_lower   = input("Include lowercase letters? (y/n): ").strip().lower() == "y"
+    use_digits  = input("Include digits? (y/n): ").strip().lower() == "y"
+
+    try:
+        pwd = password_generator(
+            length,
+            use_special=use_special,
+            use_upper=use_upper,
+            use_lower=use_lower,
+            use_digits=use_digits,
+        )
+    except ValueError as e:
+        print(e)
+        return
+
+    print("\nYour generated password is:", pwd)
+    print("=" * 40)
+
+
+if __name__ == "__main__":
+    ask_user()
+
+
+
+
 COB Analyser is a lightweight, browser-based tool designed to help operations and development teams monitor and troubleshoot their overnight batch processes (“Close-Of-Business” or COB runs). Its main goals are to:
 	1.	Collect and display key COB metrics
 	•	Start & Stop Times for each day’s batch run
