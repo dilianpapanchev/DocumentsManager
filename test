@@ -1,3 +1,49 @@
+function getEOMAnnotations(labels, heights) {
+  const annotations = {};
+  for (let i = 0; i < labels.length - 1; i++) {
+    const current = labels[i];
+    const next = labels[i + 1];
+
+    if (current.substring(0, 6) !== next.substring(0, 6)) {
+      const height = heights?.[i] || 1; // ако няма масив, падаме на 1
+      const adjustedY = height + 50; // издигаме текста с 50 над стълба
+
+      annotations[`line-eom-${i}`] = {
+        type: 'line',
+        scaleID: 'x',
+        value: current,
+        borderColor: 'orange',
+        borderWidth: 2,
+        borderDash: [6, 4],
+      };
+
+      annotations[`text-eom-${i}`] = {
+        type: 'label',
+        xValue: current,
+        yValue: adjustedY,
+        backgroundColor: 'transparent',
+        content: ['EOM'],
+        font: {
+          size: 12,
+          weight: 'bold'
+        },
+        color: 'orange',
+        textAlign: 'center',
+        position: 'start',
+        xAdjust: 0,
+        yAdjust: -10,
+        rotation: 0
+      };
+    }
+  }
+
+  return annotations;
+}
+
+
+
+
+
 // make sure you’ve imported & registered both Chart.js and chartjs-plugin-annotation before this runs
 // e.g.:
 //   import { Chart, BarController, BarElement, CategoryScale, LinearScale, Title } from 'chart.js';
