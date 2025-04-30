@@ -1,3 +1,73 @@
+function getEOMAnnotationsWithHeights(chart) {
+  const annotations = [];
+  const labels = chart.data.labels;
+  const datasets = chart.data.datasets;
+
+  // Намери последните дни от месеца
+  const lastDays = [];
+  for (let i = 0; i < labels.length; i++) {
+    const current = labels[i].substring(0, 6);
+    const next = labels[i + 1]?.substring(0, 6);
+    if (current !== next) {
+      lastDays.push({ index: i, date: labels[i] });
+    }
+  }
+
+  // За всяка дата намери максималната стойност по Y
+  lastDays.forEach(({ index, date }) => {
+    let maxY = 0;
+
+    datasets.forEach(ds => {
+      const val = ds.data[index];
+      if (typeof val === 'number' && val > maxY) {
+        maxY = val;
+      }
+    });
+
+    annotations.push({
+      type: 'line',
+      xMin: date,
+      xMax: date,
+      borderColor: 'orange',
+      borderDash: [4, 4],
+      borderWidth: 1,
+      label: {
+        content: 'EOM',
+        enabled: true,
+        position: {
+          x: 'end',
+          y: 'start'
+        },
+        yAdjust: -10,
+        backgroundColor: 'transparent',
+        color: 'orange',
+        font: {
+          size: 11,
+          weight: 'bold'
+        }
+      }
+    });
+  });
+
+  return annotations;
+}
+
+
+const annotations = getEOMAnnotationsWithHeights(chart);
+
+options: {
+  // ...
+  plugins: {
+    annotation: {
+      annotations: annotations
+    }
+  }
+}
+
+
+
+
+
 function getEOMAnnotationsWithHeights(chart, labels, datasets) {
   const eomAnnotations = [];
   const lastDays = [];
