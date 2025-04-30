@@ -4,6 +4,48 @@ function getEOMAnnotations(labels) {
     const current = labels[i];
     const next = labels[i + 1];
     if (current.substring(0, 6) !== next.substring(0, 6)) {
+      annotations[`line-eom-${i}`] = {
+        type: 'line',
+        scaleID: 'x',
+        value: current,
+        borderColor: 'orange',
+        borderWidth: 2,
+        borderDash: [6, 4]
+      };
+      annotations[`text-eom-${i}`] = {
+        type: 'label',
+        xValue: current,
+        yValue: 1, // Няма значение, ще го коригираме със yAdjust
+        backgroundColor: 'transparent',
+        content: ['EOM'],
+        font: {
+          size: 12,
+          weight: 'bold'
+        },
+        color: 'orange',
+        textAlign: 'center',
+        position: 'start',
+        xAdjust: 0,
+        yAdjust: -30, // това мести текста над графиката
+        rotation: 0
+      };
+    }
+  }
+  return annotations;
+}
+
+
+
+
+
+
+
+function getEOMAnnotations(labels) {
+  const annotations = {};
+  for (let i = 0; i < labels.length - 1; i++) {
+    const current = labels[i];
+    const next = labels[i + 1];
+    if (current.substring(0, 6) !== next.substring(0, 6)) {
       annotations[`eom-${i}`] = {
         type: 'line',
         scaleID: 'x',
