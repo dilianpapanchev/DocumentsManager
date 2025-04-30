@@ -1,3 +1,24 @@
+for i in {0..11}; do
+  last_day=$(date -d "$current_date -$i month -1 day" +%Y%m%d)
+  echo "$last_day"
+
+  jtfind="$jt_path/JT_$last_day.csv"
+
+  if [[ -s "$jtfind" ]]; then
+    echo "COB $last_day $jtfind"
+    echo "-----Started-----"
+    cat "$jtfind" | grep A000 | cut -d ',' -f6 | head -1
+    echo "-----Stopped-----"
+    cat "$jtfind" | grep R999 | cut -d ',' -f7 | head -1
+  else
+    echo "File not found or empty: $jtfind, skipping..."
+  fi
+done
+
+
+
+
+
 function getEOMAnnotations(labels, yData) {
   const annotations = {};
   const topY = Math.max(...yData);  // използваме масива от стойности
