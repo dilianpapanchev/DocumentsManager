@@ -1,3 +1,59 @@
+function getEOMAnnotationsWithHeights(chart, labels, datasets) {
+  const eomAnnotations = [];
+  const lastDays = [];
+
+  // Намираме всички последни дати за всеки месец
+  for (let i = 0; i < labels.length; i++) {
+    const currentDate = labels[i];
+    const currentMonth = currentDate.substring(0, 6);
+    const nextDate = labels[i + 1];
+    const nextMonth = nextDate ? nextDate.substring(0, 6) : null;
+
+    if (currentMonth !== nextMonth) {
+      lastDays.push({ index: i, date: currentDate });
+    }
+  }
+
+  // За всяка такава дата намираме най-високата стойност от всички datasets
+  lastDays.forEach(({ index, date }) => {
+    let maxY = 0;
+
+    datasets.forEach(dataset => {
+      const value = dataset.data[index];
+      if (typeof value === 'number' && value > maxY) {
+        maxY = value;
+      }
+    });
+
+    eomAnnotations.push({
+      type: 'line',
+      xMin: date,
+      xMax: date,
+      borderColor: 'orange',
+      borderDash: [6, 3],
+      borderWidth: 1,
+      label: {
+        content: 'EOM',
+        enabled: true,
+        position: 'end',
+        yAdjust: -8,
+        backgroundColor: 'transparent',
+        color: 'orange',
+        font: {
+          weight: 'bold'
+        }
+      },
+      yMax: maxY
+    });
+  });
+
+  return eomAnnotations;
+}
+
+
+
+
+
 function getEOMAnnotations(labels) {
   const annotations = {};
   for (let i = 0; i < labels.length - 1; i++) {
