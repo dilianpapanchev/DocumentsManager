@@ -14,6 +14,113 @@
       line-height: 1.4;
     }
     a { color: #0066cc; text-decoration: none; }
+
+    /* Центрираща таблица */
+    .email-container {
+      width: 100%;
+      background-color: #f4f4f4;
+      padding: 20px 0;
+    }
+    .email-content {
+      width: 600px;
+      max-width: 100%;
+      margin: 0 auto;
+      background-color: #ffffff;
+      border-radius: 8px;
+      overflow: hidden;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+    }
+
+    /* Хедър */
+    .email-header {
+      background-color: #004080;
+      color: white;
+      padding: 20px;
+      font-size: 20px;
+      font-weight: bold;
+      text-align: center;
+    }
+
+    /* Тяло */
+    .email-body {
+      padding: 30px;
+      text-align: center;            /* центрираме текста */
+    }
+    .email-body p {
+      margin: 0 0 16px;
+    }
+    .email-body code {
+      display: inline-block;
+      background-color: #f0f0f0;
+      padding: 4px 6px;
+      border-radius: 4px;
+      font-family: Menlo, monospace;
+      font-size: 14px;
+      text-align: center;            /* центрираме и кода */
+    }
+
+    /* Футър */
+    .email-footer {
+      padding: 0 30px 30px;
+      font-size: 16px;
+      text-align: center;            /* центрираме подписа */
+    }
+  </style>
+</head>
+<body>
+  <table class="email-container" cellpadding="0" cellspacing="0">
+    <tr>
+      <td align="center">
+        <table class="email-content" cellpadding="0" cellspacing="0">
+          <!-- Header -->
+          <tr>
+            <td class="email-header">
+              COB Analyser Report
+            </td>
+          </tr>
+          <!-- Body -->
+          <tr>
+            <td class="email-body">
+              <p>Здравейте,</p>
+              <p>📂 Файлът за <strong>COB Analyser</strong> в <strong>SP24 PROD</strong> за дата <em>today_cob_date</em> е прикачен.</p>
+              <p>📂 LOG файлът, както и изпълнението на всички функции, се намира в следната директория:</p>
+              <p><code>/opt/t24/support_scripts/cob_analyser/log</code></p>
+            </td>
+          </tr>
+          <!-- Footer -->
+          <tr>
+            <td class="email-footer">
+              <p>Поздрави,<br>Дилян</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="UTF-8">
+  <title>COB Analyser Report</title>
+  <style>
+    /* Общ стил за имейла */
+    body {
+      margin: 0;
+      padding: 0;
+      background-color: #f4f4f4;
+      font-family: Arial, sans-serif;
+      color: #333;
+      line-height: 1.4;
+    }
+    a { color: #0066cc; text-decoration: none; }
     /* Центрираща таблица */
     .email-container {
       width: 100%;
