@@ -1,3 +1,13 @@
+toggleEomBtn.addEventListener("click", (event) => {
+  // Игнорирай кликове по вложени елементи вътре в бутона
+  if (event.target !== toggleEomBtn && !toggleEomBtn.contains(event.target)) return;
+
+  eomSliderWrapper.classList.toggle("hidden");
+  eomTable.classList.toggle("hidden");
+});
+
+
+
 <div class="tool-button" id="toggleEomBtn">
   <span>Show EOM COBs</span>
   <div id="eomSliderWrapper" class="hidden eom-slider">
