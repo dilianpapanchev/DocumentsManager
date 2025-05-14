@@ -1,3 +1,33 @@
+document.addEventListener("DOMContentLoaded", () => {
+  const toggleEomBtn = document.getElementById("toggleEomBtn");
+  const eomTable = document.getElementById("eomTable");
+  const eomSliderWrapper = document.getElementById("eomSliderWrapper");
+
+  let eomVisible = false;
+
+  toggleEomBtn.addEventListener("mousedown", (e) => {
+    if (e.target.tagName === 'INPUT') return; // предотвратява затваряне от range
+
+    eomVisible = !eomVisible;
+
+    if (eomVisible) {
+      eomTable.classList.remove("hidden");
+      eomSliderWrapper.classList.remove("hidden");
+    } else {
+      eomTable.classList.add("hidden");
+      eomSliderWrapper.classList.add("hidden");
+    }
+  });
+
+  document.getElementById("eomRange").addEventListener("input", (e) => {
+    document.getElementById("eomValue").textContent = e.target.value;
+    updateEomTableRows(e.target.value); // само ако имаш функция
+  });
+});
+
+
+
+
 <script>
   const toggleEomBtn = document.getElementById("toggleEomBtn");
   const eomTable = document.getElementById("eomTable");
