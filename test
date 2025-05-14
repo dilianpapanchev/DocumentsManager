@@ -1,5 +1,19 @@
 function updateEomTableRows() {
   const table = document.getElementById('eomTable');
+  const rows = Array.from(table.getElementsByTagName('tr')).slice(2); // пропуска заглавията
+  const maxRows = Math.max(parseInt(document.getElementById('eomRange').value, 10), 3); // min 3
+  const totalRows = rows.length;
+
+  rows.forEach((tr, i) => {
+    tr.hidden = i < totalRows - maxRows; // скриваме горните
+  });
+}
+
+
+
+
+function updateEomTableRows() {
+  const table = document.getElementById('eomTable');
   const rows = Array.from(table.getElementsByTagName('tr')).slice(2); // пропускаш заглавията
   const maxRows = Math.max(parseInt(document.getElementById('eomRange').value, 10), 3); // min 3
 
