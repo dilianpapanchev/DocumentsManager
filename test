@@ -3,6 +3,21 @@
   <div id="eomSliderWrapper" class="daysSliderWrapper hidden">
     <div class="daysInputWrapper">
       <input type="range" id="eomRange" min="3" max="12" value="10" />
+      <div class="daysValue" id="eomValue">10</div>
+    </div>
+  </div>
+</div>
+
+
+
+
+
+
+<div class="tool-button">
+  <button id="toggleEomBtn">🔴 Show EOM COBs</button>
+  <div id="eomSliderWrapper" class="daysSliderWrapper hidden">
+    <div class="daysInputWrapper">
+      <input type="range" id="eomRange" min="3" max="12" value="10" />
       <span id="eomValue">10</span>
       <span>&nbsp;days</span>
     </div>
