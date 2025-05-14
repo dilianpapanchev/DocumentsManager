@@ -1,3 +1,40 @@
+<button id="toggleEomBtn" class="tool-button">📅 Show EOM COBs</button>
+
+<div id="eomSliderWrapper" class="tool-bottom hidden">
+  <label for="eomDaysRange">EOM COBs:</label>
+  <input type="range" id="eomDaysRange" min="1" max="12" value="5">
+  <input type="number" id="eomDaysInput" min="1" max="12" value="5" style="width: 40px; margin-left: 5px;">
+</div>
+
+#eomSliderWrapper {
+  margin-top: 10px;
+  font-size: 14px;
+}
+
+
+const toggleEomBtn = document.getElementById('toggleEomBtn');
+const eomSliderWrapper = document.getElementById('eomSliderWrapper');
+const eomTable = document.getElementById('eomTable'); // Увери се, че има такава таблица
+
+toggleEomBtn.addEventListener('click', () => {
+  eomTable?.classList.toggle('hidden');
+  eomSliderWrapper.classList.toggle('hidden');
+});
+
+function syncEOMSliderAndInput(value) {
+  const v = Math.max(1, Math.min(12, parseInt(value) || 5));
+  document.getElementById('eomDaysRange').value = v;
+  document.getElementById('eomDaysInput').value = v;
+  updateEOMTableRows(v); // Имплементирай тази функция, ако още не съществува
+}
+
+document.getElementById('eomDaysRange').addEventListener('input', (e) => syncEOMSliderAndInput(e.target.value));
+document.getElementById('eomDaysInput').addEventListener('input', (e) => syncEOMSliderAndInput(e.target.value));
+
+
+
+
+
 <div id="cobToolsMenu" class="tools-menu">
   <!-- Existing tools -->
   
