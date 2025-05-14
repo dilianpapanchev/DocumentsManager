@@ -1,3 +1,141 @@
+let eomChartInstance = null;
+
+function parseElapsedToHours(str) {
+    if (!str || str.length < 8) return 0;
+    const parts = str.split(':').map(Number);
+    const hours = parts[0];
+    const minutes = parts[1];
+    const seconds = parts[2];
+    return hours + (minutes / 60) + (seconds / 3600);
+}
+
+function getEOMTimes() {
+    const table = document.getElementById("eomTable");
+    const rows = Array.from(table.getElementsByTagName("tr")).slice(2);
+    const maxDays = parseInt(document.getElementById("eomDaysRange").value, 10) || 12;
+
+    const dates = [];
+    const cobElapsed = [];
+    const rrElapsed = [];
+
+    for (let i = rows.length - 1; i >= 0 && dates.length < maxDays; i--) {
+        const cells = rows[i].getElementsByTagName("td");
+        if (cells.length < 6) continue;
+
+        const date = cells[0].innerText.trim();
+        const cobTime = parseElapsedToHours(cells[3].innerText.trim());
+        const rrTime = parseElapsedToHours(cells[6].innerText.trim());
+
+        if (cobTime && rrTime) {
+            dates.push(date);
+            cobElapsed.push(cobTime);
+            rrElapsed.push(rrTime);
+        }
+    }
+
+    return {
+        labels: dates.reverse(),
+        cobElapsed: cobElapsed.reverse(),
+        rrElapsed: rrElapsed.reverse()
+    };
+}
+
+function renderEOMChart() {
+    const ctx = document.getElementById("eomChart").getContext("2d");
+    const { labels, cobElapsed, rrElapsed } = getEOMTimes();
+
+    if (eomChartInstance) {
+        eomChartInstance.destroy();
+    }
+
+    eomChartInstance = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: "COB Elapsed",
+                    data: cobElapsed,
+                    backgroundColor: "rgba(154,200,245,1)",
+                    stack: "stack1"
+                },
+                {
+                    label: "RR Elapsed",
+                    data: rrElapsed,
+                    backgroundColor: "rgba(181,181,181,1)",
+                    stack: "stack1"
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: {
+                padding: {
+                    top: 20,
+                    bottom: 20,
+                    left: 10,
+                    right: 10
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    ticks: {
+                        font: {
+                            size: 13
+                        },
+                        color: "#333"
+                    }
+                },
+                y: {
+                    stacked: true,
+                    beginAtZero: true,
+                    ticks: {
+                        font: {
+                            size: 13
+                        },
+                        color: "#333"
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: true,
+                    labels: {
+                        font: {
+                            size: 13,
+                            weight: "bold"
+                        },
+                        color: "#444"
+                    }
+                },
+                title: {
+                    display: true,
+                    text: "EOM COB & RR Elapsed Times",
+                    font: {
+                        size: 13,
+                        weight: "bold"
+                    },
+                    color: "#222"
+                },
+                animation: {
+                    duration: 1500,
+                    easing: "easeOutBounce"
+                }
+            }
+        }
+    });
+
+    updateChartsTheme();
+}
+
+
+
+
+
+
+
 <div class="chart-container hidden" id="eomChartWrapper">
   <canvas id="eomChart"></canvas>
 </div>
