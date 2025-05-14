@@ -1,3 +1,31 @@
+function updateEomTableRows() {
+  const table = document.getElementById('eomTable');
+  const rows = Array.from(table.getElementsByTagName('tr')).slice(2); // пропускаш заглавията
+  const maxRows = Math.max(parseInt(document.getElementById('eomRange').value, 10), 3); // min 3
+
+  rows.forEach((tr, i) => {
+    tr.hidden = i >= maxRows;
+  });
+}
+
+if (eomVisible) {
+  eomTable.classList.remove("hidden");
+  eomSliderWrapper.classList.remove("hidden");
+  updateEomTableRows(); // <-- Тук се вика
+}
+
+
+
+document.getElementById("eomRange").addEventListener("input", (e) => {
+  document.getElementById("eomValue").textContent = e.target.value;
+  updateEomTableRows();
+});
+
+
+
+
+
+
 document.addEventListener("DOMContentLoaded", () => {
   const toggleEomBtn = document.getElementById("toggleEomBtn");
   const eomTable = document.getElementById("eomTable");
