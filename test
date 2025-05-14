@@ -1,3 +1,147 @@
+<div class="chart-container hidden" id="eomChartWrapper">
+  <canvas id="eomChart"></canvas>
+</div>
+
+
+let eomChartInstance = null;
+
+function renderEOMChart() {
+  const ctx = document.getElementById("eomChart").getContext("2d");
+  const { labels, cobElapsed, rrElapsed } = getEOMTimes();
+
+  if (eomChartInstance) {
+    eomChartInstance.destroy();
+  }
+
+  eomChartInstance = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels: labels,
+      datasets: [
+        {
+          label: "COB Elapsed",
+          data: cobElapsed,
+          backgroundColor: "rgba(154,200,245,1)",
+          stack: "stack1"
+        },
+        {
+          label: "RR Elapsed",
+          data: rrElapsed,
+          backgroundColor: "rgba(181,181,181,1)",
+          stack: "stack1"
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          stacked: true,
+          ticks: {
+            maxRotation: 45,
+            minRotation: 45
+          }
+        },
+        y: {
+          beginAtZero: true,
+          stacked: true,
+          ticks: {
+            stepSize: 1
+          }
+        }
+      },
+      plugins: {
+        title: {
+          display: true,
+          text: "EOM COB + RR Elapsed Time (stacked)",
+          font: {
+            size: 13,
+            weight: 'bold'
+          },
+          color: "#222"
+        },
+        legend: {
+          display: true,
+          labels: {
+            font: {
+              size: 13
+            }
+          }
+        }
+      },
+      animation: {
+        duration: 1000,
+        easing: 'easeOutBounce'
+      }
+    }
+  });
+}
+
+
+function getEOMTimes() {
+  const table = document.getElementById('eomTable');
+  const rows = Array.from(table.getElementsByTagName('tr')).slice(2);
+
+  const maxDays = parseInt(document.getElementById('eomDaysRange').value, 10) || 10;
+
+  const labels = [];
+  const cobElapsed = [];
+  const rrElapsed = [];
+
+  for (let i = rows.length - 1; i >= 0 && labels.length < maxDays; i--) {
+    const cells = rows[i].getElementsByTagName('td');
+    if (cells.length < 8) continue;
+
+    const date = cells[0].innerText.trim();
+    const cob = parseFloat(cells[3].innerText.trim()) || 0;
+    const rr = parseFloat(cells[7].innerText.trim()) || 0;
+
+    labels.push(date);
+    cobElapsed.push(cob);
+    rrElapsed.push(rr);
+  }
+
+  return {
+    labels: labels.reverse(),
+    cobElapsed: cobElapsed.reverse(),
+    rrElapsed: rrElapsed.reverse()
+  };
+}
+
+function getEOMTimes() {
+  const table = document.getElementById('eomTable');
+  const rows = Array.from(table.getElementsByTagName('tr')).slice(2);
+
+  const maxDays = parseInt(document.getElementById('eomDaysRange').value, 10) || 10;
+
+  const labels = [];
+  const cobElapsed = [];
+  const rrElapsed = [];
+
+  for (let i = rows.length - 1; i >= 0 && labels.length < maxDays; i--) {
+    const cells = rows[i].getElementsByTagName('td');
+    if (cells.length < 8) continue;
+
+    const date = cells[0].innerText.trim();
+    const cob = parseFloat(cells[3].innerText.trim()) || 0;
+    const rr = parseFloat(cells[7].innerText.trim()) || 0;
+
+    labels.push(date);
+    cobElapsed.push(cob);
+    rrElapsed.push(rr);
+  }
+
+  return {
+    labels: labels.reverse(),
+    cobElapsed: cobElapsed.reverse(),
+    rrElapsed: 
+
+
+
+
+
+
 function getEOMTimes() {
     const table = document.getElementById("eomTable");
     const rows = Array.from(table.getElementsByTagName("tr")).slice(2);
