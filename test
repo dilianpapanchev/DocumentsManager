@@ -1,3 +1,34 @@
+#eomTable {
+  opacity: 0;
+  transform: scaleY(0);
+  transform-origin: top;
+  transition: transform 0.3s ease, opacity 0.3s ease;
+}
+
+#eomTable.show {
+  opacity: 1;
+  transform: scaleY(1);
+}
+
+
+const toggleEomBtn = document.getElementById("toggleEomBtn");
+const eomTable = document.getElementById("eomTable");
+
+let isEomVisible = false;
+
+toggleEomBtn.addEventListener("click", () => {
+  isEomVisible = !isEomVisible;
+  if (isEomVisible) {
+    eomTable.classList.add("show");
+  } else {
+    eomTable.classList.remove("show");
+  }
+});
+
+
+
+
+
 <div class="tool-button">
   <button id="toggleEomBtn">🔴 Show EOM COBs</button>
   <div id="eomSliderWrapper" class="daysSliderWrapper hidden">
