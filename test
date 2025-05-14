@@ -1,3 +1,45 @@
+<script>
+document.addEventListener("DOMContentLoaded", () => {
+  const toggleEomBtn = document.getElementById("toggleEomBtn");
+  const eomTable = document.getElementById("eomTable");
+  const eomSliderWrapper = document.getElementById("eomSliderWrapper");
+  const eomRange = document.getElementById("eomRange");
+  const eomValue = document.getElementById("eomValue");
+
+  let eomVisible = false;
+
+  toggleEomBtn.addEventListener("click", () => {
+    eomVisible = !eomVisible;
+
+    eomTable.classList.toggle("show", eomVisible);
+    eomSliderWrapper.classList.toggle("hidden", !eomVisible);
+
+    if (eomVisible) {
+      updateEomTableRows();
+    }
+  });
+
+  eomRange.addEventListener("input", (e) => {
+    eomValue.textContent = e.target.value;
+    updateEomTableRows();
+  });
+
+  function updateEomTableRows() {
+    const table = document.getElementById("eomTable");
+    const rows = Array.from(table.getElementsByTagName("tr")).slice(2); // Skip headers
+    const maxRows = parseInt(eomRange.value, 10);
+
+    rows.forEach((tr, i, arr) => {
+      tr.hidden = i < arr.length - maxRows;
+    });
+  }
+});
+</script>
+
+
+
+
+
 #eomTable {
   opacity: 0;
   transform: scaleY(0);
