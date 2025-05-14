@@ -1,3 +1,45 @@
+<div class="tool-button">
+  <button id="toggleEomBtn">🔴 Show EOM COBs</button>
+</div>
+<div id="eomSliderWrapper" class="daysSliderWrapper hidden">
+  <label for="eomRange" id="eomLabel">EOM Days:</label>
+  <div class="daysInputWrapper">
+    <input type="range" id="eomRange" min="3" max="12" value="10" />
+    <span id="eomValue">10</span><span>&nbsp;days</span>
+  </div>
+</div>
+
+
+document.addEventListener("DOMContentLoaded", () => {
+  const toggleEomBtn = document.getElementById("toggleEomBtn");
+  const eomTable = document.getElementById("eomTable");
+  const eomSliderWrapper = document.getElementById("eomSliderWrapper");
+
+  let eomVisible = false;
+
+  toggleEomBtn.addEventListener("click", () => {
+    eomVisible = !eomVisible;
+
+    if (eomVisible) {
+      eomTable.classList.remove("hidden");
+      eomSliderWrapper.classList.remove("hidden");
+      updateEomTableRows(); // обнови при показване
+    } else {
+      eomTable.classList.add("hidden");
+      eomSliderWrapper.classList.add("hidden");
+    }
+  });
+
+  document.getElementById("eomRange").addEventListener("input", (e) => {
+    document.getElementById("eomValue").textContent = e.target.value;
+    updateEomTableRows();
+  });
+});
+
+
+
+
+
 function updateEomTableRows() {
   const table = document.getElementById('eomTable');
   const rows = Array.from(table.getElementsByTagName('tr')).slice(2); // пропуска заглавията
