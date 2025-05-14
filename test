@@ -1,3 +1,55 @@
+<div class="eom-controls">
+  <button id="toggleEomTable" class="tool-button">Show EOM COBs</button>
+
+  <div id="eomSliderWrapper" class="tool-button hidden">
+    <label for="eomRange">EOM COB Days:</label>
+    <span id="eomValue">10</span>
+    <input type="range" id="eomRange" min="3" max="12" value="10" />
+  </div>
+</div>
+
+
+.eom-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+#eomSliderWrapper label {
+  font-size: 13px;
+  font-weight: bold;
+  color: #333;
+  margin-right: 5px;
+}
+
+#eomSliderWrapper input[type="range"] {
+  width: 85px;
+  accent-color: #b3e0ff;
+}
+
+#eomValue {
+  font-size: 13px;
+  font-weight: bold;
+  color: #111;
+  margin: 0 5px;
+}
+
+body.dark-mode #eomSliderWrapper label {
+  color: #eee;
+}
+body.dark-mode #eomValue {
+  color: #eee;
+}
+
+
+document.getElementById("toggleEomTable").addEventListener("click", () => {
+  const table = document.getElementById("eomTable");
+  const slider = document.getElementById("eomSliderWrapper");
+  table.classList.toggle("hidden");
+  slider.classList.toggle("hidden");
+});
+
+
 <button id="toggleEomBtn" class="tool-button">📅 Show EOM COBs</button>
 
 <div id="eomDaysSliderWrapper" class="tool-button hidden">
