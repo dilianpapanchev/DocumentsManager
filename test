@@ -1,5 +1,45 @@
 <button id="toggleEomBtn" class="tool-button">📅 Show EOM COBs</button>
 
+<div id="eomDaysSliderWrapper" class="tool-button hidden">
+  <label for="eomDaysRange">EOM COB Days:</label>
+  <span id="eomDaysValue">10</span>
+  <input type="range" min="3" max="12" value="10" id="eomDaysRange" />
+</div>
+
+document.addEventListener('DOMContentLoaded', () => {
+  const eomBtn = document.getElementById('toggleEomBtn');
+  const eomTable = document.getElementById('eomTable');
+  const eomSlider = document.getElementById('eomDaysRange');
+  const eomValue = document.getElementById('eomDaysValue');
+  const eomSliderWrapper = document.getElementById('eomDaysSliderWrapper');
+
+  eomBtn.addEventListener('click', () => {
+    const isHidden = eomTable.classList.contains('hidden');
+    eomTable.classList.toggle('hidden', !isHidden);
+    eomSliderWrapper.classList.toggle('hidden', !isHidden);
+  });
+
+  eomSlider.addEventListener('input', () => {
+    eomValue.textContent = eomSlider.value;
+    updateEomTableRows(); // трябва да съществува, ще добавим логиката после
+  });
+});
+
+function updateEomTableRows() {
+  const table = document.getElementById('eomTable');
+  const rows = Array.from(table.getElementsByTagName('tr')).slice(2); // пропускаме заглавията
+  const maxRows = parseInt(document.getElementById('eomDaysRange').value, 10);
+
+  rows.forEach((tr, i) => {
+    tr.hidden = i >= maxRows;
+  });
+}
+
+
+
+
+<button id="toggleEomBtn" class="tool-button">📅 Show EOM COBs</button>
+
 <div id="eomSliderWrapper" class="tool-bottom hidden">
   <label for="eomDaysRange">EOM COBs:</label>
   <input type="range" id="eomDaysRange" min="1" max="12" value="5">
