@@ -1,3 +1,65 @@
+<div class="tool-button" id="toggleEomBtn">
+  <span>Show EOM COBs</span>
+  <div id="eomSliderWrapper" class="hidden eom-slider">
+    <label for="eomRange" id="eomLabel">EOM COB Days:</label>
+    <div id="eomInputWrapper">
+      <input type="range" id="eomRange" min="3" max="12" value="10">
+      <span id="eomValue">10</span>
+      <span>days</span>
+    </div>
+  </div>
+</div>
+
+
+.eom-slider {
+  margin-top: 8px;
+  font-size: 13px;
+  text-align: center;
+}
+
+#eomInputWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 5px;
+}
+
+#eomInputWrapper input[type="range"] {
+  width: 85px;
+  accent-color: #3b8de3;
+}
+
+#eomLabel {
+  color: #111;
+  font-weight: bold;
+}
+
+body.dark-mode #eomLabel {
+  color: #eee;
+}
+
+
+const toggleEomBtn = document.getElementById("toggleEomBtn");
+const eomSliderWrapper = document.getElementById("eomSliderWrapper");
+const eomTable = document.getElementById("eomTable");
+
+toggleEomBtn.addEventListener("click", () => {
+  eomSliderWrapper.classList.toggle("hidden");
+  eomTable.classList.toggle("hidden");
+});
+
+document.getElementById("eomRange").addEventListener("input", (e) => {
+  document.getElementById("eomValue").textContent = e.target.value;
+  updateEomTableRows(e.target.value); // ако имаш функция за обновяване
+});
+
+
+
+
+
+
+
 <div class="eom-controls">
   <button id="toggleEomTable" class="tool-button">Show EOM COBs</button>
 
