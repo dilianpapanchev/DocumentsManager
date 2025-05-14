@@ -1,3 +1,27 @@
+<script>
+  const toggleEomBtn = document.getElementById("toggleEomBtn");
+  const eomTable = document.getElementById("eomTable");
+  const eomSliderWrapper = document.getElementById("eomSliderWrapper");
+
+  let eomVisible = false;
+
+  toggleEomBtn.addEventListener("click", () => {
+    eomVisible = !eomVisible;
+
+    if (eomVisible) {
+      eomTable.classList.remove("hidden");
+      eomSliderWrapper.classList.remove("hidden");
+    } else {
+      eomTable.classList.add("hidden");
+      eomSliderWrapper.classList.add("hidden");
+    }
+  });
+</script>
+
+
+
+
+
 toggleEomBtn.addEventListener("click", (event) => {
   // Игнорирай кликове по вложени елементи вътре в бутона
   if (event.target !== toggleEomBtn && !toggleEomBtn.contains(event.target)) return;
