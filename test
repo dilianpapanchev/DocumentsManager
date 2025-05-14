@@ -1,3 +1,122 @@
+function getEOMTimes() {
+    const table = document.getElementById("eomTable");
+    const rows = Array.from(table.getElementsByTagName("tr")).slice(2);
+
+    const maxDays = parseInt(document.getElementById("eomDaysRange").value, 10) || 10;
+    const labels = [];
+    const cobElapsed = [];
+    const rrElapsed = [];
+
+    for (let i = rows.length - 1; i >= 0 && labels.length < maxDays; i--) {
+        const cells = rows[i].getElementsByTagName("td");
+        if (cells.length < 6) continue;
+
+        const date = cells[0].innerText.trim();
+        const cob = parseTimeToMinutes(cells[3].innerText.trim());
+        const rr = parseTimeToMinutes(cells[6].innerText.trim());
+
+        if (cob > 0 || rr > 0) {
+            labels.push(date);
+            cobElapsed.push(cob);
+            rrElapsed.push(rr);
+        }
+    }
+
+    return {
+        labels: labels.reverse(),
+        cobElapsed: cobElapsed.reverse(),
+        rrElapsed: rrElapsed.reverse()
+    };
+}
+
+function renderEOMChart() {
+    const ctx = document.getElementById("eomChart").getContext("2d");
+    const { labels, cobElapsed, rrElapsed } = getEOMTimes();
+
+    if (window.eomChartInstance) {
+        window.eomChartInstance.destroy();
+    }
+
+    window.eomChartInstance = new Chart(ctx, {
+        type: "bar",
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: "COB Elapsed",
+                    data: cobElapsed,
+                    backgroundColor: "rgba(154,200,245,1)",
+                    stack: "stack1",
+                    order: 1
+                },
+                {
+                    label: "RR Elapsed",
+                    data: rrElapsed,
+                    backgroundColor: "rgba(181,181,181,1)",
+                    stack: "stack1",
+                    order: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            layout: {
+                padding: {
+                    top: 10,
+                    bottom: 20,
+                    left: 10,
+                    right: 10
+                }
+            },
+            scales: {
+                x: {
+                    stacked: true,
+                    ticks: {
+                        autoSkip: false,
+                        maxRotation: 45,
+                        minRotation: 45
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        maxTicksLimit: 8,
+                        callback: v => formatHHMM(v)
+                    }
+                }
+            },
+            plugins: {
+                tooltip: {
+                    callbacks: {
+                        label: ctx => `${ctx.dataset.label}: ${formatHHMM(ctx.raw)}`
+                    }
+                },
+                title: {
+                    display: true,
+                    text: "EOM COB & RR Elapsed Times",
+                    color: getTextColor(),
+                    font: {
+                        size: 13,
+                        weight: "bold"
+                    }
+                },
+                legend: {
+                    labels: {
+                        font: {
+                            size: 13
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    updateChartsTheme();
+}
+
+
+
 <script>
 document.addEventListener("DOMContentLoaded", () => {
   const toggleEomBtn = document.getElementById("toggleEomBtn");
