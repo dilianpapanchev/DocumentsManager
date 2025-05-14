@@ -1,3 +1,42 @@
+<div id="cobToolsMenu" class="tools-menu">
+  <!-- Existing tools -->
+  
+  <button onclick="toggleEOMTable()">Show EOM COBs</button>
+
+  <label for="eomDaysRange">EOM COBs:</label>
+  <input type="range" id="eomDaysRange" min="1" max="12" value="5">
+  <input type="number" id="eomDaysInput" min="1" max="12" value="5" style="width: 40px; margin-left: 5px;">
+</div>
+
+<table id="eomTable" style="display: none;">
+  <!-- Your EOM table rows -->
+</table>
+
+<script>
+  function toggleEOMTable() {
+    const table = document.getElementById('eomTable');
+    table.style.display = table.style.display === 'none' ? 'table' : 'none';
+  }
+
+  function syncEOMSliderAndInput(value) {
+    const v = Math.max(1, Math.min(12, parseInt(value) || 5));
+    document.getElementById('eomDaysRange').value = v;
+    document.getElementById('eomDaysInput').value = v;
+    updateEOMTableRows(v); // Трябва да имаш дефинирана тази функция
+  }
+
+  document.addEventListener('DOMContentLoaded', () => {
+    const slider = document.getElementById('eomDaysRange');
+    const input = document.getElementById('eomDaysInput');
+    slider.addEventListener('input', () => syncEOMSliderAndInput(slider.value));
+    input.addEventListener('input', () => syncEOMSliderAndInput(input.value));
+    syncEOMSliderAndInput(5);
+  });
+</script>
+
+
+
+
 <footer>
   <p style="margin-top: 30px;">
     За идеи/бъгове, моля пишете в официалната страница на <strong>COB Analyser</strong>.<br>
