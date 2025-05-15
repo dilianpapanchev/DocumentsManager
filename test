@@ -1,3 +1,33 @@
+document.addEventListener("DOMContentLoaded", () => {
+  const eomSlider = document.getElementById("eomRange");
+  const eomInput = document.getElementById("eomValue");
+
+  function syncEomFromSlider() {
+    eomInput.value = eomSlider.value;
+    updateEomTableRows();
+    renderEOMChart();
+  }
+
+  function syncEomFromInput() {
+    let value = parseInt(eomInput.value, 10);
+    if (isNaN(value)) value = 10;
+    if (value < 3) value = 3;
+    if (value > 12) value = 12;
+    eomInput.value = value;
+    eomSlider.value = value;
+    syncEomFromSlider();
+  }
+
+  eomSlider.addEventListener("input", syncEomFromSlider);
+  eomInput.addEventListener("input", syncEomFromInput);
+
+  syncEomFromSlider(); // Initial load
+});
+
+
+
+
+
 <div class="chart-container hidden" id="eomChartWrapper">
   <canvas id="eomChart"></canvas>
 </div>
