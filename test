@@ -1,3 +1,99 @@
+function renderEOMChart() {
+  const ctx = document.getElementById("eomChart").getContext("2d");
+  const { labels, cobElapsed } = getEOMTimes();
+
+  if (window.eomChartInstance) {
+    window.eomChartInstance.destroy();
+  }
+
+  window.eomChartInstance = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "COB Elapsed",
+          data: cobElapsed,
+          backgroundColor: "rgba(154,200,245,1)",
+          stack: "stack1",
+        }
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          stacked: true,
+          ticks: {
+            maxRotation: 45,
+            minRotation: 45
+          }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: v => formatHHMM(v)
+          }
+        }
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: ctx => `${ctx.dataset.label}: ${formatHHMM(ctx.raw)}`
+          }
+        },
+        title: {
+          display: true,
+          text: "EOM COB Elapsed Times",
+          font: {
+            size: 13,
+            weight: "bold"
+          },
+          color: getTextColor()
+        },
+        legend: {
+          labels: {
+            font: {
+              size: 13
+            },
+            color: getTextColor()
+          }
+        },
+        labelsInside: {
+          afterDatasetsDraw(chart) {
+            const { ctx, data, scales } = chart;
+            const meta = chart.getDatasetMeta(0);
+            const yScale = scales.y;
+
+            ctx.save();
+            ctx.font = "bold 11px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillStyle = getTextColor();
+
+            data.labels.forEach((_, i) => {
+              const barVal = data.datasets[0].data[i];
+              if (barVal > 0) {
+                const x = meta.data[i].x;
+                const y = yScale.getPixelForValue(barVal);
+                ctx.fillText(formatHHMM(barVal), x, y + 12);
+              }
+            });
+
+            ctx.restore();
+          }
+        }
+      }
+    }
+  });
+
+  updateChartTheme();
+}
+
+
+
+
+
 plugins: {
   tooltip: {
     callbacks: {
