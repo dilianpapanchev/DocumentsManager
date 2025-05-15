@@ -1,3 +1,61 @@
+plugins: {
+  tooltip: {
+    callbacks: {
+      label: ctx => `${ctx.dataset.label}: ${formatHHMM(ctx.raw)}`
+    }
+  },
+  title: {
+    display: true,
+    text: "EOM COB Elapsed Times",
+    font: {
+      size: 13,
+      weight: "bold"
+    },
+    color: getTextColor()
+  },
+  legend: {
+    labels: {
+      font: { size: 13 },
+      color: getTextColor()
+    }
+  },
+  labelsInside: labelsInsidePlugin // това е ключово
+}
+
+
+
+
+
+
+
+const labelsInsidePlugin = {
+  id: "labelsInside",
+  afterDatasetsDraw(chart) {
+    const { ctx, data, scales } = chart;
+    const meta = chart.getDatasetMeta(0);
+    const yScale = scales.y;
+
+    ctx.save();
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = getTextColor();
+
+    data.labels.forEach((_, i) => {
+      const value = data.datasets[0].data[i];
+      if (value > 0) {
+        const x = meta.data[i].x;
+        const y = yScale.getPixelForValue(value) + 14;
+        ctx.fillText(formatHHMM(value), x, y);
+      }
+    });
+
+    ctx.restore();
+  }
+};
+
+
+
+
 <div class="chart-container" id="eomChartWrapper">
   <canvas id="eomChart"></canvas>
 </div>
