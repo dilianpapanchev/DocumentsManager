@@ -1,3 +1,24 @@
+<div class="chart-container hidden" id="eomChartWrapper">
+  <canvas id="eomChart"></canvas>
+</div>
+
+
+const eomChartWrapper = document.getElementById("eomChartWrapper");
+
+toggleEomBtn.addEventListener("click", () => {
+  eomVisible = !eomVisible;
+  eomTable.classList.toggle("hidden", !eomVisible);
+  eomSliderWrapper.classList.toggle("hidden", !eomVisible);
+  eomChartWrapper.classList.toggle("hidden", !eomVisible);
+
+  if (eomVisible) {
+    updateEomTableRows();
+    renderEOMChart();
+  }
+});
+
+
+
 function getEOMTimes() {
   const table = document.getElementById("eomTable");
   const rows = Array.from(table.getElementsByTagName("tr")).slice(2);
