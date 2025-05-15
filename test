@@ -46,6 +46,126 @@ function renderEOMChart() {
       plugins: {
         tooltip: {
           callbacks: {
+            label: ctx => {
+              const raw = ctx.raw || 0;
+              return `${ctx.dataset.label}: ${formatHHMM(raw)}`;
+            }
+          }
+        },
+        title: {
+          display: true,
+          text: "EOM COB & RR Elapsed Times",
+          font: {
+            size: 13,
+            weight: "bold"
+          },
+          color: getTextColor()
+        },
+        legend: {
+          labels: {
+            font: {
+              size: 13
+            }
+          }
+        }
+      },
+      plugins: [
+        {
+          id: "labelsInside",
+          afterDatasetsDraw(chart) {
+            const { ctx, data, scales } = chart;
+            const cobMeta = chart.getDatasetMeta(0);
+            const rrMeta = chart.getDatasetMeta(1);
+            const yScale = scales.y;
+
+            ctx.save();
+            ctx.font = "bold 11px sans-serif";
+            ctx.textAlign = "center";
+            ctx.fillStyle = getTextColor();
+
+            data.labels.forEach((_, i) => {
+              const cob = data.datasets[0].data[i] || 0;
+              const rr = data.datasets[1].data[i] || 0;
+              const total = cob + rr;
+              const x = cobMeta.data[i].x;
+
+              if (cob > 0) {
+                const yCobMid = (yScale.getPixelForValue(0) + yScale.getPixelForValue(cob)) / 2;
+                ctx.fillText(formatHHMM(cob), x, yCobMid);
+              }
+
+              if (rr > 0) {
+                const yRRMid = (yScale.getPixelForValue(cob) + yScale.getPixelForValue(total)) / 2;
+                ctx.fillText(formatHHMM(rr), x, yRRMid);
+              }
+
+              if (total > 0) {
+                const yTotal = yScale.getPixelForValue(total) - 6;
+                ctx.fillText(formatHHMM(total), x, yTotal);
+              }
+            });
+
+            ctx.restore();
+          }
+        }
+      ]
+    }
+  });
+
+  updateChartTheme();
+}
+
+
+
+
+function renderEOMChart() {
+  const ctx = document.getElementById("eomChart").getContext("2d");
+  const { labels, cobElapsed, rrElapsed } = getEOMTimes();
+
+  if (window.eomChartInstance) {
+    window.eomChartInstance.destroy();
+  }
+
+  window.eomChartInstance = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "COB Elapsed",
+          data: cobElapsed,
+          backgroundColor: "rgba(154,200,245,1)",
+          stack: "stack1"
+        },
+        {
+          label: "RR Elapsed",
+          data: rrElapsed,
+          backgroundColor: "rgba(181,181,181,1)",
+          stack: "stack1"
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      scales: {
+        x: {
+          stacked: true,
+          ticks: {
+            maxRotation: 45,
+            minRotation: 45
+          }
+        },
+        y: {
+          beginAtZero: true,
+          ticks: {
+            callback: v => formatHHMM(v)
+          }
+        }
+      },
+      plugins: {
+        tooltip: {
+          callbacks: {
             label: ctx => `${ctx.dataset.label}: ${formatHHMM(ctx.raw)}`
           }
         },
