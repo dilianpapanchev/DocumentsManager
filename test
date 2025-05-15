@@ -1,3 +1,18 @@
+<table class="rounded" id="eomChartTable">
+  <tr>
+    <th colspan="6">EOM COB & RR Elapsed Time</th>
+  </tr>
+  <tr>
+    <td colspan="6">
+      <div class="chart-container" id="eomChartWrapper">
+        <canvas id="eomChart"></canvas>
+      </div>
+    </td>
+  </tr>
+</table>
+
+
+
 function renderEOMChart() {
   const ctx = document.getElementById("eomChart").getContext("2d");
   const { labels, cobElapsed, rrElapsed } = getEOMTimes();
