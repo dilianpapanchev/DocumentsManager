@@ -3,6 +3,60 @@ def advanced_log_filter(host, user, conf, limit_date):
         logging.warning(f"[{host}] липсва секция [advanced_log_filter]")
         return
 
+    log_dir = conf.get('log_dirs', 'paths').split(',')[0]
+    char_limit = conf.get("advanced_log_filter", "char_limit")
+    log_files = conf.get("advanced_log_filter", "log_files")
+    match_keywords = conf.get("advanced_log_filter", "match_keywords")
+
+    # Shell скрипт, вграден в Python (точно като оригинала)
+    remote_script = f'''
+        LIMIT_DATE="{limit_date}"
+        CHAR_LIMIT={char_limit}
+        for f in {log_dir}/{{{log_files}}}; do
+            awk -v limit="$LIMIT_DATE" -v file="$f" -v host="{host}" '
+                /\\[ERROR\\]/ && length($0) >= {char_limit} {{
+                    log_date = substr($0, 2, 10)
+                    if (log_date >= limit) {{
+                        if ($0 ~ /{match_keywords}/) {{
+                            match($0, /\\] .*? /, arr)
+                            if (arr[1] != "" && arr[1] != "\\\\") {{
+                                key = arr[1]
+                                print key "|" "[" host "] [" file "] " $0
+                            }}
+                        }}
+                    }}
+                }}
+            ' "$f"
+        done | sort -t'|' -k1,1 -u | cut -d'|' -f2-
+    '''
+
+    ssh_cmd = ["ssh", f"{user}@{host}", remote_script]
+
+    try:
+        output = subprocess.check_output(ssh_cmd, stderr=subprocess.STDOUT, timeout=40, universal_newlines=True)
+        if output:
+            os.makedirs(RESULT_DIR, exist_ok=True)
+            with open(os.path.join(RESULT_DIR, f"{host}_adv.log"), "w") as f:
+                f.write(output)
+            logging.info(f"[{host}] Advanced лог резултат записан.")
+        else:
+            logging.info(f"[{host}] Няма резултати.")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"[{host}] SSH грешка: {e.output.strip()}")
+    except Exception as e:
+        logging.error(f"[{host}] Exception: {str(e)}")
+
+
+
+
+
+
+
+def advanced_log_filter(host, user, conf, limit_date):
+    if not conf.has_section("advanced_log_filter"):
+        logging.warning(f"[{host}] липсва секция [advanced_log_filter]")
+        return
+
     log_files = conf.get("advanced_log_filter", "log_files").split(',')
     char_limit = int(conf.get("advanced_log_filter", "char_limit"))
     match_keywords = conf.get("advanced_log_filter", "match_keywords")
