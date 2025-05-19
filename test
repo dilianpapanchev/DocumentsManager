@@ -1,3 +1,214 @@
+# Директории за логове
+[log_dirs]
+paths = /var/log,/opt/bank/logs
+
+# Директории за файлов мониторинг (локални за бекенда)
+[file_monitor]
+dirs = /var/bank/inbox,/tmp/transactions
+
+# Ключови думи за търсене
+[keywords]
+errors = ERROR,FATAL,EXCEPTION
+warnings = WARN,DEPRECATED
+
+# Потребители
+[users]
+admin = root,monitoring_user
+readonly = viewer
+
+
+# Monitoring Framework for Banking VMs
+
+## Структура
+- `config/`: Конфигурации (.conf и .properties)
+- `hosts/`: Списък с хостове
+- `logs/`: Логове от мониторинг скрипта
+- `scripts/`: Python скриптове
+
+## Конфигурация
+- `common.conf`: съдържа директории, ключови думи и потребители
+- `settings.properties`: лог ниво, ssh настройки, интервали
+- `host_list.txt`: един ред = един hostname
+
+## Стартиране
+```bash
+cd scripts
+python3 monitor.py
+
+
+# Логване
+log.level=INFO
+log.rotation=daily
+log.retention_days=7
+
+# SSH настройки
+backend.host=this-backend-host
+remote.user=monitoring_user
+connection.timeout=10
+
+# Сканиране
+scan.interval=300        # секунди между проверки
+scan.parallelism=4       # паралелни ssh задачи
+
+
+#!/usr/bin/env python3
+
+import configparser
+import logging
+import os
+import subprocess
+import shutil
+from datetime import datetime, timedelta
+
+# Пътища
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+CONF_PATH = os.path.join(BASE_DIR, 'config', 'common.conf')
+PROPERTIES_PATH = os.path.join(BASE_DIR, 'config', 'settings.properties')
+HOSTS_FILE = os.path.join(BASE_DIR, 'hosts', 'host_list.txt')
+LOG_FILE = os.path.join(BASE_DIR, 'logs', 'monitor.log')
+RESULT_DIR = os.path.join(BASE_DIR, 'logs', 'results')
+ARCHIVE_DIR = os.path.join(BASE_DIR, 'logs', 'archives')
+
+# Зареждане на конфигурации
+def load_conf(path):
+    config = configparser.ConfigParser()
+    config.read(path)
+    return config
+
+def load_properties(path):
+    props = {}
+    with open(path) as f:
+        for line in f:
+            if line.strip() and not line.startswith("#"):
+                key, value = line.strip().split("=", 1)
+                props[key.strip()] = value.strip()
+    return props
+
+def load_hostnames(path):
+    with open(path) as f:
+        return [line.strip() for line in f if line.strip()]
+
+def extract_keywords(conf):
+    keywords = []
+    for k in conf['keywords']:
+        keywords += [kw.strip() for kw in conf['keywords'][k].split(',')]
+    return list(set(keywords))
+
+# Архивиране на резултатите
+def archive_results():
+    if not os.path.exists(RESULT_DIR):
+        return
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    archive_name = f"results_{timestamp}"
+    archive_path = os.path.join(ARCHIVE_DIR, archive_name)
+
+    os.makedirs(ARCHIVE_DIR, exist_ok=True)
+    shutil.make_archive(archive_path, 'zip', RESULT_DIR)
+    logging.info(f"Резултатите архивирани в {archive_path}.zip")
+
+# Мониторинг на локални директории и файлове
+def monitor_files(conf):
+    logging.info("[LOCAL FILE CHECK] Стартира проверка на директории за файлове.")
+
+    if not conf.has_section("file_monitor"):
+        logging.info("[LOCAL FILE CHECK] Няма зададени директории за наблюдение.")
+        return
+
+    directories = conf.get("file_monitor", "dirs").split(',')
+    now = datetime.now()
+    threshold = timedelta(minutes=5)
+
+    for directory in directories:
+        directory = directory.strip()
+        if not os.path.exists(directory):
+            logging.warning(f"[LOCAL FILE CHECK] Директорията не съществува: {directory}")
+            continue
+
+        found = False
+        for fname in os.listdir(directory):
+            fpath = os.path.join(directory, fname)
+            if os.path.isfile(fpath):
+                found = True
+                mtime = datetime.fromtimestamp(os.path.getmtime(fpath))
+                age = now - mtime
+                if age > threshold:
+                    logging.warning(f"[LOCAL FILE CHECK] {fname} в {directory} е на {int(age.total_seconds()//60)} минути.")
+                else:
+                    logging.info(f"[LOCAL FILE CHECK] {fname} в {directory} е на {int(age.total_seconds()//60)} минути.")
+        if not found:
+            logging.info(f"[LOCAL FILE CHECK] Няма файлове в {directory}.")
+
+# SSH извличане на логове
+def scan_host(host, user, log_dirs, keywords):
+    logging.info(f"[{host}] Започва сканиране...")
+    result_lines = []
+
+    keyword_grep = '|'.join(keywords)
+    for log_dir in log_dirs:
+        remote_cmd = f"grep -E '{keyword_grep}' {log_dir}/* 2>/dev/null"
+        full_cmd = ["ssh", f"{user}@{host}", remote_cmd]
+
+        try:
+            output = subprocess.check_output(full_cmd, stderr=subprocess.STDOUT, timeout=15, universal_newlines=True)
+            if output:
+                result_lines.append(f"\n# {log_dir}\n{output}")
+        except subprocess.CalledProcessError as e:
+            result_lines.append(f"[Грешка при търсене в {log_dir}]: {e.output.strip()}")
+            logging.warning(f"[{host}] Грешка при търсене в {log_dir}: {e.output.strip()}")
+        except subprocess.TimeoutExpired:
+            result_lines.append(f"[{host}] Време за търсене изтече в {log_dir}")
+            logging.warning(f"[{host}] Време за търсене изтече в {log_dir}")
+        except Exception as e:
+            result_lines.append(f"[{host}] SSH грешка: {str(e)}")
+            logging.error(f"[{host}] SSH връзка неуспешна: {str(e)}")
+            break  # прекъсваме ако няма SSH достъп
+
+    # Запис в резултатен файл
+    os.makedirs(RESULT_DIR, exist_ok=True)
+    with open(os.path.join(RESULT_DIR, f"{host}.log"), "w") as f:
+        if result_lines:
+            f.write("\n".join(result_lines))
+        else:
+            f.write(f"[{host}] Няма открити резултати или няма достъп до лог директории.")
+
+    logging.info(f"[{host}] Сканиране завърши.")
+
+def main():
+    logging.info("Monitoring стартира.")
+
+    conf = load_conf(CONF_PATH)
+    props = load_properties(PROPERTIES_PATH)
+    hosts = load_hostnames(HOSTS_FILE)
+
+    log_dirs = conf.get('log_dirs', 'paths').split(',')
+    keywords = extract_keywords(conf)
+    user = props.get('remote.user', 'monitoring_user')
+
+    # Remote log scan
+    for host in hosts:
+        scan_host(host, user, log_dirs, keywords)
+
+    # Local file check
+    monitor_files(conf)
+
+    # Archive results
+    archive_results()
+
+    logging.info("Monitoring приключи.")
+
+if __name__ == "__main__":
+    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+    logging.basicConfig(filename=LOG_FILE,
+                        level=getattr(logging, load_properties(PROPERTIES_PATH).get("log.level", "INFO").upper()),
+                        format="%(asctime)s [%(levelname)s] %(message)s")
+    main()
+
+
+
+
+
+
 function renderEOMChart() {
   const ctx = document.getElementById("eomChart").getContext("2d");
   const { labels, cobElapsed, rrElapsed } = getEOMTimes();
