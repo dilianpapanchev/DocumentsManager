@@ -1,3 +1,21 @@
+def run_advanced_shell_script():
+    script_path = os.path.join(BASE_DIR, "scripts", "advanced_log.sh")
+    try:
+        output = subprocess.check_output(["bash", script_path], stderr=subprocess.STDOUT, universal_newlines=True)
+        logging.info("Shell скриптът за advanced лог анализ е изпълнен успешно.")
+        # Ако искаш да го запишеш:
+        result_file = os.path.join(RESULT_DIR, "advanced_combined.log")
+        os.makedirs(RESULT_DIR, exist_ok=True)
+        with open(result_file, "w") as f:
+            f.write(output)
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Shell скрипт грешка: {e.output.strip()}")
+    except Exception as e:
+        logging.error(f"Грешка при стартиране на shell скрипта: {str(e)}")
+
+
+
+
 import tempfile
 
 def advanced_log_filter(host, user, conf, limit_date):
