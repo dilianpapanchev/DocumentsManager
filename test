@@ -1,3 +1,56 @@
+def advanced_log_filter(host, user, conf, limit_date):
+    if not conf.has_section("advanced_log_filter"):
+        logging.warning(f"[{host}] липсва секция [advanced_log_filter]")
+        return
+
+    log_files = conf.get("advanced_log_filter", "log_files").split(',')
+    char_limit = int(conf.get("advanced_log_filter", "char_limit"))
+    match_keywords = conf.get("advanced_log_filter", "match_keywords")
+    log_dirs = conf.get('log_dirs', 'paths').split(',')
+
+    # Формируем списък от лог файлове във всички лог директории
+    log_patterns = []
+    for log_dir in log_dirs:
+        log_dir = log_dir.rstrip('/')
+        for f in log_files:
+            log_patterns.append(f"{log_dir}/{f}")
+    log_patterns_str = ' '.join(log_patterns)
+
+    # awk скрипт (без външен shell parsing)
+    awk_script = (
+        f"""/\\[ERROR\\]/ && length($0) > {char_limit} {{
+            log_date = substr($0, 2, 19);
+            if (log_date >= "{limit_date}") {{
+                if ($0 ~ /{match_keywords}/)
+                    print host "|" file "|" $0;
+            }}
+        }}"""
+    )
+
+    remote_cmd = f"for file in {log_patterns_str}; do awk -v host='{host}' -v file=\"$file\" '{awk_script}' $file 2>/dev/null; done | sort -t'|' -k1,1 -u | cut -d'|' -f2-"
+    ssh_cmd = ["ssh", f"{user}@{host}", remote_cmd]
+
+    logging.debug(f"[{host}] SSH команда: {' '.join(ssh_cmd)}")
+
+    try:
+        output = subprocess.check_output(ssh_cmd, stderr=subprocess.STDOUT, timeout=30, universal_newlines=True)
+        if output:
+            os.makedirs(RESULT_DIR, exist_ok=True)
+            with open(os.path.join(RESULT_DIR, f"{host}_adv.log"), "w") as f:
+                f.write(output)
+            logging.info(f"[{host}] Advanced лог резултат записан.")
+        else:
+            logging.info(f"[{host}] Няма намерени резултати от advanced_log_filter.")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"[{host}] SSH грешка: {e.output.strip()}")
+    except Exception as e:
+        logging.error(f"[{host}] Exception: {str(e)}")
+
+
+
+
+
+
 #!/usr/bin/env python3
 
 import configparser
