@@ -1,3 +1,146 @@
+#!/usr/bin/env python3
+
+import configparser
+import logging
+import os
+import subprocess
+import shutil
+from datetime import datetime, timedelta
+
+# Пътища
+BASE_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..'))
+CONF_PATH = os.path.join(BASE_DIR, 'config', 'common.conf')
+PROPERTIES_PATH = os.path.join(BASE_DIR, 'config', 'settings.properties')
+HOSTS_FILE = os.path.join(BASE_DIR, 'hosts', 'host_list.txt')
+LOG_FILE = os.path.join(BASE_DIR, 'logs', 'monitor.log')
+RESULT_DIR = os.path.join(BASE_DIR, 'logs', 'results')
+ARCHIVE_DIR = os.path.join(BASE_DIR, 'logs', 'archives')
+
+def load_conf(path):
+    config = configparser.ConfigParser()
+    config.read(path)
+    return config
+
+def load_properties(path):
+    props = {}
+    with open(path) as f:
+        for line in f:
+            if line.strip() and not line.startswith("#"):
+                key, value = line.strip().split("=", 1)
+                props[key.strip()] = value.strip()
+    return props
+
+def load_hostnames(path):
+    with open(path) as f:
+        return [line.strip() for line in f if line.strip()]
+
+def archive_results():
+    if not os.path.exists(RESULT_DIR):
+        return
+
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    archive_name = f"results_{timestamp}"
+    archive_path = os.path.join(ARCHIVE_DIR, archive_name)
+
+    os.makedirs(ARCHIVE_DIR, exist_ok=True)
+    shutil.make_archive(archive_path, 'zip', RESULT_DIR)
+    logging.info(f"Резултатите архивирани в {archive_path}.zip")
+
+def monitor_files(conf):
+    logging.info("[LOCAL FILE CHECK] Стартира проверка на директории за файлове.")
+
+    if not conf.has_section("file_monitor"):
+        logging.info("[LOCAL FILE CHECK] Няма зададени директории за наблюдение.")
+        return
+
+    directories = conf.get("file_monitor", "dirs").split(',')
+    now = datetime.now()
+    threshold = timedelta(minutes=5)
+
+    for directory in directories:
+        directory = directory.strip()
+        if not os.path.exists(directory):
+            logging.warning(f"[LOCAL FILE CHECK] Директорията не съществува: {directory}")
+            continue
+
+        found = False
+        for fname in os.listdir(directory):
+            fpath = os.path.join(directory, fname)
+            if os.path.isfile(fpath):
+                found = True
+                mtime = datetime.fromtimestamp(os.path.getmtime(fpath))
+                age = now - mtime
+                if age > threshold:
+                    logging.warning(f"[LOCAL FILE CHECK] {fname} в {directory} е на {int(age.total_seconds()//60)} минути.")
+                else:
+                    logging.info(f"[LOCAL FILE CHECK] {fname} в {directory} е на {int(age.total_seconds()//60)} минути.")
+        if not found:
+            logging.info(f"[LOCAL FILE CHECK] Няма файлове в {directory}.")
+
+def advanced_log_filter(host, user, conf, limit_date):
+    if not conf.has_section("advanced_log_filter"):
+        return
+
+    log_files = conf.get("advanced_log_filter", "log_files").split(',')
+    char_limit = int(conf.get("advanced_log_filter", "char_limit"))
+    match_keywords = conf.get("advanced_log_filter", "match_keywords")
+    log_dir = conf.get('log_dirs', 'paths').split(',')[0]
+
+    log_patterns = ' '.join([f"{log_dir}/{f}" for f in log_files])
+    awk_script = (
+        f"/\\[ERROR\\]/ && length($0) > {char_limit} {{"
+        " log_date = substr($0, 2, 19); "
+        f" if (log_date >= \"{limit_date}\") {{ "
+        f"   if ($0 ~ /{match_keywords}/) "
+        "     print host \"|\" file \"|\" $0; "
+        " }"
+        "}"
+    )
+
+    remote_cmd = f"for file in {log_patterns}; do awk -v host='{host}' -v file=\"$file\" '{awk_script}' $file 2>/dev/null; done | sort -t'|' -k1,1 -u | cut -d'|' -f2-"
+
+    try:
+        output = subprocess.check_output(
+            ["ssh", f"{user}@{host}", remote_cmd],
+            stderr=subprocess.STDOUT, timeout=20, universal_newlines=True
+        )
+        if output:
+            os.makedirs(RESULT_DIR, exist_ok=True)
+            with open(os.path.join(RESULT_DIR, f"{host}_adv.log"), "w") as f:
+                f.write(output)
+            logging.info(f"[{host}] Advanced лог резултат записан.")
+    except Exception as e:
+        logging.warning(f"[{host}] Advanced log scan неуспешен: {str(e)}")
+
+def main():
+    logging.info("Monitoring стартира.")
+
+    conf = load_conf(CONF_PATH)
+    props = load_properties(PROPERTIES_PATH)
+    hosts = load_hostnames(HOSTS_FILE)
+
+    user = props.get('remote.user', 'monitoring_user')
+    limit_date = datetime.now() - timedelta(days=7)
+    limit_str = limit_date.strftime("%Y-%m-%d")
+
+    for host in hosts:
+        advanced_log_filter(host, user, conf, limit_str)
+
+    monitor_files(conf)
+    archive_results()
+
+    logging.info("Monitoring приключи.")
+
+if __name__ == "__main__":
+    os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
+    logging.basicConfig(filename=LOG_FILE,
+                        level=getattr(logging, load_properties(PROPERTIES_PATH).get("log.level", "INFO").upper()),
+                        format="%(asctime)s [%(levelname)s] %(message)s")
+    main()
+
+
+
+
 [advanced_log_filter]
 log_files = mdb.log,runtime.log*,database.log*,ejb.log*
 char_limit = 1000
