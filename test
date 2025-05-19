@@ -1,3 +1,72 @@
+import tempfile
+
+def advanced_log_filter(host, user, conf, limit_date):
+    if not conf.has_section("advanced_log_filter"):
+        logging.warning(f"[{host}] липсва секция [advanced_log_filter]")
+        return
+
+    log_dir = conf.get('log_dirs', 'paths').split(',')[0]
+    char_limit = conf.get("advanced_log_filter", "char_limit")
+    log_files = conf.get("advanced_log_filter", "log_files")
+    match_keywords = conf.get("advanced_log_filter", "match_keywords")
+
+    # Създаваме временен shell скрипт с оригиналната логика
+    script_content = f"""#!/bin/bash
+LIMIT_DATE="{limit_date}"
+CHAR_LIMIT={char_limit}
+LOG_DIR="{log_dir}"
+for f in $LOG_DIR/{log_files}; do
+    awk -v limit="$LIMIT_DATE" -v file="$f" -v host="{host}" '
+        /\\[ERROR\\]/ && length($0) >= {char_limit} {{
+            log_date = substr($0, 2, 10)
+            if (log_date >= limit) {{
+                if ($0 ~ /{match_keywords}/) {{
+                    match($0, /\\] .*? /, arr)
+                    if (arr[1] != "" && arr[1] != "\\\\") {{
+                        key = arr[1]
+                        print key "|" "[" host "] [" file "] " $0
+                    }}
+                }}
+            }}
+        }}
+    ' "$f"
+done | sort -t'|' -k1,1 -u | cut -d'|' -f2-
+"""
+
+    try:
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".sh", mode="w") as tmpfile:
+            tmpfile.write(script_content)
+            tmpfile_path = tmpfile.name
+
+        remote_path = f"/tmp/monitor_adv_{host}.sh"
+
+        # Качваме скрипта на отдалечената машина
+        subprocess.run(["scp", tmpfile_path, f"{user}@{host}:{remote_path}"], check=True)
+
+        # Даваме права и го изпълняваме през ssh
+        ssh_cmd = f"chmod +x {remote_path} && bash {remote_path} && rm {remote_path}"
+        output = subprocess.check_output(["ssh", f"{user}@{host}", ssh_cmd], stderr=subprocess.STDOUT, timeout=60, universal_newlines=True)
+
+        if output:
+            os.makedirs(RESULT_DIR, exist_ok=True)
+            with open(os.path.join(RESULT_DIR, f"{host}_adv.log"), "w") as f:
+                f.write(output)
+            logging.info(f"[{host}] Advanced лог резултат записан.")
+        else:
+            logging.info(f"[{host}] Няма резултати от advanced_log_filter.")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"[{host}] SSH/Script грешка: {e.output.strip()}")
+    except Exception as e:
+        logging.error(f"[{host}] Грешка при изпълнение на advanced_log_filter: {str(e)}")
+    finally:
+        if os.path.exists(tmpfile_path):
+            os.unlink(tmpfile_path)
+
+
+
+
+
+
 def advanced_log_filter(host, user, conf, limit_date):
     if not conf.has_section("advanced_log_filter"):
         logging.warning(f"[{host}] липсва секция [advanced_log_filter]")
