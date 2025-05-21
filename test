@@ -1,3 +1,35 @@
+#!/bin/bash
+
+input_log="main_log.txt"
+output_log="enhanced_log.txt"
+log_dir="./logs"  # директория с файловете по дати
+
+> "$output_log"  # празно изходен файл
+
+while IFS= read -r line; do
+    # Извличане на датата след JT.
+    date=$(echo "$line" | grep -oP 'JT\.\K[0-9]+')
+
+    if [[ -n "$date" ]]; then
+        file="$log_dir/$date.log"
+
+        if [[ -f "$file" ]]; then
+            # Извличане на реда със Stop, Start, Elapsed (примерна логика)
+            match=$(grep -i 'Stop.*Start.*Elapsed' "$file" | head -n 1)
+
+            # Добавяне на намереното в края на реда
+            echo "$line $match" >> "$output_log"
+        else
+            echo "$line [No file for $date]" >> "$output_log"
+        fi
+    else
+        echo "$line [No JT date found]" >> "$output_log"
+    fi
+done < "$input_log"
+
+
+
+
 def run_advanced_shell_script():
     script_path = os.path.join(BASE_DIR, "scripts", "advanced_log.sh")
     try:
