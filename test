@@ -1,5 +1,35 @@
 #!/bin/bash
 
+main_log="main_log.txt"        # лог с JT.20240520
+rrex_log="rrex_log.txt"        # лог със Start/End/Duration за всяка дата
+output_log="enhanced_log.txt"
+
+> "$output_log"
+
+while IFS= read -r line; do
+    date=$(echo "$line" | grep -oP 'JT\.\K[0-9]{8}')
+
+    if [[ -n "$date" ]]; then
+        # Търси ред в rrex_log, започващ с датата
+        rrex_info=$(awk -F'|' -v d="$date" '$1 == d { print $2, $3, $4 }' "$rrex_log")
+
+        if [[ -n "$rrex_info" ]]; then
+            echo "$line | $rrex_info" >> "$output_log"
+        else
+            echo "$line | [No RREX data]" >> "$output_log"
+        fi
+    else
+        echo "$line" >> "$output_log"
+    fi
+done < "$main_log"
+
+
+
+
+
+
+#!/bin/bash
+
 input_log="main_log.txt"
 output_log="enhanced_log.txt"
 log_dir="./logs"  # директория с файловете по дати
