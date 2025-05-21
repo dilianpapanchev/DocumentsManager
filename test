@@ -1,5 +1,41 @@
 #!/bin/bash
 
+main_log="main_log.txt"
+rrex_log="rrex_data.txt"
+output_log="merged_log.txt"
+
+> "$output_log"
+
+while IFS= read -r line; do
+    # Извличаме датата от формата JT.20240520
+    date=$(echo "$line" | grep -oP 'JT\.\K[0-9]{8}')
+
+    if [[ -n "$date" ]]; then
+        # Търсим съвпадащ ред в RREX таблицата по първото поле (датата)
+        match=$(awk -F'|' -v d="$date" '$1 == d {print $0}' "$rrex_log")
+
+        if [[ -n "$match" ]]; then
+            # Вземаме само времената
+            rrex_start=$(echo "$match" | awk -F'|' '{print $2}' | cut -d' ' -f2)
+            rrex_end=$(echo "$match" | awk -F'|' '{print $3}' | cut -d' ' -f2)
+            rrex_duration=$(echo "$match" | awk -F'|' '{print $4}')
+
+            echo "$line | RREX_START: $rrex_start | RREX_END: $rrex_end | RREX_DURATION: $rrex_duration" >> "$output_log"
+        else
+            echo "$line | RREX: N/A" >> "$output_log"
+        fi
+    else
+        echo "$line" >> "$output_log"
+    fi
+done < "$main_log"
+
+
+
+
+
+
+#!/bin/bash
+
 main_log="main_log.txt"        # лог с JT.20240520
 rrex_log="rrex_log.txt"        # лог със Start/End/Duration за всяка дата
 output_log="enhanced_log.txt"
