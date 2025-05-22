@@ -1,5 +1,20 @@
 function updateEomTableRows() {
   const table = document.getElementById('eomTable');
+  const rows = Array.from(table.getElementsByTagName('tr')).slice(2); // пропуска заглавията
+  const total = rows.length;
+  const requested = parseInt(document.getElementById('eomRange').value, 10);
+  const maxRows = Math.min(requested, total); // Не позволявай да искаме повече, отколкото имаме
+
+  rows.forEach((tr, i) => {
+    tr.hidden = i < total - maxRows;
+  });
+}
+
+
+
+
+function updateEomTableRows() {
+  const table = document.getElementById('eomTable');
   const rows = Array.from(table.getElementsByTagName('tr')).slice(2); // само данни
   const maxRows = parseInt(document.getElementById('eomRange').value, 10);
   const total = rows.length;
