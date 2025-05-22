@@ -1,3 +1,23 @@
+function updateEomTableRows(days) {
+  const allRows = Array.from(document.getElementById('eomTable').getElementsByTagName('tr'));
+  const dataRows = allRows.slice(2); // Прескачаме заглавните два реда
+  const n = dataRows.length;
+
+  const visibleCount = Math.max(days, 3);
+  const start = Math.max(0, n - visibleCount);
+
+  allRows.forEach((tr, i) => {
+    if (i < 2) {
+      tr.hidden = false; // винаги показвай заглавията
+    } else {
+      tr.hidden = (i - 2) < start ? false : true;
+    }
+  });
+}
+
+
+
+
 const visibleRows = Math.min(maxRows, rows.length);
 rows.forEach((tr, i) => {
   tr.hidden = i < rows.length - visibleRows;
