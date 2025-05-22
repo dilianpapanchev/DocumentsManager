@@ -1,3 +1,13 @@
+const visibleRows = Math.min(maxRows, rows.length);
+rows.forEach((tr, i) => {
+  tr.hidden = i < rows.length - visibleRows;
+});
+
+
+
+
+
+
 #!/bin/bash
 
 main_log="main_log.txt"
