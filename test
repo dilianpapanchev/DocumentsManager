@@ -2,6 +2,284 @@
 set -euo pipefail
 
 CSV="${1:-report.csv}"
+OUT_HTML="${2:-report.html}"
+
+if [[ ! -f "$CSV" ]]; then
+  echo "❌ CSV файлът '$CSV' не е намерен в $(pwd)" >&2
+  exit 1
+fi
+
+# Ескейпваме backticks, за да вградим CSV-то в JS-template
+CSV_CONTENT=$(sed 's/`/\\`/g' "$CSV")
+
+cat >"$OUT_HTML" <<EOF
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Interactive JT Report</title>
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"/>
+  <style>
+    body { margin:0; padding:20px; font-family:sans-serif; overflow-x:auto; }
+    .container { max-width:100%; background:#fff; padding:20px; border-radius:6px;
+                 box-shadow:0 1px 3px rgba(0,0,0,0.1); }
+    h1 { margin-top:0; }
+    .controls { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:15px; }
+    .controls input, .controls button { padding:6px 10px; font-size:14px; }
+    .columns-toggle { margin-bottom:15px; }
+    .columns-toggle label { margin-right:8px; user-select:none; }
+    .table-wrap { background:#fff; }
+    table { border-collapse:collapse; width:100%; }
+    th,td { border:1px solid #ddd; padding:8px; white-space:nowrap; }
+    th { background:#f0f0f0; cursor:pointer; position:relative; }
+    th.sort-asc::after  { content:" ↑"; }
+    th.sort-desc::after { content:" ↓"; }
+    td.max { background:#fff9c4; }
+    td.diff-pos { background:#e6f4ea; }
+    td.diff-neg { background:#fce8e6; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Interactive JT Report</h1>
+    <div class="controls">
+      <input id="search" placeholder="Global search…" />
+      <input id="start" type="date"/>
+      <input id="end"   type="date"/>
+      <button id="applyDates">Apply Date Filter</button>
+      <button id="allDates">All Dates</button>
+      <button id="compare">Compare Dates</button>
+      <button id="reset">Reset All</button>
+    </div>
+    <div class="columns-toggle" id="toggles"></div>
+    <div class="table-wrap">
+      <table id="report"><thead id="thead"></thead><tbody id="tbody"></tbody></table>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script>
+  // ─── Вградeно CSV ──────────────────────────────────────────────────────────
+  const rawCSV = \`
+$CSV_CONTENT
+\`;
+  // ────────────────────────────────────────────────────────────────────────────
+
+  // Парсване на CSV
+  function parseCSV(txt) {
+    return txt.trim().split('\\n').map(r => r.split(','));
+  }
+  function parseElapsed(s) {
+    const [h,m,sec] = (s||'00:00:00').split(':').map(Number);
+    return h*3600 + m*60 + sec;
+  }
+  function formatDiff(n) { return (n>=0?'+':'') + n; }
+
+  // Глобално състояние
+  let header, rows, N;
+  let columns = [], dateCols = [], elapsedCols = [];
+  let data = [], currentSort = { col:null, dir:'asc' };
+
+  // Инициализация
+  document.addEventListener('DOMContentLoaded', () => {
+    flatpickr('#start,{ dateFormat:"Y-m-d" }');
+    flatpickr('#end',  { dateFormat:"Y-m-d" });
+
+    initData();
+    buildToggles();
+    renderTable();
+
+    document.getElementById('search').addEventListener('input', filterTable);
+    document.getElementById('applyDates').addEventListener('click', filterTable);
+    document.getElementById('allDates').addEventListener('click', setAllDates);
+    document.getElementById('compare').addEventListener('click', compareDates);
+    document.getElementById('reset').addEventListener('click', resetAll);
+  });
+
+  function initData() {
+    const arr = parseCSV(rawCSV);
+    header = arr.shift();
+    rows   = arr;
+    N = (header.length - 4) / 2;
+
+    // Дефинираме колони
+    header.forEach((h,i) => {
+      columns.push({ name:h, hidden:false });
+      if (/date/i.test(h))    dateCols.push(i);
+      if (/elapsed/i.test(h)) elapsedCols.push(i);
+    });
+
+    // Подготвяме data[] обекти
+    data = rows.map(r => {
+      let maxIdx = elapsedCols[0], maxSec = -1;
+      elapsedCols.forEach(ci => {
+        const s = parseElapsed(r[ci]);
+        if (s>maxSec) { maxSec = s; maxIdx = ci; }
+      });
+      return { vals:r, hidden:false, maxIdx, diffAll:0 };
+    });
+  }
+
+  function buildToggles() {
+    const ctr = document.getElementById('toggles');
+    ctr.innerHTML = '';
+    columns.forEach((col,i) => {
+      const lbl = document.createElement('label');
+      const cb  = document.createElement('input');
+      cb.type='checkbox'; cb.checked = !col.hidden;
+      cb.onchange = ()=>{
+        col.hidden = !cb.checked;
+        renderTable();
+      };
+      lbl.append(cb,' ',col.name);
+      ctr.append(lbl);
+    });
+  }
+
+  function renderTable() {
+    const thead = document.getElementById('thead');
+    const tbody = document.getElementById('tbody');
+    thead.innerHTML = ''; tbody.innerHTML = '';
+
+    // HEADER
+    const hr = document.createElement('tr');
+    columns.forEach((col,i) => {
+      if (col.hidden) return;
+      const th = document.createElement('th');
+      th.textContent = col.name;
+      th.onclick = ()=>sortBy(i);
+      if (currentSort.col===i)
+        th.classList.add(currentSort.dir==='asc'?'sort-asc':'sort-desc');
+      hr.append(th);
+    });
+    const thD = document.createElement('th');
+    thD.textContent = 'Difference';
+    hr.append(thD);
+    thead.append(hr);
+
+    // BODY
+    data.forEach(row=>{
+      if (row.hidden) return;
+      const tr = document.createElement('tr');
+      columns.forEach((col,i)=>{
+        if (col.hidden) return;
+        const td = document.createElement('td');
+        td.textContent = row.vals[i]||'';
+        if (elapsedCols.includes(i) && row.maxIdx===i)
+          td.classList.add('max');
+        tr.append(td);
+      });
+      // Difference = lastElapsed - firstElapsed
+      const d = parseElapsed(row.vals[ elapsedCols[elapsedCols.length-1] ]) -
+                parseElapsed(row.vals[ elapsedCols[0] ]);
+      const td2 = document.createElement('td');
+      td2.textContent = formatDiff(d);
+      if (d>0) td2.classList.add('diff-pos');
+      if (d<0) td2.classList.add('diff-neg');
+      tr.append(td2);
+
+      tbody.append(tr);
+    });
+  }
+
+  function sortBy(ci) {
+    // clear classes
+    document.querySelectorAll('#thead th')
+      .forEach(th=>th.classList.remove('sort-asc','sort-desc'));
+    // toggle dir
+    if (currentSort.col===ci && currentSort.dir==='asc') currentSort.dir='desc';
+    else currentSort.dir='asc';
+    currentSort.col = ci;
+    // mark header
+    const th = document.querySelectorAll('#thead th')[ci];
+    th.classList.add(currentSort.dir==='asc'?'sort-asc':'sort-desc');
+    // sort data
+    data.sort((a,b)=>{
+      let A=a.vals[ci], B=b.vals[ci], cmp;
+      const nA=parseFloat(A), nB=parseFloat(B);
+      if (!isNaN(nA)&&!isNaN(nB)) cmp=nA-nB;
+      else cmp=A.localeCompare(B);
+      return currentSort.dir==='asc'?cmp:-cmp;
+    });
+    renderTable();
+  }
+
+  function filterTable() {
+    const term = document.getElementById('search').value.toLowerCase();
+    const sd   = document.getElementById('start').value;
+    const ed   = document.getElementById('end').value;
+    data.forEach(r=>{
+      let ok = true;
+      if (term) {
+        ok = r.vals.some((v,i)=>!columns[i].hidden && v.toLowerCase().includes(term));
+      }
+      if (ok && (sd||ed)) {
+        ok = dateCols.some(ci=>{
+          const d = (r.vals[ci]||'').split('T')[0];
+          return (!sd||d>=sd) && (!ed||d<=ed);
+        });
+      }
+      r.hidden = !ok;
+    });
+    renderTable();
+  }
+
+  function setAllDates() {
+    if (!dateCols.length) return;
+    // Извличаме header датите
+    const dates = dateCols.map(ci=>header[ci]).sort();
+    document.getElementById('start').value = dates[0];
+    document.getElementById('end').value   = dates[dates.length-1];
+    filterTable();
+  }
+
+  function compareDates() {
+    const sd = document.getElementById('start').value;
+    const ed = document.getElementById('end').value;
+    if (!sd||!ed) return alert('Изберете две дати');
+    // намираме колоните по header
+    const ci1 = header.findIndex(h=>h===sd);
+    const ci2 = header.findIndex(h=>h===ed);
+    if (ci1<0||ci2<0) return alert('Дата не намерена в колони');
+    // сравняваме Elapsed стълбовете (след всяка date колона)
+    const ei1 = dateCols.indexOf(ci1)>=0 ? dateCols.indexOf(ci1)+1 : ci1+1;
+    const ei2 = dateCols.indexOf(ci2)>=0 ? dateCols.indexOf(ci2)+1 : ci2+1;
+    data.forEach(r=>{
+      const v1=parseElapsed(r.vals[ei1]);
+      const v2=parseElapsed(r.vals[ei2]);
+      r.diffAll = v2 - v1;
+    });
+    renderTable();
+  }
+
+  function resetAll() {
+    document.getElementById('search').value='';
+    document.getElementById('start').value='';
+    document.getElementById('end').value='';
+    columns.forEach(c=>c.hidden=false);
+    data.forEach(r=>{ r.hidden=false; r.diffAll=0; });
+    currentSort={col:null,dir:'asc'};
+    initData(); buildToggles(); renderTable();
+  }
+  </script>
+
+</body>
+</html>
+EOF
+
+echo "✅ Генериран $OUT_HTML – отвори го директно в браузър."
+
+
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+CSV="${1:-report.csv}"
 OUT="${2:-report.html}"
 
 if [[ ! -f "$CSV" ]]; then
