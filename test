@@ -1,3 +1,62 @@
+#!/usr/bin/env bash
+
+# Проверка на параметри
+if [ $# -ne 2 ]; then
+  echo "Usage: $0 <date1: YYYYMMDD> <date2: YYYYMMDD>"
+  exit 1
+fi
+
+date1=$1
+date2=$2
+
+# Намираме имената на файловете по маска
+file1=(JT*${date1}*)
+file2=(JT*${date2}*)
+
+if [ ! -f "${file1[0]}" ] || [ ! -f "${file2[0]}" ]; then
+  echo "Не можаха да се намерят файлове JT*${date1}* или JT*${date2}*"
+  exit 1
+fi
+
+file1=${file1[0]}
+file2=${file2[0]}
+
+awk -F, -v OFS=, '
+  # Прочитаме първия файл, запазваме Elapsed Time (поле 8) в секунди и оригиналния низ
+  FNR==NR {
+    key = $1 FS $2 FS $3 FS $4 FS $6 FS $7
+    t = $8
+    split(t, a, ":")
+    secs = a[1]*3600 + a[2]*60 + a[3]
+    t1_secs[key] = secs
+    t1_str[key]  = t
+    next
+  }
+  # Сега втория файл: пак правим ключа и взимаме време t2
+  {
+    key = $1 FS $2 FS $3 FS $4 FS $6 FS $7
+    t2 = $8
+    split(t2, b, ":")
+    secs2 = b[1]*3600 + b[2]*60 + b[3]
+    secs1 = (key in t1_secs ? t1_secs[key] : 0)
+    delta = secs2 - secs1
+
+    # Преобразуваме delta в HH:MM:SS
+    sign = ""
+    if (delta < 0) { sign = "-"; delta = -delta }
+    hh = int(delta/3600)
+    mm = int((delta%3600)/60)
+    ss = delta%60
+    diff = sprintf("%s%02d:%02d:%02d", sign, hh, mm, ss)
+
+    # Печатаме полета 1,2,3,4,6,7, original t1, t2 и разликата
+    print $1, $2, $3, $4, $6, $7, t1_str[key], t2, diff
+  }
+' "$file1" "$file2"
+
+
+
+
 #!/bin/bash
 
 if [ $# -ne 2 ]; then
