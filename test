@@ -9,6 +9,81 @@ fi
 d1=$1
 d2=$2
 
+# Find the two files
+f1=(JT*${d1}*)
+f2=(JT*${d2}*)
+if [ ! -f "${f1[0]}" ] || [ ! -f "${f2[0]}" ]; then
+  echo "Не намерих файлове JT*${d1}* или JT*${d2}*"
+  exit 1
+fi
+file1=${f1[0]}
+file2=${f2[0]}
+
+# Print header
+echo "BATCH.STAGE,BATCH,JOB.NAME,Date1,Elapsed1,Date2,Elapsed2,Diff"
+
+# Extract, compute delta, add arrow, sort and drop the temp column
+awk -F, -v OFS=, '
+  # 1) Първо минаваме през file1 и запаметяваме:
+  #      key = BATCH.STAGE FS BATCH FS JOB.NAME
+  #      date1[key]    = $4
+  #      elapsed1[key] = $8  (и в секунди secs1[key])
+  FNR==NR {
+    key            = $1 FS $2 FS $3
+    date1[key]     = $4
+    elapsed1[key]  = $8
+    split($8, t, ":")
+    secs1[key]     = t[1]*3600 + t[2]*60 + t[3]
+    next
+  }
+
+  # 2) После минаваме file2 и за всеки същия key:
+  {
+    key            = $1 FS $2 FS $3
+    d2             = $4
+    e2             = $8
+    split(e2, t2, ":")
+    secs2          = t2[1]*3600 + t2[2]*60 + t2[3]
+    s1             = (key in secs1 ? secs1[key] : 0)
+    delta          = secs2 - s1
+
+    # форматираме diff в ±HH:MM:SS
+    sign           = ""
+    if (delta < 0) { sign = "-"; delta = -delta }
+    hh             = int(delta/3600)
+    mm             = int((delta%3600)/60)
+    ss             = delta % 60
+    diff           = sprintf("%s%02d:%02d:%02d", sign, hh, mm, ss)
+
+    # ако date1 е по-бавно (secs1 > secs2) – стрелка ↑, иначе ↓
+    arrow          = (secs1[key] > secs2 ? "↑" : "↓")
+
+    # Първо delta (за сортиране), после стрелката+stage и останалите полета
+    print delta, \
+          arrow $1, $2, $3, \
+          date1[key], elapsed1[key], \
+          d2,          e2, \
+          diff
+  }
+' "$file1" "$file2" \
+| sort -t, -k1,1nr \     # сортиране по delta низходящо
+| cut -d, -f2-            # махаме временната numeric delta-колона
+
+
+
+
+
+#!/usr/bin/env bash
+
+# Usage check
+if [ $# -ne 2 ]; then
+  echo "Usage: $0 <date1: YYYYMMDD> <date2: YYYYMMDD>"
+  exit 1
+fi
+
+d1=$1
+d2=$2
+
 # Find files
 f1=(JT*${d1}*)
 f2=(JT*${d2}*)
