@@ -1,5 +1,82 @@
 #!/usr/bin/env bash
 
+# Проверка за две дати
+if [ $# -ne 2 ]; then
+  echo "Usage: $0 <date1: YYYYMMDD> <date2: YYYYMMDD>"
+  exit 1
+fi
+
+d1=$1
+d2=$2
+
+# Откриваме файловете по маска JT*<дата>*
+files1=(JT*${d1}*)
+files2=(JT*${d2}*)
+if [ ! -f "${files1[0]}" ] || [ ! -f "${files2[0]}" ]; then
+  echo "Не намерих файлове JT*${d1}* или JT*${d2}*"
+  exit 1
+fi
+f1=${files1[0]}
+f2=${files2[0]}
+
+awk -F, -v OFS=, '
+  #
+  # Първо четем файл1 (за date1):
+  #   key = комбинация от полета 1..4 (JOB fields)
+  #   записваме date1, start, stop и elapsed и пресмятаме секунди
+  #
+  FNR==NR {
+    key = $1 FS $2 FS $3 FS $4
+    date1[key]    = $5        # полe 5 е датата във входния ред
+    start1[key]   = $7        # поле 7 = старт време
+    stop1[key]    = $8        # поле 8 = стоп време
+    elapsed1[key] = $9        # поле 9 = elapsed
+    split($9, t, ":")
+    secs1[key]    = t[1]*3600 + t[2]*60 + t[3]
+    next
+  }
+
+  #
+  # Сега четем файл2 (за date2) и за всеки ключ
+  # ● взимаме полета 1..4
+  # ● взимаме date2, start2, stop2, elapsed2
+  # ● смятаме diff = elapsed2 - elapsed1
+  #
+  {
+    key    = $1 FS $2 FS $3 FS $4
+    d2     = $5
+    s2     = $7
+    e2     = $9
+    split(e2, t2, ":")
+    secs2  = t2[1]*3600 + t2[2]*60 + t2[3]
+    s1     = (key in secs1 ? secs1[key] : 0)
+    delta  = secs2 - s1
+
+    sign   = ""
+    if (delta<0) { sign="-"; delta = -delta }
+    hh     = int(delta/3600)
+    mm     = int((delta%3600)/60)
+    ss     = delta%60
+    diff   = sprintf("%s%02d:%02d:%02d", sign, hh, mm, ss)
+
+    # Печатаме:
+    #  $1,$2,$3,$4 — полета до JOB.NAME
+    #  date1, start1, stop1, elapsed1
+    #  date2, start2, stop2, elapsed2
+    #  diff
+    print \
+      $1, $2, $3, $4, \
+      date1[key], start1[key], stop1[key], elapsed1[key], \
+      d2,       s2,         $8,        e2,        \
+      diff
+  }
+' "$f1" "$f2"
+
+
+
+
+#!/usr/bin/env bash
+
 # Проверка на параметри
 if [ $# -ne 2 ]; then
   echo "Usage: $0 <date1: YYYYMMDD> <date2: YYYYMMDD>"
