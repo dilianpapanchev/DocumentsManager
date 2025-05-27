@@ -2,6 +2,182 @@
 set -euo pipefail
 
 # Usage: ./generate_interactive.sh [input.csv] [output.html]
+CSV="${1:-report.csv}"
+OUT="${2:-interactive_report.html}"
+
+if [[ ! -f "$CSV" ]]; then
+  echo "❌ Не открих CSV файла '$CSV' в $(pwd)" >&2
+  exit 1
+fi
+
+# Прочитаме header (първи ред)
+IFS= read -r header_line < "$CSV"
+IFS=',' read -r -a header_arr <<< "$header_line"
+
+# Прочитаме data (всичко след първия ред)
+data_lines=()
+while IFS= read -r line; do
+  data_lines+=("$line")
+done < <(tail -n +2 "$CSV")
+
+# Функция за превръщане на CSV-ред в JS-стринг-арей
+to_js_array(){
+  local line="$1"
+  IFS=',' read -r -a cells <<< "$line"
+  printf '['
+  local first=1
+  for cell in "${cells[@]}"; do
+    # ескейпваме евентуални двойни кавички в cell
+    esc=${cell//\"/\\\"}
+    if (( first )); then
+      printf "\"%s\"" "$esc"
+      first=0
+    else
+      printf ",\"%s\"" "$esc"
+    fi
+  done
+  printf ']'
+}
+
+# ГЕНЕРИРАМЕ HTML
+cat >"$OUT" <<EOF
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="UTF-8">
+  <title>JT Interactive Report</title>
+  <link rel="stylesheet"
+        href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/css/bootstrap.min.css"/>
+  <link rel="stylesheet"
+        href="https://cdn.datatables.net/v/bs4/dt-1.13.4/b-2.3.6/r-2.5.0/datatables.min.css"/>
+  <style>
+    table, th, td { border:1px solid #ccc; border-collapse:collapse; }
+    th, td       { padding:4px 8px; }
+    th            { cursor:pointer; background:#f0f0f0; }
+    td.max        { background:#ffeb3b !important; }
+    .dataTables_scrollBody { overflow-x:auto!important; }
+  </style>
+</head>
+<body class="bg-light">
+  <div class="container-fluid py-4">
+    <h2 class="mb-4">JT Interactive Report</h2>
+    <table id="data-table" class="table table-striped table-bordered" style="width:100%">
+      <thead><tr id="table-header"></tr></thead>
+      <tbody id="table-body"></tbody>
+    </table>
+  </div>
+
+  <!-- JS libs -->
+  <script src="https://code.jquery.com/jquery-3.6.1.min.js"></script>
+  <script
+    src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js">
+  </script>
+  <script
+    src="https://cdn.datatables.net/v/bs4/dt-1.13.4/b-2.3.6/r-2.5.0/datatables.min.js">
+  </script>
+
+  <script>
+    // Header и data вградени като JS масиви
+    const header = [
+EOF
+
+# Вмъкваме header
+first=1
+for col in "${header_arr[@]}"; do
+  esc=${col//\"/\\\"}
+  if (( first )); then
+    printf '      "%s"\n' "$esc" >>"$OUT"
+    first=0
+  else
+    printf '     ,"%s"\n' "$esc" >>"$OUT"
+  fi
+done
+
+cat >>"$OUT" <<EOF
+    ];
+
+    const data = [
+EOF
+
+# Вмъкваме data ред по ред
+for i in "${!data_lines[@]}"; do
+  line=${data_lines[i]}
+  jsarr=$(to_js_array "$line")
+  if (( i < ${#data_lines[@]} - 1 )); then
+    printf '      %s,\n' "$jsarr" >>"$OUT"
+  else
+    printf '      %s\n' "$jsarr" >>"$OUT"
+  fi
+done
+
+cat >>"$OUT" <<'EOF'
+    ];
+
+    $(document).ready(function(){
+      const N = (header.length - 4)/2; // брой Date/Elapsed двойки
+
+      // Рисуваме header + добавяме Difference
+      header.forEach(h => $('#table-header').append(`<th>${h}</th>`));
+      $('#table-header').append('<th>Difference</th>');
+
+      // Рисуваме body + highlight max
+      data.forEach(row => {
+        // парсиме Elapsed в секунди и търсим max
+        const secs = [], tr = $('<tr>'), LENGTH=N;
+        let maxSec=-1, maxIdx=0;
+        for(let j=0;j<LENGTH;j++){
+          const [hh,mm,ss] = row[4+2*j+1].split(':').map(Number);
+          const s = hh*3600 + mm*60 + ss;
+          secs.push(s);
+          if(s>maxSec){ maxSec=s; maxIdx=j; }
+        }
+        // STATUS..JOB.NAME
+        row.slice(0,4).forEach(c => tr.append(`<td>${c}</td>`));
+        // Date/Elapsed двойки
+        for(let j=0;j<LENGTH;j++){
+          tr.append(`<td>${row[4+2*j]}</td>`);
+          const cls=(j===maxIdx?'max':'');
+          tr.append(`<td class="${cls}">${row[4+2*j+1]}</td>`);
+        }
+        // Difference = last-first
+        const diff = secs[secs.length-1] - secs[0],
+              sign = diff<0?'-':'',
+              sabs = Math.abs(diff),
+              h2   = Math.floor(sabs/3600),
+              m2   = Math.floor((sabs%3600)/60),
+              s2   = sabs%60,
+              dstr = `${sign}${String(h2).padStart(2,'0')}:${String(m2).padStart(2,'0')}:${String(s2).padStart(2,'0')}`;
+        tr.append(`<td>${dstr}</td>`);
+        $('#table-body').append(tr);
+      });
+
+      // Инициализираме DataTable
+      $('#data-table').DataTable({
+        dom: 'Bfrtip',
+        paging:   false,   // без страници
+        scrollX:  true,    // хоризонтално скролване
+        searching:true,    // глобална търсачка
+        buttons: ['colvis'],
+        order:   [],
+        columnDefs:[{ targets:[0], orderable:false }]
+      });
+    });
+  </script>
+</body>
+</html>
+EOF
+
+echo "✅ Генериран: $OUT (от $CSV)"
+
+
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Usage: ./generate_interactive.sh [input.csv] [output.html]
 CSV_INPUT="${1:-report.csv}"
 OUT_HTML="${2:-interactive_report.html}"
 
