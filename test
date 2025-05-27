@@ -2,6 +2,111 @@
 set -euo pipefail
 
 CSV="${1:-report.csv}"
+OUT="${2:-report.html}"
+
+# 1) Записваме началото на HTML + стилове + търсачка
+cat >"$OUT" <<'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  table, th, td { border: 1px solid #ccc; border-collapse: collapse; }
+  th, td { padding: 4px 8px; }
+  th { cursor: pointer; background: #f0f0f0; }
+  .max { background-color: #ffeb3b; }
+  #search { margin: 10px 0; padding: 6px; width: 100%; box-sizing: border-box; }
+</style>
+</head>
+<body>
+<input type="text" id="search" placeholder="Търси…">
+EOF
+
+# 2) Генерираме <table> с оцветяване на максимума и кликаеми <th>
+awk -F, '
+BEGIN {
+  print "<table id=\"data-table\"><thead>";
+}
+NR==1 {
+  print "<tr>";
+  for(i=1;i<=NF;i++){
+    # правим колоната сортиращ бутон
+    printf "<th onclick=\"sortTable(%d)\">%s</th>", i-1, $i;
+    if($i ~ /^Elapsed/) { ecount++; elapsed_idx[ecount]=i }
+  }
+  print "</tr></thead><tbody>";
+  next;
+}
+{
+  # намираме max сред Elapsed колоните
+  maxsec=-1; maxcol=0;
+  for(j=1;j<=ecount;j++){
+    idx=elapsed_idx[j];
+    split($idx, T, ":");
+    sec=T[1]*3600 + T[2]*60 + T[3];
+    if(sec>maxsec){ maxsec=sec; maxcol=idx }
+  }
+  # отпечатваме реда, маркираме class="max" само на maxcol
+  printf "<tr>";
+  for(i=1;i<=NF;i++){
+    cls = (i==maxcol ? " class=\"max\"" : "");
+    printf "<td%s>%s</td>", cls, $i;
+  }
+  print "</tr>";
+}
+END {
+  print "</tbody></table>";
+}' "$CSV" >> "$OUT"
+
+# 3) Добавяме JS за търсене и сортиране
+cat >>"$OUT" <<'EOF'
+<script>
+// Живо филтриране:
+document.getElementById('search').addEventListener('input', function(e) {
+  var filter = e.target.value.toLowerCase();
+  document.querySelectorAll("#data-table tbody tr").forEach(function(row) {
+    row.style.display = row.textContent.toLowerCase().includes(filter) ? "" : "none";
+  });
+});
+
+// Сортиране при клик на заглавие:
+function sortTable(colIndex) {
+  var table = document.getElementById("data-table");
+  var tbody = table.tBodies[0];
+  var rows  = Array.from(tbody.rows);
+  // Определяме посока (toggle)
+  var currentCol = table.getAttribute("data-sort-col");
+  var currentDir = table.getAttribute("data-sort-dir");
+  var asc = !(currentCol==colIndex && currentDir=="asc");
+  // Сортиране
+  rows.sort(function(a, b) {
+    var A = a.cells[colIndex].textContent.trim();
+    var B = b.cells[colIndex].textContent.trim();
+    return asc 
+      ? (A > B ? 1 : A < B ? -1 : 0)
+      : (A < B ? 1 : A > B ? -1 : 0);
+  });
+  // Ребилд на tbody
+  rows.forEach(function(r) { tbody.appendChild(r); });
+  // Запомняме състоянието
+  table.setAttribute("data-sort-col", colIndex);
+  table.setAttribute("data-sort-dir", asc ? "asc" : "desc");
+}
+</script>
+</body>
+</html>
+EOF
+
+echo "✅ Готово! Отвори '$OUT' в браузър." 
+
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+CSV="${1:-report.csv}"
 OUT="${2:-interactive_report.html}"
 
 if [[ ! -f "$CSV" ]]; then
