@@ -4,6 +4,88 @@ set -euo pipefail
 CSV="${1:-report.csv}"
 OUT="${2:-report.html}"
 
+# 1) Пишем началото на HTML + стилове + търсачка
+cat >"$OUT" <<'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<style>
+  table, th, td { border: 1px solid #ccc; border-collapse: collapse; }
+  th, td { padding: 4px 8px; }
+  .max { background-color: #ffeb3b; }
+  #search { margin: 10px 0; padding: 6px; width: 100%; box-sizing: border-box; }
+</style>
+</head>
+<body>
+<input type="text" id="search" placeholder="Търси в таблицата…">
+EOF
+
+# 2) Генерираме самата <table> от CSV, като оцветяваме max Elapsed на ред
+awk -F, '
+BEGIN {
+  OFS="";
+  print "<table>";
+}
+NR==1 {
+  # header
+  print "<tr>";
+  for(i=1;i<=NF;i++){
+    header[i]=$i;
+    if($i ~ /^Elapsed/) { ecount++; elapsed_idx[ecount]=i }
+    print "<th>"$i"</th>";
+  }
+  print "</tr>";
+  next;
+}
+{
+  # намираме max сред Elapsed колоните
+  maxsec=-1; maxcol=0;
+  for(j=1;j<=ecount;j++){
+    idx=elapsed_idx[j];
+    split($idx, T, ":");
+    sec=T[1]*3600+T[2]*60+T[3];
+    if(sec>maxsec){ maxsec=sec; maxcol=idx }
+  }
+  # отпечатваме реда, като само при maxcol добавяме class="max"
+  print "<tr>";
+  for(i=1;i<=NF;i++){
+    cls = (i==maxcol ? " class=\"max\"" : "");
+    print "<td" cls ">" , $i , "</td>";
+  }
+  print "</tr>";
+}
+END {
+  print "</table>";
+}' "$CSV" >> "$OUT"
+
+# 3) Добавяме JS за живото филтриране при писане в полето #search
+cat >>"$OUT" <<'EOF'
+<script>
+document.getElementById('search').addEventListener('input', function(e) {
+  var filter = e.target.value.toLowerCase();
+  document.querySelectorAll("table tr").forEach(function(row, i) {
+    if(i === 0) return; // skip header
+    var text = row.textContent.toLowerCase();
+    row.style.display = text.includes(filter) ? "" : "none";
+  });
+});
+</script>
+</body>
+</html>
+EOF
+
+echo "✅ Готово! Отвори '$OUT' в браузър, за да видиш търсачката и оцветения максимум."
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+CSV="${1:-report.csv}"
+OUT="${2:-report.html}"
+
 awk -F, '
 BEGIN {
   OFS=""
