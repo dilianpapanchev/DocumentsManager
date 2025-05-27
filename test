@@ -1,6 +1,267 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+CSV_INPUT="${1:-report.csv}"
+OUT_HTML="${2:-report.html}"
+
+# Проверка за наличен CSV
+if [[ ! -f "$CSV_INPUT" ]]; then
+  echo "❌ CSV файлът '$CSV_INPUT' не е намерен в $(pwd)" >&2
+  exit 1
+fi
+
+# Вграждане на CSV съдържанието (escape на backticks)
+CSV_CONTENT=$(sed 's/`/\\`/g' "$CSV_INPUT")
+
+# Генерираме HTML
+cat >"$OUT_HTML" <<EOF
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Advanced Report</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css"/>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet"/>
+  <link rel="stylesheet"
+        href="https://cdn.datatables.net/v/bs4/dt-1.13.4/b-2.3.6/r-2.5.0/datatables.min.css"/>
+  <style>
+    :root {
+      --primary-color: #4285f4;
+      --secondary-color: #f1f3f4;
+      --hover-color: #e8f0fe;
+      --border-color: #dadce0;
+      --text-color: #202124;
+      --light-text: #5f6368;
+      --max-highlight: #fff9c4;
+      --diff-positive: #e6f4ea;
+      --diff-negative: #fce8e6;
+    }
+    body {
+      font-family: 'Roboto',sans-serif; margin:0; padding:20px; background:#f8f9fa; color:var(--text-color);
+    }
+    .container {
+      background:#fff; border-radius:8px; box-shadow:0 1px 2px rgba(0,0,0,0.1); padding:20px;
+    }
+    h1 { color:var(--primary-color); font-weight:500; margin-top:0; }
+    .controls { display:flex; flex-wrap:wrap; gap:15px; margin-bottom:20px; align-items:center }
+    .controls input, .controls button { padding:8px 12px; border:1px solid var(--border-color); border-radius:4px; font-family:inherit }
+    .controls button { background:var(--primary-color); color:#fff; cursor:pointer; }
+    .controls button:hover { background:#3367d6; }
+    .table-container { overflow-x:auto; border:1px solid var(--border-color); border-radius:4px }
+    table { width:100%; border-collapse:collapse; }
+    th,td { padding:12px 15px; text-align:left; border-bottom:1px solid var(--border-color) }
+    th { background:var(--secondary-color); color:var(--light-text); position:relative; cursor:pointer }
+    tr:hover { background:var(--hover-color) }
+    th.sort-asc::after { content:" ↑"; color:var(--primary-color) }
+    th.sort-desc::after { content:" ↓"; color:var(--primary-color) }
+    td.max { background:var(--max-highlight); font-weight:500 }
+    .column-toggle { display:flex; flex-wrap:wrap; gap:8px; margin-bottom:15px }
+    .column-toggle label { display:flex; align-items:center; gap:5px; cursor:pointer; font-size:13px; background:var(--secondary-color); padding:5px 8px; border-radius:4px }
+    .hidden { display:none!important }
+    .diff-positive { background:var(--diff-positive) }
+    .diff-negative { background:var(--diff-negative) }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Advanced Report</h1>
+    <div class="controls">
+      <input type="text" id="search" placeholder="Search across all columns..."/>
+      <input type="text" id="start-date" class="date-picker" placeholder="From date"/>
+      <input type="text" id="end-date" class="date-picker" placeholder="To date"/>
+      <button id="apply-dates">Apply</button>
+      <button id="compare-dates">Compare Dates</button>
+      <button id="reset-all">Reset All</button>
+    </div>
+    <div class="column-toggle" id="column-toggle-container"></div>
+    <div class="table-container">
+      <table id="data-table"><thead></thead><tbody></tbody></table>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://code.jquery.com/jquery-3.6.1.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.datatables.net/v/bs4/dt-1.13.4/b-2.3.6/r-2.5.0/datatables.min.js"></script>
+
+  <script>
+    // Вградено CSV
+    const csvData = \`
+$CSV_CONTENT
+\`;
+
+    // Помощни функции
+    function parseCSV(text) {
+      return text.trim().split('\n').map(r=>r.split(','));
+    }
+    function parseElapsed(s) {
+      const [h,m,sec]=s.split(':').map(Number);
+      return h*3600+m*60+sec;
+    }
+    function formatElapsed(sec) {
+      const h=Math.floor(sec/3600), m=Math.floor((sec%3600)/60), s=sec%60;
+      return \`\${String(h).padStart(2,'0')}:\${String(m).padStart(2,'0')}:\${String(s).padStart(2,'0')}\`;
+    }
+
+    // Глобално състояние
+    let columns = [], dateCols = [], elapsedCols = [];
+    let allData = [], isComparing=false, compareIdx=[];
+
+    // Зареждане и инициализация
+    \$(document).ready(function(){
+      flatpickr('.date-picker',{dateFormat:'Y-m-d',allowInput:true});
+      const rows = parseCSV(csvData);
+      const header = rows.shift();
+      const N = (header.length-4)/2;
+      // Колони
+      header.forEach((h,i)=>{
+        const isDate = /date/i.test(h);
+        const isElapsed = /elapsed/i.test(h);
+        columns.push({name:h,hidden:false});
+        if(isDate) dateCols.push(i);
+        if(isElapsed) elapsedCols.push(i);
+      });
+      // Данни
+      rows.forEach(r=>{
+        let maxIdx=elapsedCols[0], maxVal=-1;
+        r.forEach((v,i)=> {
+          if(elapsedCols.includes(i) && v){
+            const secs=parseElapsed(v);
+            if(secs>maxVal){ maxVal=secs; maxIdx=i; }
+          }
+        });
+        allData.push({values:r,hidden:false,maxIdx,diff:{}}); 
+      });
+      initToggles();
+      renderTable();
+      // Events
+      \$('#search').on('input',filterData);
+      \$('#apply-dates').click(filterData);
+      \$('#compare-dates').click(doCompare);
+      \$('#reset-all').click(resetAll);
+      \$('#start-date, #end-date').change(storeCompareIdx);
+    });
+
+    function initToggles(){
+      const ct=\$('#column-toggle-container').empty();
+      columns.forEach((col,i)=>{
+        const chk=\$('<input type="checkbox">').prop('checked',!col.hidden)
+          .change(_=>{col.hidden=!chk.prop('checked');renderTable();});
+        ct.append(\$('<label>').append(chk,document.createTextNode(col.name)));
+      });
+    }
+
+    function renderTable(){
+      const tbl=\$('#data-table');
+      const thead=tbl.find('thead').empty().append('<tr>');
+      const tbody=tbl.find('tbody').empty();
+      // Header + Difference
+      columns.forEach((c,i)=>!c.hidden&& thead.append(\`<th data-col="\${i}">\${c.name}</th>\`));
+      thead.append('<th>Difference</th>');
+      thead.find('th').click(function(){
+        sortBy(+this.dataset.col);
+      });
+      // Body
+      allData.forEach(r=>{
+        if(r.hidden) return;
+        const tr=\$('<tr>');
+        columns.forEach((c,i)=> {
+          if(c.hidden) return;
+          const v=r.values[i];
+          const td=\$('<td>').text(v);
+          if(elapsedCols.includes(i)&&i===r.maxIdx) td.addClass('max');
+          if(isComparing && r.diff[i]!=null){
+            td.addClass(r.diff[i]>=0?'diff-positive':'diff-negative')
+              .append(' '+(r.diff[i]>=0?'+':'')+r.diff[i]);
+          }
+          tr.append(td);
+        });
+        // difference col
+        const dsum = elapsedCols.reduce((acc,i)=>acc+(r.diff[i]||0),0);
+        tr.append(\`<td>\${formatElapsed(dsum)}</td>\`);
+        tbody.append(tr);
+      });
+      // DataTable
+      tbl.DataTable({destroy:true,paging:false,scrollX:true,searching:true,dom:'Bfrtip',buttons:['colvis'],order:[]});
+    }
+
+    function sortBy(col){
+      allData.sort((a,b)=>{
+        const A=a.values[col], B=b.values[col];
+        const nA=parseFloat(A),nB=parseFloat(B);
+        let cmp=0;
+        if(!isNaN(nA)&&!isNaN(nB)){ cmp=nA-nB; }
+        else { cmp=A.localeCompare(B); }
+        return cmp;
+      });
+      renderTable();
+    }
+
+    function filterData(){
+      const term=\$('#search').val().toLowerCase();
+      const sD=\$('#start-date').val(), eD=\$('#end-date').val();
+      allData.forEach(r=>{
+        const bySearch=term? r.values.some((v,i)=>!columns[i].hidden && v.toLowerCase().includes(term)) : true;
+        const byDate=(sD||eD)? dateCols.some(i=>{
+          const d=r.values[i]; if(!d) return false;
+          const dd=d.split('T')[0];
+          return (!sD||dd>=sD)&&(!eD||dd<=eD);
+        }):true;
+        r.hidden=!(bySearch&&byDate);
+      });
+      renderTable();
+    }
+
+    function storeCompareIdx(){
+      const dval=this.value;
+      if(!dval) return;
+      const col=dateCols[0];
+      const idx=allData.findIndex(r=>r.values[col].startsWith(dval));
+      if(this.id==='start-date') compareIdx[0]=idx;
+      else compareIdx[1]=idx;
+    }
+
+    function doCompare(){
+      if(compareIdx.length<2||compareIdx[0]==null||compareIdx[1]==null){
+        alert('Изберете две дати!');
+        return;
+      }
+      allData.forEach(r=>{
+        r.diff={};
+        elapsedCols.forEach(i=>{
+          const v1=parseElapsed(allData[compareIdx[0]].values[i]);
+          const v2=parseElapsed(allData[compareIdx[1]].values[i]);
+          r.diff[i]=v2-v1;
+        });
+      });
+      isComparing=true;
+      renderTable();
+    }
+
+    function resetAll(){
+      \$('#search,#start-date,#end-date').val('');
+      columns.forEach(c=>c.hidden=false);
+      allData.forEach(r=>{r.hidden=false; r.diff={}}); 
+      isComparing=false; compareIdx=[];
+      initToggles();
+      renderTable();
+    }
+  </script>
+</body>
+</html>
+EOF
+
+echo "✅ Генериран $OUT_HTML – отвори го директно в браузър."
+
+
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+
 CSV="${1:-report.csv}"
 OUT="${2:-report.html}"
 
