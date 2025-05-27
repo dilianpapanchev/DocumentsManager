@@ -4,6 +4,116 @@ set -euo pipefail
 CSV="${1:-report.csv}"
 OUT="${2:-report.html}"
 
+if [[ ! -f "$CSV" ]]; then
+  echo "❌ Не открих CSV файла '$CSV' в $(pwd)" >&2
+  exit 1
+fi
+
+# Четем цялото CSV в една променлива (escape на backticks само)
+CSV_CONTENT=$(sed 's/`/\\`/g' "$CSV")
+
+cat >"$OUT" <<EOF
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Advanced Report</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet"
+        href="https://cdn.datatables.net/v/bs4/dt-1.13.4/b-2.3.6/r-2.5.0/datatables.min.css"/>
+  <style>
+    /* ...твоя CSS от примера... */
+    .dataTables_scrollBody { overflow-x:auto!important; }
+    td.max { background: var(--max-highlight) !important; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Advanced Report</h1>
+  <!-- ... твоя HTML за controls, toggles и т.н. ... -->
+  <div class="table-container">
+    <table id="data-table">
+      <thead></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script src="https://code.jquery.com/jquery-3.6.1.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.2/dist/js/bootstrap.bundle.min.js"></script>
+<script src="https://cdn.datatables.net/v/bs4/dt-1.13.4/b-2.3.6/r-2.5.0/datatables.min.js"></script>
+
+<script>
+// ─── ВГРАДЕНО CSV ───────────────────────────────────────────────────────────
+const csvData = \`
+$CSV_CONTENT
+\`;
+// ──────────────────────────────────────────────────────────────────────────────
+
+function parseCSV(text){
+  return text.trim().split('\\n').map(r => r.split(','));
+}
+
+$(function(){
+  const header = parseCSV(csvData).shift();
+  const data   = parseCSV(csvData).slice(1);
+  const N      = (header.length - 4) / 2;
+
+  // … тук пълниш columns[], dateColumns[], elapsedColumns[] както преди …
+
+  // Рендер на хедъра + Difference
+  const thead = $('#data-table thead tr');
+  header.forEach(h => thead.append('<th>' + h + '</th>'));
+  thead.append('<th>Difference</th>');
+
+  // Рендер на body
+  data.forEach(row => {
+    // … същата логика за изчисляване на maxIdx и diffStr …
+    const tr = $('<tr>');
+    // първите 4 поли
+    row.slice(0,4).forEach(v => tr.append('<td>'+v+'</td>'));
+    // date/elapsed двойки + highlight
+    for(let j=0;j<N;j++){
+      tr.append('<td>'+row[4+2*j]+'</td>');
+      const cls = (j===maxIdx?'max':'');
+      tr.append('<td class="'+cls+'">'+row[4+2*j+1]+'</td>');
+    }
+    tr.append('<td>'+diffStr+'</td>');
+    $('#data-table tbody').append(tr);
+  });
+
+  // Инициализиране на DataTable
+  $('#data-table').DataTable({
+    dom: 'Bfrtip',
+    paging:   false,
+    scrollX:  true,
+    searching:true,
+    buttons: ['colvis'],
+    order:   [],
+    columnDefs:[{ targets:[0], orderable:false }]
+  });
+});
+</script>
+
+</body>
+</html>
+EOF
+
+echo "✅ Генериран $OUT – отвори го директно в браузър."
+
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+CSV="${1:-report.csv}"
+OUT="${2:-report.html}"
+
 # Генерираме HTML с модерен дизайн и всички функционалности
 cat >"$OUT" <<'EOF'
 <!DOCTYPE html>
