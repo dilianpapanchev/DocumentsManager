@@ -1,6 +1,76 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Брой файла назад (по подразбиране 31)
+N=${1:-31}
+
+# Вземаме последните N файла (по modification time)
+mapfile -t files < <(ls -1tr JT* | tail -n "$N")
+if [ "${#files[@]}" -lt 1 ]; then
+  echo "Няма намерени JT* файлове."
+  exit 1
+fi
+
+awk -F, -v N="$N" '
+  BEGIN {
+    OFS=","
+    # Заглавен ред
+    printf "STATUS,STAGE,BATCH,JOB.NAME"
+    for(i=1;i<=N;i++){
+      printf ",Date%d,Elapsed%d", i, i
+    }
+    print ""
+    idx=0
+  }
+  # За всеки файл увеличаваме idx
+  FNR==1 { idx++ }
+  {
+    # ключ за JOB
+    key = $1 SUBSEP $2 SUBSEP $3
+    if (!(key in seen)) {
+      seen[key]=1
+      keys[++K]=key
+    }
+    # запомняме датата за този файл (една и съща per файл)
+    if (!(idx in dates)) {
+      dates[idx] = $4
+    }
+    # Elapsed и в секунди
+    elapsed[key,idx] = $8
+    split($8, T, ":")
+    secs[key,idx]    = T[1]*3600 + T[2]*60 + T[3]
+  }
+  END {
+    # за всеки JOB ключ
+    for(j=1;j<=K;j++){
+      key = keys[j]
+      # статус: сравняваме първи vs последен ден
+      s1 = (key,1 in secs ? secs[key,1] : 0)
+      sN = (key,N in secs ? secs[key,N] : 0)
+      status = (sN > s1 ? "↑" : (sN < s1 ? "↓" : "="))
+      # разбиваме ключа обратно на STAGE,BATCH,JOB.NAME
+      split(key, F, SUBSEP)
+      printf "%s,%s,%s,%s", status, F[1], F[2], F[3]
+      # и за всеки ден Datei, Elapsedi
+      for(i=1;i<=N;i++){
+        d = (i in dates ? dates[i] : "")
+        e = ((key,i) in elapsed ? elapsed[key,i] : "")
+        printf ",%s,%s", d, e
+      }
+      print ""
+    }
+  }
+' "${files[@]}"
+
+
+
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+
 # Брой дни назад (по подразбиране 31; можеш да подадеш друго число като първи аргумент)
 N=${1:-31}
 
