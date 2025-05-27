@@ -1,6 +1,260 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Ако скриптът е в друга папка, се местим там
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+CSV="${1:-output.csv}"
+OUT="${2:-report.html}"
+
+if [[ ! -f "$CSV" ]]; then
+  echo "❌ Не открих '$CSV' в $(pwd)" >&2
+  ls -1 >&2
+  exit 1
+fi
+
+# Четем целия CSV в масив от редове
+mapfile -t lines < "$CSV"
+# Първият ред е header
+IFS=',' read -r -a hdr <<< "${lines[0]}"
+# Изчисляваме N = брой date/elapsed двойки
+len=${#hdr[@]}
+N=$(( (len - 4 - 2) / 2 ))
+# Вземаме истинските дати от първия data-ред
+IFS=',' read -r -a firstRow <<< "${lines[1]}"
+dateLabels=()
+for i in $(seq 0 $((N-1))); do
+  idx=$((4 + 2*i))
+  dateLabels+=("${firstRow[idx]}")
+done
+# Средният и разликата са след тях
+avgLabel="${hdr[4 + 2*N]}"
+diffLabel="${hdr[5 + 2*N]}"
+# Първите 4 колони
+staticLabels=( "${hdr[0]}" "${hdr[1]}" "${hdr[2]}" "${hdr[3]}" )
+# Финален header
+finalHeader=( "${staticLabels[@]}" "${dateLabels[@]}" "$avgLabel" "$diffLabel" )
+
+# Сглобяваме data масив: за всеки ред – 4 статични, N elapsed, AVG, DIFF
+dataRows=()
+for ((r=1; r<${#lines[@]}; r++)); do
+  IFS=',' read -r -a row <<< "${lines[r]}"
+  # статични
+  out=( "${row[0]}" "${row[1]}" "${row[2]}" "${row[3]}" )
+  # elapsed
+  for i in $(seq 0 $((N-1))); do
+    out+=( "${row[4 + 2*i + 1]}" )
+  done
+  # average & difference
+  out+=( "${row[4 + 2*N]}" "${row[5 + 2*N]}" )
+  # join със ‘|’ (ще split-нем в JS)
+  dataRows+=( "$(IFS='|'; echo "${out[*]}")" )
+done
+
+# Генерираме HTML
+cat > "$OUT" <<EOF
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Interactive Report</title>
+<style>
+  body{margin:0;padding:20px;font-family:sans-serif;overflow-x:auto;}
+  .controls{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:15px}
+  .controls input,.controls button{padding:6px 10px;}
+  .toggles{margin-bottom:15px}
+  table{border-collapse:collapse;width:100%}
+  th,td{border:1px solid #ccc;padding:8px;white-space:nowrap}
+  th{background:#f0f0f0;cursor:pointer;position:relative}
+  th.sort-asc::after{content:" ↑"} th.sort-desc::after{content:" ↓"}
+  td.max{background:#fff9c4} td.diff-pos{background:#e6f4ea}
+  td.diff-neg{background:#fce8e6}
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <input id="search"    placeholder="Global search…"/>
+  <input id="start" type="date"/>
+  <input id="end"   type="date"/>
+  <button id="apply" >Apply Date Filter</button>
+  <button id="all"   >All Dates</button>
+  <button id="cmp"   >Compare Dates</button>
+  <button id="reset" >Reset All</button>
+</div>
+
+<div class="toggles" id="toggles"></div>
+<table id="report">
+  <thead id="thead"></thead>
+  <tbody id="tbody"></tbody>
+</table>
+
+<script>
+// header и data ги вграждаме директно от bash-а
+const header = [$(printf '"%s",' "${finalHeader[@]}" )].map(h=>h.replace(/",$/,''));
+const rawData = [
+$(printf "  '%s',\n" "${dataRows[@]}")
+].map(r=>r.split('|'));
+
+let cols = header.map((name,i)=>({name,idx:i,hidden:false}));
+let rows = rawData.map(r=>({vals:r,hidden:false}));
+let sortState={col:null,dir:'asc'};
+let cmpDates=[null,null];
+
+// init
+document.addEventListener('DOMContentLoaded',()=>{
+  renderToggles();
+  renderTable();
+  document.getElementById('search').addEventListener('input',filter);
+  document.getElementById('apply').addEventListener('click',filter);
+  document.getElementById('all').addEventListener('click',allDates);
+  document.getElementById('cmp').addEventListener('click',compare);
+  document.getElementById('reset').addEventListener('click',resetAll);
+  document.getElementById('start').addEventListener('change',()=>cmpDates[0]=this.value.replace(/-/g,''));
+  document.getElementById('end').addEventListener('change',()=>cmpDates[1]=this.value.replace(/-/g,''));
+});
+
+// рендер чекбоксове
+function renderToggles(){
+  const c=document.getElementById('toggles'); c.innerHTML='';
+  cols.forEach((cdef,i)=>{
+    const lbl=document.createElement('label');
+    const cb=document.createElement('input');
+    cb.type='checkbox'; cb.checked=!cdef.hidden;
+    cb.onchange=()=>{ cdef.hidden=!cb.checked; renderTable(); };
+    lbl.append(cb,' ',cdef.name);
+    c.append(lbl);
+  });
+}
+
+// рендер на таблица
+function renderTable(){
+  const thead=document.getElementById('thead'),
+        tbody=document.getElementById('tbody');
+  thead.innerHTML=''; tbody.innerHTML='';
+
+  // заглавен ред
+  const trh=document.createElement('tr');
+  cols.forEach((cdef,i)=>{
+    if(cdef.hidden) return;
+    const th=document.createElement('th');
+    th.textContent=cdef.name;
+    th.onclick=()=>sortBy(i);
+    if(sortState.col===i)
+      th.classList.add(sortState.dir==='asc'?'sort-asc':'sort-desc');
+    trh.append(th);
+  });
+  thead.append(trh);
+
+  // данни
+  rows.forEach(rdef=>{
+    if(rdef.hidden) return;
+    const tr=document.createElement('tr');
+    cols.forEach((cdef,i)=>{
+      if(cdef.hidden) return;
+      const td=document.createElement('td');
+      td.textContent = rdef.vals[i]||'';
+      // mark max (първи динамичен >4)
+      if(i>=4 && i<4+dateLabels.length && +parseSec(rdef.vals[i])===Math.max(...dateLabels.map((_,j)=>parseSec(rdef.vals[4+j]))))
+        td.classList.add('max');
+      tr.append(td);
+    });
+    tbody.append(tr);
+  });
+}
+
+// сортиране toggle asc/desc
+function sortBy(ci){
+  document.querySelectorAll('th').forEach(th=>th.classList.remove('sort-asc','sort-desc'));
+  if(sortState.col===ci && sortState.dir==='asc') sortState.dir='desc';
+  else sortState.dir='asc'; sortState.col=ci;
+  const ths=document.querySelectorAll('th')[ci];
+  ths.classList.add(sortState.dir==='asc'?'sort-asc':'sort-desc');
+  rows.sort((a,b)=>{
+    const A=a.vals[ci], B=b.vals[ci];
+    const nA=parseFloat(A), nB=parseFloat(B);
+    let cmp=!isNaN(nA)&&!isNaN(nB)? nA-nB : A.localeCompare(B);
+    return sortState.dir==='asc'?cmp:-cmp;
+  });
+  renderTable();
+}
+
+// филтър
+function filter(){
+  const term=document.getElementById('search').value.toLowerCase();
+  const sd=document.getElementById('start').value.replace(/-/g,''),
+        ed=document.getElementById('end'  ).value.replace(/-/g,'');
+  rows.forEach(rdef=>{
+    let ok=true;
+    if(term) ok = rdef.vals.some((v,i)=>!cols[i].hidden && v.toLowerCase().includes(term));
+    if(ok && (sd||ed)){
+      const v=rdef.vals[4];
+      ok = (!sd||v>=sd) && (!ed||v<=ed);
+    }
+    rdef.hidden=!ok;
+  });
+  renderTable();
+}
+
+// All Dates
+function allDates(){
+  const dates = rows.map(r=>r.vals[4]).sort();
+  const s=dates[0], e=dates.at(-1);
+  document.getElementById('start').value=s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6);
+  document.getElementById('end')  .value=e.slice(0,4)+'-'+e.slice(4,6)+'-'+e.slice(6);
+  filter();
+}
+
+// Compare Dates
+function compare(){
+  if(!cmpDates[0]||!cmpDates[1]) return alert('Изберете две дати');
+  const idx1=rows.findIndex(r=>r.vals[4]===cmpDates[0]),
+        idx2=rows.findIndex(r=>r.vals[4]===cmpDates[1]);
+  if(idx1<0||idx2<0) return alert('Няма намерен ред');
+  rows.forEach((r,i)=>{
+    const v1=parseSec(rows[idx1].vals[5]),
+          v2=parseSec(rows[idx2].vals[5]);
+    r.diffAll=v2-v1;
+    const tdDiff=document.querySelectorAll('tbody tr')[i]
+             .appendChild(document.createElement('td'));
+    tdDiff.textContent = fmtDiff(r.diffAll);
+    tdDiff.classList.add(r.diffAll>=0?'diff-pos':'diff-neg');
+  });
+}
+
+// reset
+function resetAll(){
+  document.getElementById('search').value='';
+  document.getElementById('start').value='';
+  document.getElementById('end').value='';
+  cols.forEach(c=>c.hidden=false);
+  rows.forEach(r=>{ r.hidden=false; r.diffAll=0; });
+  sortState={col:null,dir:'asc'};
+  renderToggles();
+  renderTable();
+}
+
+// parse HH:MM:SS
+function parseSec(s){ const [h,m,x]=(s||'00:00:00').split(':').map(Number); return h*3600+m*60+x; }
+function fmtDiff(n){ return (n>=0?'+':'')+n; }
+
+</script>
+</body>
+</html>
+EOF
+
+echo "✅ Генериран $OUT – отвори в браузър!"
+
+
+
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+
 # Отиваме в папката на скрипта
 cd "$(dirname "${BASH_SOURCE[0]}")"
 
