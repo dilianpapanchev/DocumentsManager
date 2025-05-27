@@ -4,6 +4,637 @@ set -euo pipefail
 CSV="${1:-report.csv}"
 OUT="${2:-report.html}"
 
+# Генерираме HTML с модерен дизайн и всички функционалности
+cat >"$OUT" <<'EOF'
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Advanced Report</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --primary-color: #4285f4;
+    --secondary-color: #f1f3f4;
+    --hover-color: #e8f0fe;
+    --border-color: #dadce0;
+    --text-color: #202124;
+    --light-text: #5f6368;
+    --max-highlight: #fff9c4;
+    --diff-positive: #e6f4ea;
+    --diff-negative: #fce8e6;
+  }
+  
+  body {
+    font-family: 'Roboto', sans-serif;
+    margin: 0;
+    padding: 20px;
+    color: var(--text-color);
+    background-color: #f8f9fa;
+  }
+  
+  .container {
+    max-width: 100%;
+    margin: 0 auto;
+    background: white;
+    border-radius: 8px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+    padding: 20px;
+  }
+  
+  h1 {
+    margin-top: 0;
+    color: var(--primary-color);
+    font-weight: 500;
+  }
+  
+  .controls {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 15px;
+    margin-bottom: 20px;
+    align-items: center;
+  }
+  
+  .control-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--secondary-color);
+    padding: 8px 12px;
+    border-radius: 4px;
+  }
+  
+  label {
+    font-size: 14px;
+    color: var(--light-text);
+  }
+  
+  input, button, select {
+    padding: 8px 12px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    font-family: inherit;
+  }
+  
+  button {
+    background-color: var(--primary-color);
+    color: white;
+    border: none;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  
+  button:hover {
+    background-color: #3367d6;
+  }
+  
+  #search {
+    flex-grow: 1;
+    min-width: 200px;
+  }
+  
+  .table-container {
+    overflow-x: auto;
+    margin-top: 20px;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+  }
+  
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  
+  th, td {
+    padding: 12px 15px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+  }
+  
+  th {
+    background-color: var(--secondary-color);
+    color: var(--light-text);
+    font-weight: 500;
+    position: relative;
+    cursor: pointer;
+    user-select: none;
+  }
+  
+  th:hover {
+    background-color: var(--hover-color);
+  }
+  
+  th.sort-asc::after {
+    content: " ↑";
+    color: var(--primary-color);
+  }
+  
+  th.sort-desc::after {
+    content: " ↓";
+    color: var(--primary-color);
+  }
+  
+  tr:hover {
+    background-color: var(--hover-color);
+  }
+  
+  .max {
+    background-color: var(--max-highlight);
+    font-weight: 500;
+  }
+  
+  .column-toggle {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 15px;
+  }
+  
+  .column-toggle label {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    cursor: pointer;
+    font-size: 13px;
+    padding: 5px 8px;
+    background: var(--secondary-color);
+    border-radius: 4px;
+  }
+  
+  .hidden {
+    display: none !important;
+  }
+  
+  .date-range {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  
+  .date-range input {
+    width: 150px;
+  }
+  
+  .diff-positive {
+    background-color: var(--diff-positive);
+  }
+  
+  .diff-negative {
+    background-color: var(--diff-negative);
+  }
+  
+  @media (max-width: 768px) {
+    .controls {
+      flex-direction: column;
+      align-items: stretch;
+    }
+    
+    #search {
+      width: 100%;
+    }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Advanced Report</h1>
+  
+  <div class="controls">
+    <input type="text" id="search" placeholder="Search across all columns...">
+    
+    <div class="control-group date-range">
+      <label for="start-date">From:</label>
+      <input type="text" id="start-date" class="date-picker" placeholder="Start date">
+      <label for="end-date">To:</label>
+      <input type="text" id="end-date" class="date-picker" placeholder="End date">
+      <button id="apply-dates">Apply</button>
+    </div>
+    
+    <button id="compare-dates">Compare Dates</button>
+    <button id="reset-all">Reset All</button>
+  </div>
+  
+  <div class="column-toggle" id="column-toggle-container">
+    <!-- Column toggles will be inserted here by JavaScript -->
+  </div>
+  
+  <div class="table-container">
+    <table id="data-table">
+      <thead></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+<script>
+// Глобални променливи за състоянието
+let allData = [];
+let columns = [];
+let dateColumns = [];
+let elapsedColumns = [];
+let currentSort = { column: null, direction: 'asc' };
+let isComparing = false;
+let comparedDateIndices = [];
+
+// Инициализация на календарите
+flatpickr(".date-picker", {
+  dateFormat: "Y-m-d",
+  allowInput: true
+});
+
+// Зареждане на данните от CSV таблицата в HTML
+function loadData() {
+  const table = document.getElementById('data-table');
+  const thead = table.querySelector('thead');
+  const tbody = table.querySelector('tbody');
+  
+  // Изчистване на текущите данни
+  thead.innerHTML = '';
+  tbody.innerHTML = '';
+  
+  // Създаване на заглавния ред
+  const headerRow = document.createElement('tr');
+  columns.forEach((col, index) => {
+    if (col.hidden) return;
+    
+    const th = document.createElement('th');
+    th.textContent = col.name;
+    th.dataset.columnIndex = index;
+    th.addEventListener('click', () => sortData(index));
+    
+    if (currentSort.column === index) {
+      th.classList.add(currentSort.direction === 'asc' ? 'sort-asc' : 'sort-desc');
+    }
+    
+    headerRow.appendChild(th);
+  });
+  thead.appendChild(headerRow);
+  
+  // Попълване на данните
+  allData.forEach(row => {
+    if (row.hidden) return;
+    
+    const tr = document.createElement('tr');
+    columns.forEach((col, colIndex) => {
+      if (col.hidden) return;
+      
+      const td = document.createElement('td');
+      td.textContent = row.values[colIndex];
+      
+      // Маркиране на максималните стойности в Elapsed колоните
+      if (elapsedColumns.includes(colIndex) && row.maxElapsedIndex === colIndex) {
+        td.classList.add('max');
+      }
+      
+      // Маркиране на разликите при сравнение на дати
+      if (isComparing && row.diffValues && row.diffValues[colIndex] !== undefined) {
+        const diff = row.diffValues[colIndex];
+        if (diff > 0) {
+          td.classList.add('diff-positive');
+          td.textContent += ` (+${diff})`;
+        } else if (diff < 0) {
+          td.classList.add('diff-negative');
+          td.textContent += ` (${diff})`;
+        }
+      }
+      
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+// Функция за сортиране
+function sortData(columnIndex) {
+  if (currentSort.column === columnIndex) {
+    // Промяна на посоката, ако вече сме сортирали по тази колона
+    currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+  } else {
+    // Сортиране по нова колона във възходящ ред
+    currentSort.column = columnIndex;
+    currentSort.direction = 'asc';
+  }
+  
+  allData.sort((a, b) => {
+    const valA = a.values[columnIndex];
+    const valB = b.values[columnIndex];
+    
+    // Опит за разпознаване на числа и дати
+    const numA = parseFloat(valA);
+    const numB = parseFloat(valB);
+    const dateA = new Date(valA);
+    const dateB = new Date(valB);
+    
+    let comparison = 0;
+    
+    if (!isNaN(numA) {
+      // Числено сравнение
+      comparison = numA - numB;
+    } else if (dateA instanceof Date && !isNaN(dateA) {
+      // Сравнение на дати
+      comparison = dateA - dateB;
+    } else {
+      // Текстово сравнение
+      comparison = valA.localeCompare(valB);
+    }
+    
+    return currentSort.direction === 'asc' ? comparison : -comparison;
+  });
+  
+  loadData();
+}
+
+// Филтриране на данните
+function filterData() {
+  const searchTerm = document.getElementById('search').value.toLowerCase();
+  const startDate = document.getElementById('start-date').value;
+  const endDate = document.getElementById('end-date').value;
+  
+  allData.forEach(row => {
+    let matchesSearch = true;
+    let matchesDate = true;
+    
+    // Филтриране по търсене
+    if (searchTerm) {
+      matchesSearch = columns.some((col, index) => {
+        if (col.hidden) return false;
+        return row.values[index].toLowerCase().includes(searchTerm);
+      });
+    }
+    
+    // Филтриране по дати
+    if (startDate || endDate) {
+      matchesDate = dateColumns.some(dateCol => {
+        const dateStr = row.values[dateCol];
+        if (!dateStr) return false;
+        
+        const rowDate = new Date(dateStr);
+        if (isNaN(rowDate)) return false;
+        
+        const compareDate = rowDate.toISOString().split('T')[0];
+        
+        if (startDate && endDate) {
+          return compareDate >= startDate && compareDate <= endDate;
+        } else if (startDate) {
+          return compareDate >= startDate;
+        } else if (endDate) {
+          return compareDate <= endDate;
+        }
+        return true;
+      });
+    }
+    
+    row.hidden = !(matchesSearch && matchesDate);
+  });
+  
+  loadData();
+}
+
+// Сравнение на дати
+function compareDates() {
+  if (comparedDateIndices.length < 2) {
+    alert('Please select two different dates first by using the date filters.');
+    return;
+  }
+  
+  const [firstIndex, secondIndex] = comparedDateIndices;
+  const firstRow = allData[firstIndex];
+  const secondRow = allData[secondIndex];
+  
+  allData.forEach(row => {
+    row.diffValues = [];
+    
+    columns.forEach((col, colIndex) => {
+      if (elapsedColumns.includes(colIndex)) {
+        // Изчисляване на разликата за Elapsed времето
+        const time1 = parseElapsedTime(firstRow.values[colIndex]);
+        const time2 = parseElapsedTime(secondRow.values[colIndex]);
+        row.diffValues[colIndex] = time2 - time1;
+      } else if (!isNaN(parseFloat(row.values[colIndex]))) {
+        // Изчисляване на разликата за числови стойности
+        const num1 = parseFloat(firstRow.values[colIndex]);
+        const num2 = parseFloat(secondRow.values[colIndex]);
+        row.diffValues[colIndex] = num2 - num1;
+      }
+    });
+  });
+  
+  isComparing = true;
+  loadData();
+}
+
+// Парсване на Elapsed време във секунди
+function parseElapsedTime(timeStr) {
+  const parts = timeStr.split(':');
+  if (parts.length === 3) {
+    return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2]);
+  }
+  return 0;
+}
+
+// Форматиране на секунди обратно във формат HH:MM:SS
+function formatElapsedTime(seconds) {
+  const hrs = Math.floor(seconds / 3600);
+  const mins = Math.floor((seconds % 3600) / 60);
+  const secs = seconds % 60;
+  return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+}
+
+// Инициализация на колоните за скриване/показване
+function initColumnToggles() {
+  const container = document.getElementById('column-toggle-container');
+  container.innerHTML = '';
+  
+  columns.forEach((col, index) => {
+    const checkboxId = `col-toggle-${index}`;
+    const label = document.createElement('label');
+    
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.id = checkboxId;
+    checkbox.checked = !col.hidden;
+    checkbox.addEventListener('change', () => {
+      col.hidden = !checkbox.checked;
+      loadData();
+    });
+    
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(col.name));
+    container.appendChild(label);
+  });
+}
+
+// Зареждане на CSV данните
+function parseCSV(csv) {
+  const lines = csv.split('\n');
+  const headers = lines[0].split(',').map(h => h.trim());
+  
+  // Инициализиране на колоните
+  columns = headers.map((header, index) => {
+    const isDate = header.toLowerCase().includes('date');
+    const isElapsed = header.toLowerCase().includes('elapsed');
+    
+    if (isDate) dateColumns.push(index);
+    if (isElapsed) elapsedColumns.push(index);
+    
+    return {
+      name: header,
+      hidden: false,
+      isDate,
+      isElapsed
+    };
+  });
+  
+  // Парсване на редовете
+  allData = lines.slice(1).map(line => {
+    const values = line.split(',');
+    let maxElapsedIndex = -1;
+    let maxElapsed = -1;
+    
+    // Намиране на максималното Elapsed време
+    elapsedColumns.forEach(colIndex => {
+      if (values[colIndex]) {
+        const seconds = parseElapsedTime(values[colIndex]);
+        if (seconds > maxElapsed) {
+          maxElapsed = seconds;
+          maxElapsedIndex = colIndex;
+        }
+      }
+    });
+    
+    return {
+      values,
+      hidden: false,
+      maxElapsedIndex,
+      diffValues: null
+    };
+  });
+  
+  // Инициализиране на UI елементите
+  initColumnToggles();
+  loadData();
+}
+
+// Зареждане на CSV файла
+function loadCSV() {
+  return fetch(window.location.href)
+    .then(response => response.text())
+    .then(csv => {
+      // Премахване на BOM символа, ако има такъв
+      if (csv.charCodeAt(0) === 0xFEFF) {
+        csv = csv.substring(1);
+      }
+      parseCSV(csv);
+    })
+    .catch(error => {
+      console.error('Error loading CSV:', error);
+      alert('Error loading CSV data. Please check console for details.');
+    });
+}
+
+// Инициализация на event listeners
+function initEventListeners() {
+  document.getElementById('search').addEventListener('input', filterData);
+  document.getElementById('apply-dates').addEventListener('click', filterData);
+  document.getElementById('compare-dates').addEventListener('click', compareDates);
+  
+  document.getElementById('reset-all').addEventListener('click', () => {
+    // Нулиране на всички филтри
+    document.getElementById('search').value = '';
+    document.getElementById('start-date').value = '';
+    document.getElementById('end-date').value = '';
+    
+    // Нулиране на скритите колони
+    columns.forEach(col => col.hidden = false);
+    
+    // Нулиране на сравнението
+    isComparing = false;
+    comparedDateIndices = [];
+    
+    // Нулиране на сортирането
+    currentSort = { column: null, direction: 'asc' };
+    
+    // Нулиране на скриването на редове
+    allData.forEach(row => row.hidden = false);
+    
+    // Презареждане на UI
+    initColumnToggles();
+    filterData();
+  });
+  
+  // Запазване на индексите на избраните дати
+  document.getElementById('start-date').addEventListener('change', function() {
+    const date = this.value;
+    if (!date) return;
+    
+    // Намиране на първия ред, който съвпада с избраната дата
+    const index = allData.findIndex(row => {
+      return dateColumns.some(colIndex => {
+        const rowDate = new Date(row.values[colIndex]);
+        return !isNaN(rowDate) && rowDate.toISOString().split('T')[0] === date;
+      });
+    });
+    
+    if (index !== -1) {
+      comparedDateIndices[0] = index;
+    }
+  });
+  
+  document.getElementById('end-date').addEventListener('change', function() {
+    const date = this.value;
+    if (!date) return;
+    
+    // Намиране на първия ред, който съвпада с избраната дата
+    const index = allData.findIndex(row => {
+      return dateColumns.some(colIndex => {
+        const rowDate = new Date(row.values[colIndex]);
+        return !isNaN(rowDate) && rowDate.toISOString().split('T')[0] === date;
+      });
+    });
+    
+    if (index !== -1) {
+      comparedDateIndices[1] = index;
+    }
+  });
+}
+
+// Стартиране на приложението при зареждане на страницата
+document.addEventListener('DOMContentLoaded', () => {
+  initEventListeners();
+  loadCSV();
+});
+</script>
+</body>
+</html>
+EOF
+
+# Вмъкване на CSV данните директно в HTML като JavaScript променлива
+echo "<script>" >> "$OUT"
+echo "// CSV data" >> "$OUT"
+echo "const csvData = \`" >> "$OUT"
+cat "$CSV" >> "$OUT"
+echo "\`;" >> "$OUT"
+echo "// End of CSV data" >> "$OUT"
+echo "</script>" >> "$OUT"
+
+echo "✅ Готово! Отвори '$OUT' в браузър."
+
+
+
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+
+CSV="${1:-report.csv}"
+OUT="${2:-report.html}"
+
 # 1) Записваме началото на HTML + стилове + търсачка
 cat >"$OUT" <<'EOF'
 <!DOCTYPE html>
