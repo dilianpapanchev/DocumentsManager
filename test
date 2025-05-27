@@ -1,4 +1,73 @@
 #!/usr/bin/env bash
+set -euo pipefail
+
+# ако подадеш един аргумент, това е броят дни назад; иначе – 31
+N=${1:-31}
+
+# 1) събираме последните N файла по modification time (ls -1tr стартира старо->ново)
+mapfile -t files < <(ls -1tr JT* | tail -n "$N")
+
+if [ "${#files[@]}" -lt 2 ]; then
+  echo "Няма достатъчно файлове в JT* (трябват поне 2 от последните $N)."
+  exit 1
+fi
+
+# Печатаме header само веднъж
+echo "BATCH.STAGE,BATCH,JOB.NAME,Date1,Elapsed1,Date2,Elapsed2,Diff"
+
+# 2) за всеки два поредни файла – старият и следващия
+for ((i=1; i<${#files[@]}; i++)); do
+  f1=${files[i-1]}
+  f2=${files[i]}
+
+  # стартираме awk за сравнение и филтриране
+  awk -F, -v OFS=, '
+    FNR==NR {
+      # четем file1
+      key            = $1 FS $2 FS $3
+      date1[key]     = $4
+      elapsed1[key]  = $8
+      split($8, t1, ":")
+      secs1[key]     = t1[1]*3600 + t1[2]*60 + t1[3]
+      next
+    }
+    {
+      # четем file2
+      key            = $1 FS $2 FS $3
+      d2             = $4
+      e2             = $8
+      split(e2, t2, ":")
+      secs2          = t2[1]*3600 + t2[2]*60 + t2[3]
+
+      # delta = secs1 - secs2 (в полза на date1)
+      delta          = (key in secs1 ? secs1[key] : 0) - secs2
+
+      # печатаме само ако secs1 > secs2 (т.е. date1 е по-бавно)
+      if (secs1[key] > secs2) {
+        # форматираме Diff като HH:MM:SS (положително число)
+        hh   = int(delta/3600)
+        mm   = int((delta%3600)/60)
+        ss   = delta % 60
+        diff = sprintf("%02d:%02d:%02d", hh, mm, ss)
+
+        # стрелката винаги ↑ (date1 е по-бавно)
+        arrow = "↑"
+
+        # отпечатваме:
+        #   arrow+stage, batch, job.name,
+        #   date1, elapsed1,
+        #   date2, elapsed2,
+        #   diff
+        print arrow $1, $2, $3, date1[key], elapsed1[key], d2, e2, diff
+      }
+    }
+  ' "${f1}" "${f2}"
+done
+
+
+
+
+#!/usr/bin/env bash
 
 # Usage check
 if [ $# -ne 2 ]; then
