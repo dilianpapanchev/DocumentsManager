@@ -1,5 +1,76 @@
 #!/bin/bash
 
+if [ $# -ne 2 ]; then
+  echo "Usage: $0 <DATE1> <DATE2>"
+  exit 1
+fi
+
+DATE1="$1"
+DATE2="$2"
+
+FILE1=$(ls JT*"$DATE1"*.CSV 2>/dev/null | head -n 1)
+FILE2=$(ls JT*"$DATE2"*.CSV 2>/dev/null | head -n 1)
+
+if [ ! -f "$FILE1" ] || [ ! -f "$FILE2" ]; then
+  echo "Missing input files for given dates."
+  exit 1
+fi
+
+echo "Сравнение на $FILE1 с $FILE2 по Elapsed Time (поле 8)"
+echo "Поле1,Поле2,Поле3,Поле4,Start1,Stop1,Elapsed1,Start2,Stop2,Elapsed2,Разлика"
+
+awk -F',' '
+function hms_to_minutes(t,   h,m,s) {
+  split(t, a, ":");
+  h = a[1]; m = a[2]; s = a[3];
+  return h * 60 + m + s / 60;
+}
+{
+  key = $1","$2","$3","$4;
+  data[key] = $6","$7","$8;
+  elapsed[key] = hms_to_minutes($8);
+}
+' "$FILE2" > /tmp/jt2.map
+
+awk -F',' -v f2="/tmp/jt2.map" '
+function hms_to_minutes(t,   h,m,s) {
+  split(t, a, ":");
+  h = a[1]; m = a[2]; s = a[3];
+  return h * 60 + m + s / 60;
+}
+function minutes_to_hhmm(mm,   h, m) {
+  sign = (mm < 0) ? "-" : "";
+  mm = (mm < 0) ? -mm : mm;
+  h = int(mm);
+  m = int((mm - h) * 60 + 0.5);
+  return sign sprintf("%d:%02d", h, m);
+}
+BEGIN {
+  while ((getline < f2) > 0) {
+    split($0, parts, " ");
+    split(parts[1], k, "=");
+    split(k[2], d, ",");
+    key = d[1]","d[2]","d[3]","d[4];
+    info[key] = d[5]","d[6]","d[7];
+    e2[key] = hms_to_minutes(d[7]);
+  }
+}
+{
+  key = $1","$2","$3","$4;
+  if (key in info) {
+    e1 = hms_to_minutes($8);
+    diff = e1 - e2[key];
+    printf "%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s\n", $1,$2,$3,$4,$6,$7,$8,info[key],minutes_to_hhmm(diff);
+  }
+}
+' "$FILE1" | sort -t',' -k11,11
+
+
+
+
+
+#!/bin/bash
+
 d1="$1"
 d2="$2"
 
