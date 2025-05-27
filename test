@@ -9,6 +9,72 @@ fi
 d1=$1
 d2=$2
 
+# Find files
+f1=(JT*${d1}*)
+f2=(JT*${d2}*)
+if [ ! -f "${f1[0]}" ] || [ ! -f "${f2[0]}" ]; then
+  echo "Не намерих файлове JT*${d1}* или JT*${d2}*"
+  exit 1
+fi
+file1=${f1[0]}
+file2=${f2[0]}
+
+# Header
+echo "BATCH.STAGE,BATCH,JOB.NAME,Date1,Elapsed1,Date2,Elapsed2,Diff"
+
+# awk + sort + cut
+awk -F, -v OFS=, '
+  # Четем първи файл: запазваме по ключ (1,2,3) датата и elapsed, и изчисляваме secs1
+  FNR==NR {
+    key = $1 FS $2 FS $3
+    date1[key]    = $4
+    elapsed1[key] = $8
+    split($8, t, ":")
+    secs1[key]    = t[1]*3600 + t[2]*60 + t[3]
+    next
+  }
+  # Втори файл: смятаме secs2 и delta
+  {
+    key    = $1 FS $2 FS $3
+    d2     = $4
+    e2     = $8
+    split(e2, t2, ":")
+    secs2  = t2[1]*3600 + t2[2]*60 + t2[3]
+    s1     = (key in secs1 ? secs1[key] : 0)
+    delta  = secs2 - s1
+
+    # Форматираме diff като ±HH:MM:SS
+    sign = ""
+    if (delta < 0) { sign = "-"; delta = -delta }
+    hh = int(delta/3600)
+    mm = int((delta%3600)/60)
+    ss = delta%60
+    diff = sprintf("%s%02d:%02d:%02d", sign, hh, mm, ss)
+
+    # Първо колона с delta (за сортиране), после всичко останало
+    print delta, \
+          $1, $2, $3, \
+          date1[key], elapsed1[key], \
+          d2,          e2, \
+          diff
+  }
+' "$file1" "$file2" \
+| sort -t, -k1,1nr \
+| cut -d, -f2-
+
+
+
+#!/usr/bin/env bash
+
+# Usage check
+if [ $# -ne 2 ]; then
+  echo "Usage: $0 <date1: YYYYMMDD> <date2: YYYYMMDD>"
+  exit 1
+fi
+
+d1=$1
+d2=$2
+
 # Намери файловете по маска JT*<дата>*
 f1=(JT*${d1}*)
 f2=(JT*${d2}*)
