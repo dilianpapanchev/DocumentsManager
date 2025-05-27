@@ -1,6 +1,275 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+CSV="${1:-report.csv}"
+OUT="${2:-report.html}"
+
+if [[ ! -f "$CSV" ]]; then
+  echo "❌ CSV файлът '$CSV' не е намерен в $(pwd)" >&2
+  exit 1
+fi
+
+# Escape двойни кавички, за да вградим CSV-то в JS
+CSV_ESCAPED=$(sed 's/"/\\"/g' "$CSV")
+
+cat > "$OUT" <<EOF
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Advanced Report</title>
+<style>
+  body { font-family:sans-serif; padding:20px; background:#f4f4f4; }
+  .controls { margin-bottom:15px; display:flex; flex-wrap:wrap; gap:10px; }
+  .controls input, .controls button { padding:6px 10px; }
+  .columns-toggle { margin-bottom:15px; }
+  .columns-toggle label { margin-right:8px; }
+  .table-wrap { overflow-x:auto; background:#fff; padding:10px; border:1px solid #ccc; }
+  table { border-collapse:collapse; width:100%; }
+  th,td { border:1px solid #ddd; padding:8px; white-space:nowrap; }
+  th { background:#eee; cursor:pointer; position:relative; user-select:none; }
+  th.sort-asc::after  { content:" ↑"; }
+  th.sort-desc::after { content:" ↓"; }
+  td.max { background:#fff9c4; }
+  .hidden { display:none; }
+  .diff-pos { background:#e6f4ea; }
+  .diff-neg { background:#fce8e6; }
+</style>
+</head>
+<body>
+
+<div class="controls">
+  <input id="search" placeholder="Global search…" />
+  <input id="start" type="date" />
+  <input id="end"   type="date" />
+  <button id="applyDates">Apply Date Filter</button>
+  <button id="compare">Compare Dates</button>
+  <button id="reset">Reset All</button>
+</div>
+
+<div class="columns-toggle" id="toggles"></div>
+
+<div class="table-wrap">
+  <table id="report"><thead id="thead"></thead><tbody id="tbody"></tbody></table>
+</div>
+
+<script>
+// Вградено CSV
+const rawCSV = \`
+$CSV_ESCAPED
+\`.trim();
+
+// Парсване на CSV в масив от масиви
+function parseCSV(txt) {
+  return txt.split('\\n').map(r => r.split(','));
+}
+
+let header, rows, N;
+let columns;    // {name,hidden}[]
+let dateCols;   // индексите на date колони
+let elapsedCols;// индексите на elapsed колони
+let data;       // {vals,hidden,maxIdx,diff:{}}[]
+
+const thead = document.getElementById('thead');
+const tbody = document.getElementById('tbody');
+const toggles= document.getElementById('toggles');
+
+function init() {
+  const arr = parseCSV(rawCSV);
+  header = arr.shift();
+  rows   = arr;
+  N = (header.length - 4)/2;
+
+  // Колони
+  columns = header.map((h,i) => ({
+    name: h, hidden: false
+  }));
+  dateCols    = header.map((h,i)=>/date/i.test(h)?i:-1).filter(i=>i>=0);
+  elapsedCols = header.map((h,i)=>/elapsed/i.test(h)?i:-1).filter(i=>i>=0);
+
+  // Данни
+  data = rows.map(r => {
+    let maxIdx=elapsedCols[0], maxSec=-1;
+    elapsedCols.forEach(ci=>{
+      const [h,m,s] = (r[ci]||'00:00:00').split(':').map(Number);
+      const sec = h*3600 + m*60 + s;
+      if(sec>maxSec){ maxSec=sec; maxIdx=ci; }
+    });
+    return { vals:r.slice(), hidden:false, maxIdx, diff:{} };
+  });
+
+  buildToggles();
+  render();
+}
+
+// Създава чекбоксове за скриване/показване на колони
+function buildToggles(){
+  toggles.innerHTML = '';
+  columns.forEach((col,i)=>{
+    const lbl = document.createElement('label');
+    const cb  = document.createElement('input');
+    cb.type='checkbox'; cb.checked = !col.hidden;
+    cb.onchange = ()=>{
+      col.hidden = !cb.checked;
+      render();
+    };
+    lbl.append(cb, ' ', col.name);
+    toggles.append(lbl);
+  });
+}
+
+// Рендер на таблицата
+function render(){
+  // Header
+  thead.innerHTML = '';
+  const hr = document.createElement('tr');
+  columns.forEach((col,i)=>{
+    if(col.hidden) return;
+    const th = document.createElement('th');
+    th.textContent = col.name;
+    th.onclick = ()=>sortBy(i);
+    hr.append(th);
+  });
+  const tdiff = document.createElement('th');
+  tdiff.textContent = 'Difference';
+  hr.append(tdiff);
+  thead.append(hr);
+
+  // Body
+  tbody.innerHTML = '';
+  data.forEach((row,ri)=>{
+    if(row.hidden) return;
+    const tr = document.createElement('tr');
+    columns.forEach((col,ci)=>{
+      if(col.hidden) return;
+      const td = document.createElement('td');
+      td.textContent = row.vals[ci]||'';
+      if(elapsedCols.includes(ci) && row.maxIdx===ci) td.classList.add('max');
+      // сравнение
+      if(row.diff[ci]!=null){
+        td.classList.add(row.diff[ci]>=0? 'diff-pos':'diff-neg');
+        td.textContent += ' '+row.diff[ci];
+      }
+      tr.append(td);
+    });
+    // difference col = lastElapsed-firstElapsed
+    const diffAll = elapsedCols.reduce((acc,ci)=>acc + (row.diff[ci]||0), 0);
+    const td2 = document.createElement('td');
+    td2.textContent = formatDiff(diffAll);
+    tr.append(td2);
+
+    tbody.append(tr);
+  });
+}
+
+// Форматира разлика секунди -> +X
+function formatDiff(d){ return (d>=0?'+':'')+d; }
+
+// Сортиране
+function sortBy(ci){
+  const dir = thead.querySelectorAll('th')[ci].classList.toggle('sort-asc')
+             ? 'asc':'desc';
+  thead.querySelectorAll('th').forEach((th,i)=>i!==ci && th.classList.remove('sort-asc','sort-desc'));
+  if(dir==='desc') thead.querySelectorAll('th')[ci].classList.add('sort-desc');
+  data.sort((a,b)=>{
+    let A=a.vals[ci], B=b.vals[ci], res=0;
+    const nA=parseFloat(A), nB=parseFloat(B);
+    if(!isNaN(nA) && !isNaN(nB)) res=nA-nB;
+    else res= A.localeCompare(B);
+    return dir==='asc'? res : -res;
+  });
+  render();
+}
+
+// Филтриране
+function filter(){
+  const term = document.getElementById('search').value.toLowerCase();
+  const sd   = document.getElementById('start').value;
+  const ed   = document.getElementById('end').value;
+  data.forEach(r=>{
+    let ok=true;
+    if(term){
+      ok = r.vals.some((v,i)=> !columns[i].hidden && v.toLowerCase().includes(term));
+    }
+    if(ok && (sd||ed)){
+      ok = dateCols.some(ci=>{
+        const d = (r.vals[ci]||'').split('T')[0];
+        return (!sd||d>=sd) && (!ed||d<=ed);
+      });
+    }
+    r.hidden = !ok;
+  });
+  render();
+}
+
+// Запаметява индексите на редовете за сравнение
+let cmpIdx = [];
+function pickCompare(){
+  const sd = document.getElementById('start').value;
+  const ed = document.getElementById('end').value;
+  if(sd){
+    cmpIdx[0] = data.findIndex(r=>r.vals[dateCols[0]].startsWith(sd));
+  }
+  if(ed){
+    cmpIdx[1] = data.findIndex(r=>r.vals[dateCols[0]].startsWith(ed));
+  }
+}
+
+// Сравнение
+function compare(){
+  if(cmpIdx.length<2) return alert('Изберете две дати');
+  data.forEach(r=>{
+    elapsedCols.forEach(ci=>{
+      const v1=parseElapsed(data[cmpIdx[0]].vals[ci]);
+      const v2=parseElapsed(data[cmpIdx[1]].vals[ci]);
+      r.diff[ci] = v2 - v1;
+    });
+  });
+  render();
+}
+
+// Парсване HH:MM:SS -> секунди
+function parseElapsed(s){
+  const [h,m,x]= (s||'00:00:00').split(':').map(Number);
+  return h*3600+m*60+x;
+}
+
+// Reset
+function resetAll(){
+  document.getElementById('search').value='';
+  document.getElementById('start').value='';
+  document.getElementById('end').value='';
+  columns.forEach(c=>c.hidden=false);
+  data.forEach(r=>{ r.hidden=false; r.diff={}; });
+  cmpIdx=[];
+  init();
+}
+
+document.getElementById('search').addEventListener('input',filter);
+document.getElementById('applyDates').addEventListener('click',filter);
+document.getElementById('compare').addEventListener('click',compare);
+document.getElementById('reset').addEventListener('click',resetAll);
+document.getElementById('start').addEventListener('change',pickCompare);
+document.getElementById('end'  ).addEventListener('change',pickCompare);
+
+init();
+</script>
+
+</body>
+</html>
+EOF
+
+echo "✅ Генериран: $OUT"
+
+
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+
 CSV_INPUT="${1:-report.csv}"
 OUT_HTML="${2:-report.html}"
 
