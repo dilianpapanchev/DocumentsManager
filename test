@@ -1,6 +1,81 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Брой дни назад (по подразбиране 31; можеш да подадеш друго число като първи аргумент)
+N=${1:-31}
+
+# Вземаме последните N файла по modification time
+mapfile -t files < <(ls -1tr JT* | tail -n "$N")
+
+if [ "${#files[@]}" -eq 0 ]; then
+  echo "Няма намерени файлове JT*"
+  exit 1
+fi
+
+awk -F, -v N="$N" '
+  BEGIN {
+    OFS = ",";
+    idx = 0;
+  }
+  # Всеки път, когато започва нов файл, вдигаме брояча
+  FNR==1 { idx++; }
+  {
+    # Строим ключа от BATCH.STAGE,BATCH,JOB.NAME
+    key = $1 FS $2 FS $3;
+    # Пази списък с уникални ключове за крайното обхождане
+    if (!(key in seen)) {
+      seen[key]=1;
+      keys[++K]=key;
+    }
+    # Запиши датата за този файл (файлът съдържа същата дата на всеки ред)
+    if (!(idx in dates)) {
+      dates[idx] = $4;
+    }
+    # Запази elapsed и секунди
+    elapsed[key","idx] = $8;
+    split($8, T, ":");
+    secs[key","idx] = T[1]*3600 + T[2]*60 + T[3];
+  }
+  END {
+    # 1) Заглавен ред
+    printf "BATCH.STAGE,BATCH,JOB.NAME";
+    for (i=1; i<=N; i++) {
+      printf ",Date%d,Elapsed%d", i, i;
+    }
+    print "";
+
+    # 2) За всеки ключ – изписваме ред
+    for (r=1; r<=K; r++) {
+      key = keys[r];
+      split(key, F, FS);
+      # първите три полета
+      printf "%s,%s,%s", F[1], F[2], F[3];
+      # след това за всеки от N-те дни
+      for (i=1; i<=N; i++) {
+        d = dates[i];
+        e = elapsed[key","i] ? elapsed[key","i] : "";
+        arrow = "";
+        if (i>1 && e!="") {
+          prev = secs[key","i-1];
+          curr = secs[key","i];
+          if (curr > prev)   arrow = "↑";  # забавяне
+          else if (curr < prev) arrow = "↓";  # ускояване
+        }
+        printf ",%s,%s%s", d, arrow, e;
+      }
+      print "";
+    }
+  }
+' "${files[@]}"
+
+
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+
 # ако подадеш един аргумент, това е броят дни назад; иначе – 31
 N=${1:-31}
 
