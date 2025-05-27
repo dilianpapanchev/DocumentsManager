@@ -1,3 +1,63 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+CSV="${1:-report.csv}"
+OUT="${2:-report.html}"
+
+awk -F, '
+BEGIN {
+  OFS=""
+  # Начало на HTML-а и стилистика
+  print "<!DOCTYPE html><html><head><meta charset=\"UTF-8\"><style>"
+  print "table, th, td { border: 1px solid #ccc; border-collapse: collapse; }"
+  print "th, td { padding: 4px 8px; }"
+  print ".max { background-color: #ffeb3b; }"
+  print "</style></head><body><table>"
+}
+NR==1 {
+  # Хедър-ред: намираме индексите на Elapsed колоните
+  printf "<tr>"
+  for(i=1;i<=NF;i++){
+    header[i]=$i
+    if($i ~ /^Elapsed/) { ecount++; elapsed_idx[ecount]=i }
+    printf "<th>%s</th>", $i
+  }
+  print "</tr>"
+  next
+}
+{
+  # За всеки ред намираме коя от Elapsed колоните е максимална
+  maxsec = -1; maxcol = 0
+  for(j=1;j<=ecount;j++){
+    idx = elapsed_idx[j]
+    split($idx, T, ":")
+    sec = T[1]*3600 + T[2]*60 + T[3]
+    if(sec > maxsec){
+      maxsec = sec
+      maxcol = idx
+    }
+  }
+  # Отпечатваме реда, като cell i=maxcol получава клас="max"
+  printf "<tr>"
+  for(i=1;i<=NF;i++){
+    if(i==maxcol)
+      printf "<td class=\"max\">%s</td>", $i
+    else
+      printf "<td>%s</td>", $i
+  }
+  print "</tr>"
+}
+END {
+  print "</table></body></html>"
+}' "$CSV" > "$OUT"
+
+echo "✅ Готово! Отвори $OUT в браузър, за да видиш оцветените максимуми."
+
+
+
+
+
+
 #!/usr/bin/env python3
 import glob, sys, os, csv
 
