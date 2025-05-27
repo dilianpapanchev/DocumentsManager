@@ -1,6 +1,298 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Отиваме в папката на скрипта
+cd "$(dirname "${BASH_SOURCE[0]}")"
+
+CSV="${1:-report.csv}"
+OUT="${2:-report.html}"
+
+if [[ ! -f "$CSV" ]]; then
+  echo "❌ Не открих '$CSV' в $(pwd)" >&2
+  echo "   Съдържание на $(pwd):" >&2
+  ls -1
+  exit 1
+fi
+
+# Ескейп на backticks, за да вградим CSV-то в JS
+CSV_ESCAPED=$(sed 's/`/\\`/g' "$CSV")
+
+cat >"$OUT" <<'EOF'
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1"/>
+  <title>Interactive JT Report</title>
+  <style>
+    body { margin:0; padding:20px; font-family:sans-serif; overflow-x:auto; }
+    .controls { display:flex; flex-wrap:wrap; gap:10px; margin-bottom:15px; }
+    .controls input, .controls button { padding:6px 10px; }
+    .columns-toggle { margin-bottom:15px; }
+    table { border-collapse:collapse; width:100%; }
+    th, td { border:1px solid #ccc; padding:8px; white-space:nowrap; }
+    th { background:#f0f0f0; cursor:pointer; position:relative; }
+    th.sort-asc::after  { content:" ↑"; }
+    th.sort-desc::after { content:" ↓"; }
+    td.max      { background:#fff9c4; }
+    td.diff-pos { background:#e6f4ea; }
+    td.diff-neg { background:#fce8e6; }
+  </style>
+</head>
+<body>
+
+<div class="controls">
+  <input id="search" placeholder="Global search…"/>
+  <input id="start" type="date"/>
+  <input id="end"   type="date"/>
+  <button id="apply">Apply Date Filter</button>
+  <button id="all"  >All Dates</button>
+  <button id="cmp"  >Compare Dates</button>
+  <button id="reset">Reset All</button>
+</div>
+
+<div class="columns-toggle" id="toggles"></div>
+
+<table id="report">
+  <thead id="thead"></thead>
+  <tbody id="tbody"></tbody>
+</table>
+
+<script>
+// ─── ВГРАДЕНО CSV ────────────────────────────────────
+const rawCSV = `
+$CSV_ESCAPED
+`.trim();
+// ────────────────────────────────────────────────────
+
+function parseCSV(txt){
+  return txt.split('\n').map(r=>r.split(','));
+}
+function parseSec(s){
+  const [h,m,x] = (s||'00:00:00').split(':').map(Number);
+  return h*3600 + m*60 + x;
+}
+function fmtDiff(n){ return (n>=0?'+':'') + n; }
+
+let header, rows, N;
+let columns   = [];    // {name, idx, hidden}
+let data      = [];    // {vals, hidden, maxIdx, diffVal}
+let sortState = {col:null,dir:'asc'};
+let cmpDates  = [null,null];
+
+document.addEventListener('DOMContentLoaded',()=>{
+  // Flatpickr заместваме input[type=date] ако е нужно, иначе native.
+  initData();
+  buildToggles();
+  renderTable();
+
+  // Слушатели
+  document.getElementById('search').addEventListener('input', filterTable);
+  document.getElementById('apply' ).addEventListener('click', filterTable);
+  document.getElementById('all'   ).addEventListener('click', setAllDates);
+  document.getElementById('cmp'   ).addEventListener('click', compareDates);
+  document.getElementById('reset' ).addEventListener('click', resetAll);
+  document.getElementById('start' ).addEventListener('change', ()=>storeDate(0));
+  document.getElementById('end'   ).addEventListener('change', ()=>storeDate(1));
+});
+
+function initData(){
+  const arr = parseCSV(rawCSV);
+  header = arr.shift();
+  rows   = arr;
+
+  // Определяме N = брой двойки Date/Elapsed
+  // Чакаме последната колона да е "AVERAGE" или няма – игнорираме я
+  const totalCols = header.length;
+  const hasAvg = header[totalCols-1]==='AVERAGE';
+  N = (totalCols - 4 - (hasAvg?1:0)) / 2;
+
+  // Първите 4 статични
+  columns = [];
+  for(let i=0;i<4;i++){
+    columns.push({name: header[i], idx:i, hidden:false});
+  }
+  // След това вземаме само Elapsed колони, но именуваме по реалните дати
+  for(let j=0;j<N;j++){
+    const dateIdx    = 4 + 2*j;
+    const elapsedIdx = dateIdx + 1;
+    const dateLabel  = rows[0][dateIdx];  // взимаме датата от първия ред
+    columns.push({name: dateLabel, idx: elapsedIdx, hidden:false});
+  }
+  // И накрая Difference
+  columns.push({name:'Difference', idx:null, hidden:false});
+
+  // Подготвяме data[]
+  data = rows.map(r=>{
+    const vals = [];
+    // статични
+    for(let i=0;i<4;i++) vals.push(r[i]);
+    // Elapsed стойности
+    for(let j=0;j<N;j++){
+      vals.push(r[4 + 2*j + 1] || '');
+    }
+    // изчисляваме maxIdx сред новите колони (0..3 + j)
+    let maxIdx = 4, maxSec=-1;
+    for(let k=0;k<N;k++){
+      const s = parseSec(vals[4+k]);
+      if(s>maxSec){ maxSec=s; maxIdx=4+k; }
+    }
+    return {vals, hidden:false, maxIdx, diffVal:0};
+  });
+}
+
+function buildToggles(){
+  const c = document.getElementById('toggles');
+  c.innerHTML = '';
+  columns.forEach((col,i)=>{
+    const lbl = document.createElement('label');
+    const cb  = document.createElement('input');
+    cb.type='checkbox'; cb.checked = !col.hidden;
+    cb.onchange = ()=>{ col.hidden = !cb.checked; renderTable(); };
+    lbl.append(cb,' ',col.name);
+    c.append(lbl);
+  });
+}
+
+function renderTable(){
+  const thead = document.getElementById('thead'),
+        tbody = document.getElementById('tbody');
+  thead.innerHTML = '';
+  tbody.innerHTML = '';
+
+  // HEADER
+  const hr = document.createElement('tr');
+  columns.forEach((col,i)=>{
+    if(col.hidden) return;
+    const th = document.createElement('th');
+    th.textContent = col.name;
+    th.onclick = ()=>sortBy(i);
+    if(sortState.col===i)
+      th.classList.add(sortState.dir==='asc'?'sort-asc':'sort-desc');
+    hr.append(th);
+  });
+  thead.append(hr);
+
+  // BODY
+  data.forEach(row=>{
+    if(row.hidden) return;
+    const tr = document.createElement('tr');
+    columns.forEach((col,i)=>{
+      if(col.hidden) return;
+      const td = document.createElement('td');
+      // Стойност: ако idx=null (Difference), ще добавим по-долу
+      if(col.idx!==null) td.textContent = row.vals[col.idx] || '';
+      if(col.idx!==null && col.idx >= 4 && col.idx < 4+N) {
+        // highlight max
+        if(i===row.maxIdx) td.classList.add('max');
+      }
+      tr.append(td);
+    });
+    // Difference = lastElap - firstElap
+    const firstSec = parseSec(row.vals[4]);
+    const lastSec  = parseSec(row.vals[4+N-1]);
+    const d        = lastSec - firstSec;
+    const td2      = document.createElement('td');
+    td2.textContent = fmtDiff(d);
+    td2.classList.add(d>=0?'diff-pos':'diff-neg');
+    tr.append(td2);
+
+    tbody.append(tr);
+  });
+}
+
+function sortBy(ci){
+  document.querySelectorAll('#thead th')
+    .forEach(th=>th.classList.remove('sort-asc','sort-desc'));
+  if(sortState.col===ci && sortState.dir==='asc') sortState.dir='desc';
+  else sortState.dir='asc';
+  sortState.col=ci;
+  const th = document.querySelectorAll('#thead th')[ci];
+  th.classList.add(sortState.dir==='asc'?'sort-asc':'sort-desc');
+
+  data.sort((a,b)=>{
+    const A = a.vals[ columns[ci].idx ] || '',
+          B = b.vals[ columns[ci].idx ] || '';
+    const nA = parseFloat(A), nB = parseFloat(B);
+    let cmp = (!isNaN(nA)&&!isNaN(nB))? nA-nB : A.localeCompare(B);
+    return sortState.dir==='asc'? cmp : -cmp;
+  });
+  renderTable();
+}
+
+function filterTable(){
+  const term = document.getElementById('search').value.toLowerCase();
+  const sd   = document.getElementById('start').value.replace(/-/g,'');
+  const ed   = document.getElementById('end').value.replace(/-/g,'');
+
+  data.forEach(r=>{
+    let ok = true;
+    if(term) ok = r.vals.some((v,i)=> !columns[i].hidden && v.toLowerCase().includes(term));
+    if(ok && (sd||ed)){
+      ok = r.vals[4] && (!sd||r.vals[4]>=sd) && (!ed||r.vals[4]<=ed);
+    }
+    r.hidden = !ok;
+  });
+  renderTable();
+}
+
+// Задава "All Dates" във формата YYYY-MM-DD
+function setAllDates(){
+  if(N<1) return;
+  const dates = rows.map(r=>r[4]).sort(); // колоната с дати
+  const s = dates[0], e = dates.at(-1);
+  document.getElementById('start').value = s.slice(0,4)+'-'+s.slice(4,6)+'-'+s.slice(6);
+  document.getElementById('end'  ).value = e.slice(0,4)+'-'+e.slice(4,6)+'-'+e.slice(6);
+  filterTable();
+}
+
+// Запазва избраната дата (YYYY-MM-DD → YYYYMMDD)
+function storeDate(i){
+  const v = document.getElementById(i? 'end':'start').value.replace(/-/g,'');
+  cmpDates[i] = v || null;
+}
+
+function compareDates(){
+  const [d1,d2] = cmpDates;
+  if(!d1||!d2) return alert('Изберете и двете дати.');
+  // намираме ред, чийто дата= d1/d2
+  const idx1 = rows.findIndex(r=>r[4]===d1);
+  const idx2 = rows.findIndex(r=>r[4]===d2);
+  if(idx1<0||idx2<0) return alert('Не намерих ред за избраните дати.');
+  data.forEach((r,i)=>{
+    const s1 = parseSec(rows[idx1][5]),  // Elapsed е в колона 5 (4+1)
+          s2 = parseSec(rows[idx2][5]);
+    r.diffAll = s2 - s1;
+  });
+  renderTable();
+}
+
+function resetAll(){
+  document.getElementById('search').value='';
+  document.getElementById('start' ).value='';
+  document.getElementById('end'   ).value='';
+  columns.forEach(c=>c.hidden=false);
+  data.forEach(r=>{ r.hidden=false; r.diffAll=0; });
+  sortState={col:null,dir:'asc'};
+  buildToggles();
+  renderTable();
+}
+</script>
+
+</body>
+</html>
+EOF
+
+echo "✅ Генериран $OUT – отвори в браузър!"
+
+
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+
 # Първо: местим се в директорията на самия скрипт
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
