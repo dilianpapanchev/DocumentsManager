@@ -4,6 +4,125 @@ import glob
 import html
 
 def parse_time(t):
+    h, m, s = t.strip().split(':')
+    return (int(h) * 3600 + int(m) * 60 + int(s))
+
+# Parse arguments
+if len(sys.argv) < 4:
+    print("Usage: python3 monitor.py <jt_dir> <days> <html_template_file>")
+    sys.exit(1)
+
+files_dir = sys.argv[1]
+try:
+    n = int(sys.argv[2])
+except ValueError:
+    n = 31
+template_path = sys.argv[3]
+
+# Collect .jt files
+files = []
+if os.path.isdir(files_dir):
+    files = [f for f in glob.glob(os.path.join(files_dir, "*")) if os.path.isfile(f)]
+    files = sorted(files, key=os.path.getmtime)[-n:]
+    if not files:
+        sys.exit("No JT files found.")
+else:
+    sys.exit("Invalid directory.")
+
+# Extract and collect data
+data = {}
+dates = [None] * len(files)
+
+for idx, fn in enumerate(files):
+    with open(fn) as f:
+        for line in f:
+            parts = line.rstrip("\n").split(",")
+            if len(parts) < 8:
+                continue
+            key = (parts[0], parts[1], parts[2])
+            date = parts[3]
+            start, stop, elapsed = parts[5], parts[6], parts[7]
+            try:
+                secs = parse_time(elapsed)
+            except:
+                secs = 0
+
+            data.setdefault(key, {})[idx] = {
+                "date": date, "start": start, "stop": stop,
+                "elapsed": elapsed, "secs": secs
+            }
+            if dates[idx] is None:
+                dates[idx] = date
+
+# Create output lines
+out_lines = []
+
+header = ["STATUS", "STAGE", "BATCH", "JOB.NAME"]
+for i in range(len(files)):
+    header += [f"Date({i})", f"Start({i})", f"Stop({i})", f"Elapsed({i})"]
+header += ["AVERAGE"]
+out_lines.append(','.join(header))
+
+for key in sorted(data.keys()):
+    status = "-"
+    s = data.get(key, {}).get(0, {}).get("secs", 0)
+    e = data.get(key, {}).get(len(files)-1, {}).get("secs", 0)
+    if s == 0 and e > 0: status = "NEW"
+    elif s > 0 and e == 0: status = "LOST"
+    elif s > 0 and e > s: status = "SLOW"
+    elif s == e and s > 0: status = "STABLE"
+
+    rec = [status, *key]
+    secs_list = []
+
+    for idx in range(len(files)):
+        info = data.get(key, {}).get(idx)
+        if info:
+            rec += [info.get("date", ""), info.get("start", ""),
+                    info.get("stop", ""), info.get("elapsed", "")]
+            secs_list.append(info.get("secs", 0))
+        else:
+            rec += ["", "", "", ""]
+            secs_list.append(0)
+
+    if secs_list:
+        total = sum(secs_list)
+        avg = total // len(secs_list)
+        avg_str = f"{avg//3600:02d}:{(avg%3600)//60:02d}:{avg%60:02d}"
+    else:
+        avg_str = ""
+    rec.append(avg_str)
+    out_lines.append(','.join(str(x) for x in rec))
+
+# Escape lines and join with JS newline
+csv_string = '\\n'.join(html.escape(line) for line in out_lines)
+
+# Replace in HTML template
+with open(template_path, 'r', encoding='utf-8') as f:
+    html_content = f.read()
+
+new_content = html_content.replace(
+    "const csvData = '';",
+    f"const csvData = '{csv_string}';"
+)
+
+with open(template_path, 'w', encoding='utf-8') as f:
+    f.write(new_content)
+
+print(f"Injected data into: {template_path}")
+
+
+
+
+
+
+
+#!/usr/bin/env python3
+import os, sys, csv
+import glob
+import html
+
+def parse_time(t):
     """Преобраз 'HH:MM:SS' в секунди."""
     h, m, s = t.strip().split(':')
     return (int(h) * 3600 + int(m) * 60 + int(s))
