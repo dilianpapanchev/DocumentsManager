@@ -1,3 +1,25 @@
+.page-title {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.page-title .title-icon {
+  width: 36px;
+  height: 36px;
+}
+
+.page-title h1 {
+  margin: 0;
+  font-size: 28px;
+  color: #0059b3;
+}
+
+
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
