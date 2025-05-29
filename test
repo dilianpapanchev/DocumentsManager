@@ -1,3 +1,405 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CSV Viewer with Compare</title>
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #f4f6f9;
+      color: #333;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    .toolbar input[type="text"],
+    .toolbar input[type="date"] {
+      padding: 8px;
+      border: 1px solid #ccc;
+      border-radius: 6px;
+      width: 200px;
+      background: #fff;
+    }
+
+    .toolbar label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 14px;
+    }
+
+    .toolbar input[type="checkbox"] {
+      transform: scale(1.2);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: #fff;
+      box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    th, td {
+      padding: 10px;
+      text-align: left;
+      border-bottom: 1px solid #eee;
+    }
+
+    th {
+      background: #f0f0f0;
+      cursor: pointer;
+      user-select: none;
+    }
+
+    th.sorted-asc::after {
+      content: " 🡻";
+      font-weight: bold;
+      font-size: 12px;
+    }
+
+    th.sorted-desc::after {
+      content: " 🡹";
+      font-weight: bold;
+      font-size: 12px;
+    }
+
+    tr:hover {
+      background-color: #f9f9f9;
+    }
+
+    td.diff-positive {
+      background-color: #d4edda;
+      font-weight: bold;
+      border-radius: 4px;
+    }
+
+    td.diff-negative {
+      background-color: #f8d7da;
+      font-weight: bold;
+      border-radius: 4px;
+    }
+
+    td.max-elapsed {
+      background-color: #fff3cd;
+      font-weight: bold;
+    }
+    
+    th {
+        white-space: nowrap;
+    }
+
+    th.sorted-asc::after,
+    th.sorted-desc::after {
+        display: inline-block;
+        margin-left: 4px;
+        vertical-align: middle;
+        line-height: 1;
+    }
+
+    @media (max-width: 768px) {
+      .toolbar {
+        flex-direction: column;
+        align-items: center;
+      }
+
+      .toolbar input[type="text"],
+      .toolbar input[type="date"] {
+        width: 100%;
+        max-width: 300px;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<h1>CSV Viewer with Compare</h1>
+
+<div class="toolbar">
+  <input type="text" id="textFilter" placeholder="Filter: Status, Stage, Batch, Job Name">
+  <label>From: <input type="date" id="dateFrom"></label>
+  <label>To: <input type="date" id="dateTo"></label>
+  <label><input type="checkbox" id="compareCheckbox"> Compare</label>
+</div>
+
+<table id="dataTable">
+  <thead><tr id="headerRow"></tr></thead>
+  <tbody></tbody>
+</table>
+
+<script>
+const csvData = `STATUS,STAGE,BATCH,JOB.NAME,Date1,Start1,Stop1,Elapsed1,Date2,Start2,Stop2,Elapsed2,Date3,Start3,Stop3,Elapsed3,Date4,Start4,Stop4,Elapsed4,Date5,Start5,Stop5,Elapsed5,Date6,Start6,Stop6,Elapsed6,Date7,Start7,Stop7,Elapsed7,Date8,Start8,Stop8,Elapsed8,Date9,Start9,Stop9,Elapsed9,Date10,Start10,Stop10,Elapsed10,Date11,Start11,Stop11,Elapsed11,Date12,Start12,Stop12,Elapsed12,Date13,Start13,Stop13,Elapsed13,Date14,Start14,Stop14,Elapsed14,Date15,Start15,Stop15,Elapsed15,Date16,Start16,Stop16,Elapsed16,Date17,Start17,Stop17,Elapsed17,Date18,Start18,Stop18,Elapsed18,Date19,Start19,Stop19,Elapsed19,Date20,Start20,Stop20,Elapsed20,Date21,Start21,Stop21,Elapsed21,Date22,Start22,Stop22,Elapsed22,Date23,Start23,Stop23,Elapsed23,Date24,Start24,Stop24,Elapsed24,Date25,Start25,Stop25,Elapsed25,Date26,Start26,Stop26,Elapsed26,Date27,Start27,Stop27,Elapsed27,Date28,Start28,Stop28,Elapsed28,Date29,Start29,Stop29,Elapsed29,Date30,Start30,Stop30,Elapsed30,Date31,Start31,Stop31,Elapsed31,AVERAGE
+OK,C,BATCH716,Job_1,20240501,00:00:00,00:01:06,00:01:06,20250502,00:00:00,00:02:18,00:02:18,20250503,00:00:00,00:01:33,00:01:33,20250504,00:00:00,00:01:12,00:01:12,20250505,00:00:00,00:02:05,00:02:05,20250506,00:00:00,00:05:18,00:05:18,20250507,00:00:00,00:01:56,00:01:56,20250508,00:00:00,00:00:38,00:00:38,20250509,00:00:00,00:03:34,00:03:34,20250510,00:00:00,00:02:25,00:02:25,20250511,00:00:00,00:04:14,00:04:14,20250512,00:00:00,00:01:47,00:01:47,20250513,00:00:00,00:00:34,00:00:34,20250514,00:00:00,00:03:33,00:03:33,20250515,00:00:00,00:02:31,00:02:31,20250516,00:00:00,00:02:17,00:02:17,20250517,00:00:00,00:04:46,00:04:46,20250518,00:00:00,00:01:16,00:01:16,20250519,00:00:00,00:00:29,00:00:29,20250520,00:00:00,00:03:53,00:03:53,20250521,00:00:00,00:01:29,00:01:29,20250522,00:00:00,00:03:54,00:03:54,20250523,00:00:00,00:05:30,00:05:30,20250524,00:00:00,00:03:33,00:03:33,20250525,00:00:00,00:05:42,00:05:42,20250526,00:00:00,00:03:27,00:03:27,20250527,00:00:00,00:05:20,00:05:20,20250528,00:00:00,00:05:14,00:05:14,20250529,00:00:00,00:04:29,00:04:29,20250530,00:00:00,00:02:53,00:02:53,20250531,00:00:00,00:04:30,00:04:30,00:03:00
+OK,A,BATCH716,Job_2,20240501,00:00:00,00:01:39,00:01:39,20250502,00:00:00,00:00:55,00:00:55,20250503,00:00:00,00:04:43,00:04:43,20250504,00:00:00,00:01:27,00:01:27,20250505,00:00:00,00:03:26,00:03:26,20250506,00:00:00,00:01:49,00:01:49,20250507,00:00:00,00:05:23,00:05:23,20250508,00:00:00,00:01:54,00:01:54,20250509,00:00:00,00:04:54,00:04:54,20250510,00:00:00,00:02:40,00:02:40,20250511,00:00:00,00:00:38,00:00:38,20250512,00:00:00,00:02:26,00:02:26,20250513,00:00:00,00:03:01,00:03:01,20250514,00:00:00,00:03:14,00:03:14,20250515,00:00:00,00:02:16,00:02:16,20250516,00:00:00,00:04:06,00:04:06,20250517,00:00:00,00:03:43,00:03:43,20250518,00:00:00,00:01:28,00:01:28,20250519,00:00:00,00:05:20,00:05:20,20250520,00:00:00,00:03:25,00:03:25,20250521,00:00:00,00:05:06,00:05:06,20250522,00:00:00,00:00:08,00:00:08,20250523,00:00:00,00:00:46,00:00:46,20250524,00:00:00,00:05:45,00:05:45,20250525,00:00:00,00:03:55,00:03:55,20250526,00:00:00,00:03:06,00:03:06,20250527,00:00:00,00:03:13,00:03:13,20250528,00:00:00,00:04:13,00:04:13,20250529,00:00:00,00:04:01,00:04:01,20250530,00:00:00,00:00:03,00:00:03,20250531,00:00:00,00:03:44,00:03:44,00:02:58
+OK,C,BATCH440,Job_3,20240501,00:00:00,00:02:56,00:02:56,20250502,00:00:00,00:01:19,00:01:19,20250503,00:00:00,00:01:13,00:01:13,20250504,00:00:00,00:05:52,00:05:52,20250505,00:00:00,00:04:46,00:04:46,20250506,00:00:00,00:02:19,00:02:19,20250507,00:00:00,00:02:53,00:02:53,20250508,00:00:00,00:01:43,00:01:43,20250509,00:00:00,00:01:29,00:01:29,20250510,00:00:00,00:01:05,00:01:05,20250511,00:00:00,00:00:56,00:00:56,20250512,00:00:00,00:02:57,00:02:57,20250513,00:00:00,00:04:51,00:04:51,20250514,00:00:00,00:03:42,00:03:42,20250515,00:00:00,00:01:31,00:01:31,20250516,00:00:00,00:01:17,00:01:17,20250517,00:00:00,00:02:17,00:02:17,20250518,00:00:00,00:00:17,00:00:17,20250519,00:00:00,00:00:24,00:00:24,20250520,00:00:00,00:00:31,00:00:31,20250521,00:00:00,00:04:11,00:04:11,20250522,00:00:00,00:04:24,00:04:24,20250523,00:00:00,00:05:30,00:05:30,20250524,00:00:00,00:04:03,00:04:03,20250525,00:00:00,00:01:59,00:01:59,20250526,00:00:00,00:01:39,00:01:39,20250527,00:00:00,00:00:32,00:00:32,20250528,00:00:00,00:00:32,00:00:32,20250529,00:00:00,00:03:47,00:03:47,20250530,00:00:00,00:03:57,00:03:57,20250531,00:00:00,00:01:43,00:01:43,00:02:28
+ERROR,C,BATCH740,Job_4,20240501,00:00:00,00:04:31,00:04:31,20250502,00:00:00,00:00:22,00:00:22,20250503,00:00:00,00:00:33,00:00:33,20250504,00:00:00,00:02:23,00:02:23,20250505,00:00:00,00:02:47,00:02:47,20250506,00:00:00,00:04:11,00:04:11,20250507,00:00:00,00:01:10,00:01:10,20250508,00:00:00,00:03:24,00:03:24,20250509,00:00:00,00:05:35,00:05:35,20250510,00:00:00,00:02:15,00:02:15,20250511,00:00:00,00:03:34,00:03:34,20250512,00:00:00,00:04:42,00:04:42,20250513,00:00:00,00:05:18,00:05:18,20250514,00:00:00,00:05:00,00:05:00,20250515,00:00:00,00:04:12,00:04:12,20250516,00:00:00,00:05:13,00:05:13,20250517,00:00:00,00:01:14,00:01:14,20250518,00:00:00,00:05:05,00:05:05,20250519,00:00:00,00:02:03,00:02:03,20250520,00:00:00,00:05:13,00:05:13,20250521,00:00:00,00:05:00,00:05:00,20250522,00:00:00,00:01:01,00:01:01,20250523,00:00:00,00:01:15,00:01:15,20250524,00:00:00,00:05:27,00:05:27,20250525,00:00:00,00:00:53,00:00:53,20250526,00:00:00,00:03:59,00:03:59,20250527,00:00:00,00:05:55,00:05:55,20250528,00:00:00,00:02:13,00:02:13,20250529,00:00:00,00:00:18,00:00:18,20250530,00:00:00,00:00:12,00:00:12,20250531,00:00:00,00:02:55,00:02:55,00:03:09
+OK,C,BATCH966,Job_5,20240501,00:00:00,00:05:44,00:05:44,20250502,00:00:00,00:00:58,00:00:58,20250503,00:00:00,00:03:09,00:03:09,20250504,00:00:00,00:03:53,00:03:53,20250505,00:00:00,00:03:33,00:03:33,20250506,00:00:00,00:02:08,00:02:08,20250507,00:00:00,00:04:22,00:04:22,20250508,00:00:00,00:02:51,00:02:51,20250509,00:00:00,00:04:24,00:04:24,20250510,00:00:00,00:02:40,00:02:40,20250511,00:00:00,00:03:54,00:03:54,20250512,00:00:00,00:00:46,00:00:46,20250513,00:00:00,00:01:45,00:01:45,20250514,00:00:00,00:00:11,00:00:11,20250515,00:00:00,00:04:58,00:04:58,20250516,00:00:00,00:03:42,00:03:42,20250517,00:00:00,00:03:13,00:03:13,20250518,00:00:00,00:02:05,00:02:05,20250519,00:00:00,00:02:33,00:02:33,20250520,00:00:00,00:00:46,00:00:46,20250521,00:00:00,00:04:58,00:04:58,20250522,00:00:00,00:05:06,00:05:06,20250523,00:00:00,00:02:17,00:02:17,20250524,00:00:00,00:02:47,00:02:47,20250525,00:00:00,00:01:37,00:01:37,20250526,00:00:00,00:04:03,00:04:03,20250527,00:00:00,00:03:57,00:03:57,20250528,00:00:00,00:04:24,00:04:24,20250529,00:00:00,00:05:07,00:05:07,20250530,00:00:00,00:05:52,00:05:52,20250531,00:00:00,00:01:23,00:01:23,00:03:11`;
+
+let data = [], headers = [], currentDiffs = [];
+let currentSort = { index: -1, direction: 0 };
+
+const textFilter = document.getElementById("textFilter");
+const dateFrom = document.getElementById("dateFrom");
+const dateTo = document.getElementById("dateTo");
+const compareCheckbox = document.getElementById("compareCheckbox");
+
+const table = document.getElementById("dataTable").getElementsByTagName("tbody")[0];
+const headerRow = document.getElementById("headerRow");
+
+function parseCSV(text) {
+  const lines = text.trim().split("\n");
+  headers = lines[0].split(",");
+  data = lines.slice(1).map(line => line.split(","));
+}
+
+function hmsToSeconds(hms) {
+  const [h, m, s] = hms.split(":").map(Number);
+  return h * 3600 + m * 60 + s;
+}
+
+function secondsToHMS(sec) {
+  const negative = sec < 0;
+  sec = Math.abs(sec);
+  const h = String(Math.floor(sec / 3600)).padStart(2, '0');
+  const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+  const s = String(sec % 60).padStart(2, '0');
+  return (negative ? "- " : "") + `${h}:${m}:${s}`;
+}
+
+function updateCompareCheckbox() {
+  const fromVal = dateFrom.value;
+  const toVal = dateTo.value;
+  const enabled = fromVal && toVal;
+  compareCheckbox.disabled = !enabled;
+  if (!enabled) {
+    compareCheckbox.checked = false;
+    if (currentSort.index === -2) {
+      currentSort = { index: -1, direction: 0 };
+    }
+  }
+}
+
+function buildTable(rows, visibleCols = headers, diffAfterIndex = null) {
+  table.innerHTML = "";
+  headerRow.innerHTML = "";
+
+  const visibleIndexes = visibleCols.map(col => headers.indexOf(col));
+  const showDiff = diffAfterIndex !== null;
+
+  visibleCols.forEach(col => {
+    const th = document.createElement("th");
+    th.textContent = col;
+    const originalIndex = headers.indexOf(col);
+    if (originalIndex === currentSort.index) {
+      th.classList.add(currentSort.direction === 1 ? "sorted-asc" : "sorted-desc");
+    }
+    th.onclick = () => {
+      if (currentSort.index === originalIndex) {
+        currentSort.direction = (currentSort.direction + 1) % 3;
+        if (currentSort.direction === 0) currentSort.index = -1;
+      } else {
+        currentSort = { index: originalIndex, direction: 1 };
+      }
+      filterData();
+    };
+    headerRow.appendChild(th);
+
+    if (showDiff && originalIndex === diffAfterIndex) {
+      const thDiff = document.createElement("th");
+      thDiff.textContent = "Difference";
+      if (currentSort.index === -2) {
+        thDiff.classList.add(currentSort.direction === 1 ? "sorted-asc" : "sorted-desc");
+      }
+      thDiff.onclick = () => {
+        if (currentSort.index === -2) {
+          currentSort.direction = (currentSort.direction + 1) % 3;
+          if (currentSort.direction === 0) currentSort.index = -1;
+        } else {
+          currentSort = { index: -2, direction: 1 };
+        }
+        filterData();
+      };
+      headerRow.appendChild(thDiff);
+    }
+  });
+
+  const elapsedIndexes = headers
+    .map((h, i) => ({ h, i }))
+    .filter(obj => /^Elapsed\d+$/.test(obj.h))
+    .map(obj => obj.i);
+
+  currentDiffs = [];
+
+  rows.forEach((row, idx) => {
+    const tr = document.createElement("tr");
+
+    let maxElapsedSec = -1;
+    let maxElapsedIndexes = [];
+
+    elapsedIndexes.forEach(i => {
+      const val = row[i];
+      if (val && /^\d{2}:\d{2}:\d{2}$/.test(val)) {
+        const sec = hmsToSeconds(val);
+        if (sec > maxElapsedSec) {
+          maxElapsedSec = sec;
+          maxElapsedIndexes = [i];
+        } else if (sec === maxElapsedSec) {
+          maxElapsedIndexes.push(i);
+        }
+      }
+    });
+
+    let diffValue = null;
+
+    visibleIndexes.forEach(i => {
+      const td = document.createElement("td");
+      td.textContent = row[i] !== undefined ? row[i] : "";
+      if (maxElapsedIndexes.includes(i)) {
+        td.style.backgroundColor = "yellow";
+        td.style.fontWeight = "bold";
+      }
+      tr.appendChild(td);
+
+      if (showDiff && i === diffAfterIndex) {
+        const fromDay = parseInt(dateFrom.value.replaceAll("-", "").slice(-2));
+        const toDay = parseInt(dateTo.value.replaceAll("-", "").slice(-2));
+        const fromElapsed = row[headers.indexOf(`Elapsed${fromDay}`)];
+        const toElapsed = row[headers.indexOf(`Elapsed${toDay}`)];
+        const tdDiff = document.createElement("td");
+        if (fromElapsed && toElapsed) {
+          const diffSec = hmsToSeconds(toElapsed) - hmsToSeconds(fromElapsed);
+          diffValue = diffSec;
+          tdDiff.textContent = secondsToHMS(diffSec);
+          tdDiff.style.backgroundColor = diffSec < 0 ? "#f88" : "#8f8";
+          tdDiff.style.fontWeight = "bold";
+        }
+        tr.appendChild(tdDiff);
+      }
+    });
+
+    if (showDiff) currentDiffs[idx] = diffValue;
+    table.appendChild(tr);
+  });
+}
+
+function filterData() {
+  updateCompareCheckbox();
+
+  const keyword = textFilter.value.toLowerCase();
+  const fromRaw = dateFrom.value;
+  const toRaw = dateTo.value;
+  const compare = compareCheckbox.checked;
+
+  let filtered = [...data];
+
+  if (keyword) {
+    filtered = filtered.filter(row =>
+      row.slice(0, 4).join(" ").toLowerCase().includes(keyword)
+    );
+  }
+
+  const baseCols = headers.slice(0, 4);
+  let visibleCols = [...baseCols];
+  let insertDiffAfter = null;
+
+  if (compare && fromRaw && toRaw) {
+    const fromParsed = fromRaw.replaceAll("-", "");
+    const toParsed = toRaw.replaceAll("-", "");
+    const fromDay = parseInt(fromParsed.slice(-2));
+    const toDay = parseInt(toParsed.slice(-2));
+    visibleCols.push(...[`Date${fromDay}`, `Start${fromDay}`, `Stop${fromDay}`, `Elapsed${fromDay}`]);
+    visibleCols.push(...[`Date${toDay}`, `Start${toDay}`, `Stop${toDay}`, `Elapsed${toDay}`]);
+    insertDiffAfter = headers.indexOf(`Elapsed${toDay}`);
+  } else if (fromRaw || toRaw) {
+    const fromInt = fromRaw ? parseInt(fromRaw.replaceAll("-", "")) : null;
+    const toInt = toRaw ? parseInt(toRaw.replaceAll("-", "")) : null;
+
+    for (let i = 1; i <= 31; i++) {
+      const dateKey = `Date${i}`;
+      const dateIndex = headers.indexOf(dateKey);
+      if (dateIndex === -1) continue;
+
+      const hasMatch = data.some(row => {
+        const val = row[dateIndex];
+        if (!val || !/^\d{8}$/.test(val)) return false;
+        const valInt = parseInt(val);
+        if (fromInt && !toInt) return valInt === fromInt;
+        if (!fromInt && toInt) return valInt === toInt;
+        return valInt >= fromInt && valInt <= toInt;
+      });
+
+      if (hasMatch) {
+        visibleCols.push(...[`Date${i}`, `Start${i}`, `Stop${i}`, `Elapsed${i}`]);
+      }
+    }
+  } else {
+    visibleCols = headers;
+  }
+
+  if (currentSort.direction === 0) {
+    filtered = [...filtered];
+  } else if (currentSort.index >= 0) {
+    filtered.sort((a, b) => {
+      const valA = a[currentSort.index] || "";
+      const valB = b[currentSort.index] || "";
+      return currentSort.direction === 1
+        ? valA.localeCompare(valB)
+        : valB.localeCompare(valA);
+    });
+  } else if (currentSort.index === -2) {
+    const fromDay = parseInt(dateFrom.value.replaceAll("-", "").slice(-2));
+    const toDay = parseInt(dateTo.value.replaceAll("-", "").slice(-2));
+    const fromIdx = headers.indexOf(`Elapsed${fromDay}`);
+    const toIdx = headers.indexOf(`Elapsed${toDay}`);
+    filtered.sort((a, b) => {
+      const aFrom = a[fromIdx], aTo = a[toIdx];
+      const bFrom = b[fromIdx], bTo = b[toIdx];
+      const aDiff = (aTo && aFrom) ? hmsToSeconds(aTo) - hmsToSeconds(aFrom) : 0;
+      const bDiff = (bTo && bFrom) ? hmsToSeconds(bTo) - hmsToSeconds(bFrom) : 0;
+      return currentSort.direction === 1 ? aDiff - bDiff : bDiff - aDiff;
+    });
+  }
+
+  buildTable(filtered, visibleCols, insertDiffAfter);
+}
+
+textFilter.addEventListener("input", filterData);
+dateFrom.addEventListener("input", filterData);
+dateTo.addEventListener("input", filterData);
+compareCheckbox.addEventListener("change", () => {
+  if (!compareCheckbox.checked && currentSort.index === -2) {
+    currentSort = { index: -1, direction: 0 };
+  }
+  filterData();
+});
+
+parseCSV(csvData);
+filterData();
+</script>
+</body>
+</html>
+
+
+
+
+
+
+
+
 #!/usr/bin/env bash
 set -euo pipefail
 
