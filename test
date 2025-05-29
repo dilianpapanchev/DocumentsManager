@@ -1,3 +1,35 @@
+const fromDate = parseInt(fromRaw.replaceAll("-", ""));
+const toDate = parseInt(toRaw.replaceAll("-", ""));
+
+let fromX = null, toX = null;
+
+for (let i = 1; i <= 31; i++) {
+  const idx = headers.indexOf(`Date${i}`);
+  if (idx === -1) continue;
+
+  if (fromX === null && data.some(row => parseInt(row[idx]) === fromDate)) {
+    fromX = i;
+  }
+
+  if (toX === null && data.some(row => parseInt(row[idx]) === toDate)) {
+    toX = i;
+  }
+
+  if (fromX !== null && toX !== null) break;
+}
+
+if (fromX !== null && toX !== null) {
+  visibleCols.push(...[`Date${fromX}`, `Start${fromX}`, `Stop${fromX}`, `Elapsed${fromX}`]);
+  visibleCols.push(...[`Date${toX}`, `Start${toX}`, `Stop${toX}`, `Elapsed${toX}`]);
+  insertDiffAfter = headers.indexOf(`Elapsed${toX}`);
+}
+
+
+
+
+
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
