@@ -1,3 +1,22 @@
+const row = data[0]; // only the first row
+const val = row[dateIndex];
+let hasMatch = false;
+
+if (val && /^\d{8}$/.test(val)) {
+  const valInt = parseInt(val);
+  if (fromInt && toInt) {
+    hasMatch = valInt >= fromInt && valInt <= toInt;
+  } else if (fromInt) {
+    hasMatch = valInt === fromInt;
+  } else if (toInt) {
+    hasMatch = valInt === toInt;
+  }
+}
+
+
+
+
+
 const hasMatch = data.some(row => {
   const val = row[dateIndex];
   if (!val || !/^\d{8}$/.test(val)) return false;
