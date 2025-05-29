@@ -1,3 +1,305 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Interactive Viewer</title>
+  <link rel="icon" href="https://jobmarketforyoungresearchers.be/files/attachments/.2877641!320h320!0853_kbc!openduw_pmF" />
+  <style>
+    body {
+      font-family: "Segoe UI", sans-serif;
+      background: #f4f4f4;
+      color: #333;
+    }
+
+    h1 {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: center;
+      gap: 20px;
+      margin-bottom: 20px;
+    }
+
+    .toolbar input[type="text"],
+    .toolbar input[type="date"] {
+      padding: 5px;
+      border: 1px solid #ccc;
+      border-radius: 4px;
+      width: 200px;
+    }
+
+    .toolbar label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .toolbar input[type="checkbox"] {
+      transform: scale(1.2);
+    }
+
+    .table-wrapper {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: white;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      border: 1px solid #dee2ff;
+    }
+
+    th, td {
+      padding: 10px;
+      text-align: left;
+      border: 1px solid #dee2ff;
+    }
+
+    th {
+      background-color: #b0c8ff;
+      cursor: pointer;
+      user-select: none;
+      position: sticky;
+      top: 0;
+      z-index: 3;
+    }
+
+    th.sorted.asc::after,
+    th.sorted.desc::after {
+      content: "";
+      display: inline-block;
+      width: 0;
+      height: 0;
+      margin-left: 10px;
+      vertical-align: middle;
+      border-left: 5px solid transparent;
+      border-right: 5px solid transparent;
+    }
+
+    th.sorted.asc::after {
+      border-bottom: 5px solid black;
+    }
+
+    th.sorted.desc::after {
+      border-top: 5px solid black;
+    }
+
+    tr:hover {
+      background-color: #f9f9f9;
+    }
+
+    td.diff-positive {
+      background-color: #d6f0da;
+      font-weight: bold;
+      border-radius: 4px;
+    }
+
+    td.diff-negative {
+      background-color: #f7d7da;
+      font-weight: bold;
+      border-radius: 4px;
+    }
+
+    td.max-elapsed {
+      background-color: #fff6cd;
+      font-weight: bold;
+      border-radius: 4px;
+    }
+
+    /* Sticky column styles */
+    th.sticky-col, td.sticky-col {
+      position: sticky;
+      background: white;
+      z-index: 2;
+    }
+
+    th.sticky-0, td.sticky-0 { left: 0; }
+    th.sticky-1, td.sticky-1 { left: 120px; }
+    th.sticky-2, td.sticky-2 { left: 240px; }
+    th.sticky-3, td.sticky-3 { left: 360px; }
+
+    @media (max-width: 768px) {
+      .toolbar {
+        flex-direction: column;
+        align-items: center;
+      }
+    }
+  </style>
+</head>
+<body>
+  <h1>JST Advanced Viewer</h1>
+
+  <div class="toolbar">
+    <label>
+      <input type="text" id="textFilter" placeholder="Filter: Status, Stage, Batch, Job..." />
+    </label>
+    <label>
+      <input type="date" id="dateFrom" />
+    </label>
+    <label>
+      <input type="checkbox" id="compareCheckbox" /> Compare
+    </label>
+  </div>
+
+  <div class="table-wrapper">
+    <table id="dataTable">
+      <thead><tr id="headerRow"></tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+
+  <script>
+    const csvData = `Status,Stage,Batch,Job.name,Date1,Start1,Stop1,Elapsed1
+OK,Stage1,BatchA,JobX,2025-05-20,10:00,10:05,00:05
+FAIL,Stage2,BatchB,JobY,2025-05-20,09:00,09:30,00:30
+OK,Stage1,BatchA,JobX,2025-05-21,10:00,10:07,00:07
+FAIL,Stage2,BatchB,JobY,2025-05-21,09:00,09:20,00:20`;
+
+    let data = [];
+    let currentSort = { index: null, direction: 1 };
+
+    const textFilter = document.getElementById("textFilter");
+    const dateFrom = document.getElementById("dateFrom");
+    const compareCheckbox = document.getElementById("compareCheckbox");
+    const table = document.getElementById("dataTable");
+    const headerRow = document.getElementById("headerRow");
+    const tbody = table.querySelector("tbody");
+
+    function msToSeconds(ms) {
+      const [m, s] = ms.split(":").map(Number);
+      return m * 60 + s;
+    }
+
+    function secondsToHMS(sec) {
+      const m = Math.floor(sec / 60);
+      const s = sec % 60;
+      return `${m}:${s.toString().padStart(2, "0")}`;
+    }
+
+    function buildTable(headers, visibleRows, diffAfter) {
+      headerRow.innerHTML = "";
+      tbody.innerHTML = "";
+
+      headers.forEach((col, i) => {
+        const th = document.createElement("th");
+        th.textContent = col;
+
+        if (["Status", "Stage", "Batch", "Job.name"].includes(col)) {
+          th.classList.add("sticky-col", `sticky-${i}`);
+        }
+
+        if (currentSort.index === i) {
+          th.classList.add("sorted", currentSort.direction === 1 ? "asc" : "desc");
+        }
+
+        th.onclick = () => {
+          if (currentSort.index === i) {
+            currentSort.direction *= -1;
+          } else {
+            currentSort.index = i;
+            currentSort.direction = 1;
+          }
+          filterData();
+        };
+
+        headerRow.appendChild(th);
+      });
+
+      visibleRows.forEach((row, rIndex) => {
+        const tr = document.createElement("tr");
+
+        row.forEach((cell, i) => {
+          const td = document.createElement("td");
+          td.textContent = cell;
+
+          if (["Status", "Stage", "Batch", "Job.name"].includes(headers[i])) {
+            td.classList.add("sticky-col", `sticky-${i}`);
+          }
+
+          if (i === diffAfter?.index && diffAfter[rIndex]?.diff != null) {
+            td.classList.add(diffAfter[rIndex].diff > 0 ? "diff-positive" : "diff-negative");
+          }
+
+          if (diffAfter?.max === msToSeconds(cell)) {
+            td.classList.add("max-elapsed");
+          }
+
+          tr.appendChild(td);
+        });
+
+        tbody.appendChild(tr);
+      });
+    }
+
+    function filterData() {
+      const keyword = textFilter.value.toLowerCase();
+      const from = dateFrom.value;
+      const compare = compareCheckbox.checked;
+
+      let filtered = data.filter(row => row.join(",").toLowerCase().includes(keyword));
+      if (from) {
+        filtered = filtered.filter(row => row[4] >= from);
+      }
+
+      let diffAfter = null;
+      if (compare) {
+        diffAfter = [];
+        const grouped = {};
+        filtered.forEach(r => {
+          const key = `${r[0]}-${r[1]}-${r[2]}-${r[3]}`;
+          if (!grouped[key]) grouped[key] = [];
+          grouped[key].push(r);
+        });
+
+        filtered = [];
+        for (const key in grouped) {
+          const group = grouped[key];
+          if (group.length >= 2) {
+            const g = group.slice(-2);
+            const v1 = msToSeconds(g[0][7]);
+            const v2 = msToSeconds(g[1][7]);
+            const diff = v2 - v1;
+
+            diffAfter.push({ index: 7, diff, max: Math.max(v1, v2) });
+            filtered.push(...g);
+          }
+        }
+      }
+
+      if (currentSort.index !== null) {
+        filtered.sort((a, b) => {
+          const valA = a[currentSort.index];
+          const valB = b[currentSort.index];
+          return currentSort.direction * valA.localeCompare(valB);
+        });
+      }
+
+      buildTable(data[0], filtered, diffAfter);
+    }
+
+    function parseCSV(csv) {
+      return csv.split("\n").map(row => row.split(","));
+    }
+
+    data = parseCSV(csvData);
+    buildTable(data[0], data.slice(1));
+    
+    textFilter.addEventListener("input", filterData);
+    dateFrom.addEventListener("input", filterData);
+    compareCheckbox.addEventListener("change", filterData);
+  </script>
+</body>
+</html>
+
+
+
+
+
+
 csv_file = 'your_file.csv'
 html_file = 'your_file.html'
 output_file = 'output.html'
