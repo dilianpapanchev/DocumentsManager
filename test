@@ -1,3 +1,17 @@
+const valid = data.every(row => {
+  const val = row[dateIndex];
+  if (!val || !/^\d{8}$/.test(val)) return false;
+  const valInt = parseInt(val);
+  if (fromInt && !toInt) return valInt === fromInt;
+  if (!fromInt && toInt) return valInt === toInt;
+  return valInt >= fromInt && valInt <= toInt;
+});
+
+
+
+
+
+
 #!/usr/bin/env python3
 
 import glob, sys, os, csv
