@@ -1,3 +1,57 @@
+import os
+import csv
+import sys
+import html
+
+def find_files_by_date(root_dir, date_mask):
+    matches = []
+    for dirpath, _, filenames in os.walk(root_dir):
+        for filename in filenames:
+            if date_mask in filename:
+                matches.append(os.path.join(dirpath, filename))
+    return matches
+
+def extract_csv_rows(file_path, rows_to_print):
+    output_lines = []
+    with open(file_path, newline='', encoding='utf-8') as csvfile:
+        reader = csv.reader(csvfile)
+        for i, row in enumerate(reader, start=1):
+            if i in rows_to_print:
+                line = ','.join(row)
+                output_lines.append(line)
+    return output_lines
+
+if __name__ == "__main__":
+    if len(sys.argv) != 4:
+        print("Usage: python csv_to_js_var.py <root_directory> <date_mask> <output_html_file>")
+        sys.exit(1)
+
+    root_directory = sys.argv[1]
+    date_mask = sys.argv[2]
+    output_html_file = sys.argv[3]
+
+    rows_to_print = {1, 2, 3, 4, 6, 7, 8}
+    files = find_files_by_date(root_directory, date_mask)
+
+    if not files:
+        print("No matching files found.")
+        sys.exit(0)
+
+    csv_lines = []
+    for file in files:
+        csv_lines += extract_csv_rows(file, rows_to_print)
+
+    csv_string = '\\n'.join(html.escape(line) for line in csv_lines)
+    js_line = f"const csvData = '{csv_string}';\n"
+
+    with open(output_html_file, 'w', encoding='utf-8') as f:
+        f.write(js_line)
+
+    print(f"JavaScript CSV data written to {output_html_file}")
+
+
+
+
 .page-title {
   display: flex;
   align-items: center;
