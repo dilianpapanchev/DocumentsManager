@@ -1,3 +1,38 @@
+} else if (currentSort.index === -2) {
+  const diffs = [];
+  filtered.forEach(row => {
+    const fromDate = parseInt(dateFrom.value.replaceAll("-", ""));
+    const toDate = parseInt(dateTo.value.replaceAll("-", ""));
+    let fromX = null, toX = null;
+
+    for (let j = 1; j <= 31; j++) {
+      const idx = headers.indexOf(`Date${j}`);
+      if (idx === -1) continue;
+      if (fromX === null && parseInt(row[idx]) === fromDate) fromX = j;
+      if (toX === null && parseInt(row[idx]) === toDate) toX = j;
+    }
+
+    const fromElapsed = fromX ? row[headers.indexOf(`Elapsed${fromX}`)] : null;
+    const toElapsed = toX ? row[headers.indexOf(`Elapsed${toX}`)] : null;
+
+    let diff = 0;
+    if (fromElapsed && toElapsed) {
+      diff = hmsToSeconds(toElapsed) - hmsToSeconds(fromElapsed);
+    }
+
+    diffs.push({ row, diff });
+  });
+
+  filtered = diffs
+    .sort((a, b) => currentSort.direction === 1 ? a.diff - b.diff : b.diff - a.diff)
+    .map(item => item.row);
+}
+
+
+
+
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
