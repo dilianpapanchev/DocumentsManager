@@ -1,3 +1,133 @@
+#!/usr/bin/env python3
+import os, sys, csv
+import glob
+import html
+
+def parse_time(t):
+    """Преобраз 'HH:MM:SS' в секунди."""
+    h, m, s = t.strip().split(':')
+    return (int(h) * 3600 + int(m) * 60 + int(s))
+
+# --- Настройка на директория и брой дни назад ---
+arg1 = sys.argv[1] if len(sys.argv) > 1 else None
+arg2 = sys.argv[2] if len(sys.argv) > 2 else None
+
+files_dir = arg1
+try:
+    n = int(arg2) if arg2 else 31
+except ValueError:
+    n = 31
+
+# Събиране на файловете
+files = []
+if os.path.isdir(files_dir):
+    try:
+        files = [f for f in glob.glob(os.path.join(files_dir, "*")) if os.path.isfile(f)]
+        files = sorted(files, key=os.path.getmtime)[-n:]
+        if not files:
+            sys.exit("Няма намерени файлове .JT в текущата папка.")
+    except Exception as e:
+        sys.exit(f"Не мога да вляза в директория {files_dir}: {e}")
+else:
+    sys.exit("Невалидна директория.")
+
+# Данни
+data = {}
+dates = [None] * len(files)
+
+# Парсване на всеки файл
+for idx, fn in enumerate(files):
+    with open(fn) as f:
+        for line in f:
+            parts = line.rstrip("\n").split(",")
+            if len(parts) < 8:
+                continue
+            stage_batch_job = (parts[0], parts[1], parts[2])
+            date     = parts[3]
+            start    = parts[5]
+            stop     = parts[6]
+            elapsed  = parts[7]
+            try:
+                secs = parse_time(elapsed)
+            except:
+                secs = 0
+
+            key = stage_batch_job
+            data.setdefault(key, {})[idx] = {
+                "start": start,
+                "stop": stop,
+                "elapsed": elapsed,
+                "secs": secs,
+                "date": date
+            }
+
+            if dates[idx] is None:
+                dates[idx] = date
+
+# --- Генериране на CSV редове ---
+out_lines = []
+
+# Заглавен ред
+header = ["STATUS", "STAGE", "BATCH", "JOB.NAME"]
+for i in range(len(files)):
+    header += [f"Date({i})", f"Start({i})", f"Stop({i})", f"Elapsed({i})"]
+header += ["AVERAGE"]
+out_lines.append(','.join(header))
+
+# По ключ
+for key in sorted(data.keys()):
+    status = ""
+    secs_list = []
+
+    # Изчисляване на STATUS
+    s = data.get(key, {}).get(0, {}).get("secs", 0)
+    e = data.get(key, {}).get(len(files)-1, {}).get("secs", 0)
+    if s == 0 and e > 0:
+        status = "NEW"
+    elif s > 0 and e == 0:
+        status = "LOST"
+    elif s > 0 and e > s:
+        status = "SLOW"
+    elif s == e and s > 0:
+        status = "STABLE"
+    else:
+        status = "-"
+
+    rec = [status, *key]
+
+    # Събиране на редовете
+    for idx in range(len(files)):
+        info = data.get(key, {}).get(idx)
+        if info:
+            rec += [info.get("date", ""), info.get("start", ""), info.get("stop", ""), info.get("elapsed", "")]
+            secs_list.append(info.get("secs", 0))
+        else:
+            rec += ["", "", "", ""]
+            secs_list.append(0)
+
+    # Изчисляване на AVERAGE
+    if secs_list:
+        s = sum(secs_list)
+        m = s // len(secs_list)
+        avg_str = f"{m//3600:02d}:{(m%3600)//60:02d}:{m%60:02d}"
+    else:
+        avg_str = ""
+    rec.append(avg_str)
+
+    out_lines.append(','.join(str(x) for x in rec))
+
+# --- Запис като JS променлива ---
+csv_string = '\\n'.join(html.escape(line) for line in out_lines)
+
+with open("csv_output.js", 'w', encoding='utf-8') as f:
+    f.write(f"const csvData = '{csv_string}';\n")
+
+print("Генериран файл: csv_output.js")
+
+
+
+
+
 import os
 import csv
 import sys
