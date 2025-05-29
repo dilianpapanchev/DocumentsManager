@@ -1,3 +1,17 @@
+const hasMatch = data.some(row => {
+  const val = row[dateIndex];
+  if (!val || !/^\d{8}$/.test(val)) return false;
+  const valInt = parseInt(val);
+  return (
+    (fromInt && !toInt && valInt === fromInt) ||
+    (!fromInt && toInt && valInt === toInt) ||
+    (fromInt && toInt && valInt >= fromInt && valInt <= toInt)
+  );
+});
+
+
+
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
