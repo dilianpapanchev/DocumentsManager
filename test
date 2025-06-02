@@ -1,3 +1,30 @@
+# Създай главната директория
+mkdir -p monitoring/{config,logs,tmp,scripts,results}
+
+# Създай примерна поддиректория с текущата дата (за логове и резултати)
+TODAY=$(date +%F)
+mkdir -p monitoring/logs/$TODAY
+mkdir -p monitoring/results/$TODAY
+
+# Създай примерни файлове в директорията config
+touch monitoring/config/{main.conf,hosts.list,keywords.conf,env.properties}
+
+# Създай основните скриптови файлове
+touch monitoring/scripts/{monitor_main.sh,ssh_runner.sh,check_disk.sh,check_memory.sh,check_services.sh,report_generator.sh}
+
+# Създай README файл
+touch monitoring/README.md
+
+# Добави права за изпълнение на скриптовете
+chmod +x monitoring/scripts/*.sh
+
+# Потвърждение
+echo "✅ Структурата на monitoring е създадена успешно."
+
+
+
+
+
 const fromval = parseInt(datefrom.value.replaceAll("-", ""), 10);
 const toval = parseInt(dateto.value.replaceAll("-", ""), 10);
 
