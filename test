@@ -1,3 +1,131 @@
+function filterData() {
+    updateCompareCheckbox();
+
+    const keyword = textFilter.value.toLowerCase();
+    const fromRaw = datefrom.value;
+    const toRaw = dateto.value;
+    const compare = compareCheckbox.checked;
+
+    let filtered = csvData.filter(row =>
+        row.join(" ").toLowerCase().includes(keyword)
+    );
+
+    const baseCols = headers.slice(0, 5);
+    let visibleCols = [...baseCols];
+    let insertDiffAfter = null;
+
+    if (compare && fromRaw && toRaw) {
+        const fromval = parseInt(fromRaw.replaceAll("-", ""), 10);
+        const toval = parseInt(toRaw.replaceAll("-", ""), 10);
+        const from = Math.min(fromval, toval);
+        const to = Math.max(fromval, toval);
+
+        let fromIdx = -1;
+        let toIdx = -1;
+
+        for (let i = 0; i < 35; i++) {
+            const idx = headers.indexOf(`DateS${i}`);
+            if (idx === -1) continue;
+
+            if (fromIdx === -1 && filtered.some(row => parseInt(row[idx]) === fromval)) fromIdx = i;
+            if (toIdx === -1 && filtered.some(row => parseInt(row[idx]) === toval)) toIdx = i;
+            if (fromIdx !== -1 && toIdx !== -1) break;
+        }
+
+        if (fromIdx !== -1 && toIdx !== -1) {
+            visibleCols.push(
+                `DateS${fromIdx}`, `StartS${fromIdx}`, `StopS${fromIdx}`, `ElapsedS${fromIdx}`,
+                `DateS${toIdx}`, `StartS${toIdx}`, `StopS${toIdx}`, `ElapsedS${toIdx}`
+            );
+            insertDiffAfter = headers.indexOf(`ElapsedS${toIdx}`);
+        }
+    } else if (fromRaw || toRaw) {
+        const fromval = parseInt(fromRaw.replaceAll("-", ""), 10) || null;
+        const toval = parseInt(toRaw.replaceAll("-", ""), 10) || null;
+
+        for (let i = 0; i < 35; i++) {
+            const dateKey = `DateS${i}`;
+            const idx = headers.indexOf(dateKey);
+            if (idx === -1) continue;
+
+            const col = dateKey;
+            const rowVal = row => parseInt(row[idx]);
+
+            let hasMatch = false;
+
+            if (fromval && toval) {
+                hasMatch = row => {
+                    const val = rowVal(row);
+                    return val >= fromval && val <= toval;
+                };
+            } else if (fromval) {
+                hasMatch = row => rowVal(row) === fromval;
+            } else if (toval) {
+                hasMatch = row => rowVal(row) === toval;
+            }
+
+            if (hasMatch && filtered.some(hasMatch)) {
+                visibleCols.push(`DateS${i}`, `StartS${i}`, `StopS${i}`, `ElapsedS${i}`);
+            }
+        }
+    } else {
+        visibleCols = headers;
+    }
+
+    if (currentSort.index >= 0) {
+        filtered.sort((a, b) => {
+            const valA = a[currentSort.index] || "";
+            const valB = b[currentSort.index] || "";
+            return currentSort.direction === 1
+                ? valA.localeCompare(valB)
+                : valB.localeCompare(valA);
+        });
+    } else if (compare && fromRaw && toRaw) {
+        const fromval = parseInt(fromRaw.replaceAll("-", ""), 10);
+        const toval = parseInt(toRaw.replaceAll("-", ""), 10);
+        const from = Math.min(fromval, toval);
+        const to = Math.max(fromval, toval);
+
+        const idx = headers.indexOf("DateS3");
+        if (idx === -1) return;
+
+        for (let i = 0; i < 35; i++) {
+            const testIdx = headers.indexOf(`DateS${i}`);
+            if (testIdx === -1) continue;
+
+            filtered = filtered.map(row => {
+                const fromIdx = headers.indexOf(`ElapsedS${from}`);
+                const toIdx = headers.indexOf(`ElapsedS${to}`);
+                const fromElapsed = row[fromIdx] || null;
+                const toElapsed = row[toIdx] || null;
+
+                let diff = null;
+                if (fromElapsed && toElapsed) {
+                    diff = msToSeconds(toElapsed) - msToSeconds(fromElapsed);
+                }
+
+                return {
+                    row,
+                    diff
+                };
+            });
+
+            filtered.sort((a, b) =>
+                currentSort.direction === 1 ? a.diff - b.diff : b.diff - a.diff
+            );
+
+            filtered = filtered.map(obj => obj.row);
+        }
+    }
+
+    buildTable(filtered, visibleCols, insertDiffAfter);
+}
+
+
+
+
+
+
 const valFrom = parseInt(datefrom.value.replaceAll("-", ""), 10);
 const valTo = parseInt(dateto.value.replaceAll("-", ""), 10);
 
