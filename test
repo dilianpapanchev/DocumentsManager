@@ -1,3 +1,18 @@
+const valFrom = parseInt(datefrom.value.replaceAll("-", ""), 10);
+const valTo = parseInt(dateto.value.replaceAll("-", ""), 10);
+
+// Оригинални стойности
+let fromval = valFrom;
+let toval = valTo;
+
+// За да работи range правилно
+const from = Math.min(valFrom, valTo);
+const to = Math.max(valFrom, valTo);
+
+
+
+
+
 let fromval = parseInt(datefrom.value.replaceAll("-", ""), 10);
 let toval = parseInt(dateto.value.replaceAll("-", ""), 10);
 
