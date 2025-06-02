@@ -1,3 +1,224 @@
+<script>
+const csvData = 'UI_DATA';
+
+let data = [];
+let headers = [];
+let currentSort = {
+    index: -1,
+    direction: 1
+};
+
+const textFilter = document.getElementById("textFilter");
+const datefrom = document.getElementById("datefrom");
+const dateto = document.getElementById("dateto");
+const compareCheckbox = document.getElementById("compareCheckbox");
+const dataTable = document.getElementById("dataTable").getElementsByTagName("tbody")[0];
+const headerRow = document.getElementById("headerRow");
+
+function msToSeconds(ms) {
+    const [h, m, s] = ms.split(':').map(Number);
+    return h * 3600 + m * 60 + s;
+}
+
+function secondsToHMS(sec) {
+    const negative = sec < 0;
+    sec = Math.abs(sec);
+    const h = String(Math.floor(sec / 3600)).padStart(2, '0');
+    const m = String(Math.floor((sec % 3600) / 60)).padStart(2, '0');
+    const s = String(sec % 60).padStart(2, '0');
+    return (negative ? '-' : '') + `${h}:${m}:${s}`;
+}
+
+function updateCompareCheckbox() {
+    const fromval = datefrom.value;
+    const toval = dateto.value;
+    const enabled = !!(fromval && toval);
+    compareCheckbox.disabled = !enabled;
+
+    if (!enabled) {
+        compareCheckbox.checked = false;
+        currentSort.index = -1;
+        direction = 1;
+    }
+}
+
+function buildTable(rows, visibleCols, diffAfterIndex) {
+    dataTable.innerHTML = "";
+    headerRow.innerHTML = "";
+
+    const visibleIndexes = visibleCols.map(col => headers.indexOf(col));
+
+    visibleCols.forEach((col, i) => {
+        const th = document.createElement("th");
+        th.textContent = col;
+        const idx = headers.indexOf(col);
+        th.classList.add("sortable");
+        if (idx === currentSort.index) {
+            th.classList.add(currentSort.direction === 1 ? "sorted-asc" : "sorted-desc");
+        }
+        th.onclick = () => {
+            if (idx === currentSort.index) {
+                currentSort.direction = (currentSort.direction * -1);
+            } else {
+                currentSort.index = idx;
+                currentSort.direction = 1;
+            }
+            filterData();
+        };
+        headerRow.appendChild(th);
+    });
+
+    if (compareCheckbox.checked && currentSort.index === -1) {
+        const thDiff = document.createElement("th");
+        thDiff.textContent = "Difference";
+        thDiff.classList.add("sortable");
+        thDiff.classList.add(currentSort.direction === 1 ? "sorted-asc" : "sorted-desc");
+        thDiff.onclick = () => {
+            if (currentSort.index === -1) {
+                currentSort.direction = (currentSort.direction * -1);
+            } else {
+                currentSort.index = -1;
+                currentSort.direction = 1;
+            }
+            filterData();
+        };
+        headerRow.appendChild(thDiff);
+    }
+
+    rows.forEach(row => {
+        const tr = document.createElement("tr");
+
+        let maxElapsed = 0;
+        let maxIndexes = [];
+
+        headers.forEach((head, i) => {
+            if (/Elapsed\d+/.test(head) && row[i]) {
+                const sec = msToSeconds(row[i]);
+                if (sec > maxElapsed) {
+                    maxElapsed = sec;
+                    maxIndexes = [i];
+                } else if (sec === maxElapsed) {
+                    maxIndexes.push(i);
+                }
+            }
+        });
+
+        visibleIndexes.forEach(i => {
+            const td = document.createElement("td");
+            td.textContent = row[i];
+            if (maxIndexes.includes(i)) {
+                td.classList.add("max-elapsed");
+            }
+            tr.appendChild(td);
+        });
+
+        if (compareCheckbox.checked && diffAfterIndex) {
+            const idx = headers.indexOf("DateS(3)");
+            if (idx === -1) return;
+
+            const fromval = parseInt(datefrom.value.replaceAll("-", ""), 10);
+            const toval = parseInt(dateto.value.replaceAll("-", ""), 10);
+            const dateval = parseInt(row[idx].replaceAll("-", ""), 10);
+            if (isNaN(dateval) || dateval < fromval || dateval > toval) return;
+
+            const fromIdx = headers.indexOf(`Elapsed${fromval}`);
+            const toIdx = headers.indexOf(`Elapsed${toval}`);
+            const fromElapsed = fromIdx >= 0 ? row[fromIdx] : null;
+            const toElapsed = toIdx >= 0 ? row[toIdx] : null;
+
+            const tdDiff = document.createElement("td");
+            if (fromElapsed && toElapsed) {
+                const diff = msToSeconds(toElapsed) - msToSeconds(fromElapsed);
+                tdDiff.textContent = secondsToHMS(diff);
+                tdDiff.classList.add(diff < 0 ? "diff-negative" : "diff-positive");
+            }
+            tr.appendChild(tdDiff);
+        }
+
+        dataTable.appendChild(tr);
+    });
+}
+
+function filterData() {
+    updateCompareCheckbox();
+
+    const keyword = textFilter.value.toLowerCase();
+    const fromval = parseInt(datefrom.value.replaceAll("-", ""), 10);
+    const toval = parseInt(dateto.value.replaceAll("-", ""), 10);
+
+    let from = Math.min(fromval, toval);
+    let to = Math.max(fromval, toval);
+
+    let visibleCols = headers.slice(0, 5); // първите 5 (DateS, Start, Stop, Elapsed)
+
+    const dateIndexes = [];
+    for (let i = 0; i < 35; i++) {
+        const colDate = new Date();
+        colDate.setDate(colDate.getDate() - i);
+        const dateStr = colDate.toISOString().slice(0, 10).replaceAll("-", "");
+        dateIndexes.push(dateStr);
+    }
+
+    if (compareCheckbox.checked && from && to) {
+        const filteredDates = dateIndexes.filter(date => {
+            const val = parseInt(date);
+            return val >= from && val <= to;
+        });
+
+        visibleCols = [];
+
+        filteredDates.forEach(d => {
+            visibleCols.push(`DateS(${d})`, `StartS(${d})`, `StopS(${d})`, `ElapsedS(${d})`);
+        });
+    } else {
+        visibleCols = headers;
+    }
+
+    const filtered = data.filter(row => {
+        const rowStr = row.join(" ").toLowerCase();
+        return rowStr.includes(keyword);
+    });
+
+    const insertDiffAfter = headers.indexOf(`ElapsedS(${toval})`);
+
+    if (compareCheckbox.checked && from && to) {
+        filtered.sort((a, b) => {
+            const fromIdx = headers.indexOf(`Elapsed${from}`);
+            const toIdx = headers.indexOf(`Elapsed${to}`);
+            const aDiff = fromIdx >= 0 && toIdx >= 0 ? msToSeconds(a[toIdx]) - msToSeconds(a[fromIdx]) : 0;
+            const bDiff = fromIdx >= 0 && toIdx >= 0 ? msToSeconds(b[toIdx]) - msToSeconds(b[fromIdx]) : 0;
+            return (currentSort.direction === 1 ? aDiff - bDiff : bDiff - aDiff);
+        });
+    }
+
+    buildTable(filtered, visibleCols, insertDiffAfter);
+}
+
+function parseCSV(csv) {
+    const lines = csv.trim().split('\n');
+    headers = lines[0].split(',');
+    data = lines.slice(1).map(line => line.split(','));
+}
+
+textFilter.addEventListener("input", filterData);
+datefrom.addEventListener("input", filterData);
+dateto.addEventListener("input", filterData);
+compareCheckbox.addEventListener("change", () => {
+    if (compareCheckbox.checked && currentSort.index === -1) {
+        currentSort.direction = 1;
+    }
+    filterData();
+});
+
+// Инициализация
+parseCSV(csvData);
+filterData();
+</script>
+
+
+
+
+
 const row = data[0]; // only the first row
 const val = row[dateIndex];
 let hasMatch = false;
