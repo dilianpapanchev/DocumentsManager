@@ -1,6 +1,41 @@
 #!/bin/bash
 
 CONFIG_FILE="./config/hosts.list"
+LOG_DIR="./logs/$(date +%F)"
+USER="your_ssh_user"  # Замени с реален потребител за SSH
+
+mkdir -p "$LOG_DIR"
+
+if [ ! -f "$CONFIG_FILE" ]; then
+  echo "⛔ Не е намерен файл: $CONFIG_FILE"
+  exit 1
+fi
+
+while IFS= read -r HOST; do
+  # Пропуска празни редове и коментари
+  [[ -z "$HOST" || "$HOST" =~ ^# ]] && continue
+
+  echo "👉 Свързване с $HOST..."
+  OUTPUT=$(ssh -o BatchMode=yes -o ConnectTimeout=5 "$USER@$HOST" 'echo "Успешно Влизане"' 2>&1)
+
+  if [[ $? -eq 0 ]]; then
+    echo "$HOST: ✅ $OUTPUT"
+    echo "$OUTPUT" > "$LOG_DIR/$HOST.log"
+  else
+    echo "$HOST: ❌ Неуспешно свързване"
+    echo "Грешка при свързване: $OUTPUT" > "$LOG_DIR/$HOST.log"
+  fi
+
+done < "$CONFIG_FILE"
+
+
+
+
+
+
+#!/bin/bash
+
+CONFIG_FILE="./config/hosts.list"
 USER="your_ssh_user"  # Смени това с валидно SSH потребителско име
 
 if [ ! -f "$CONFIG_FILE" ]; then
