@@ -1,3 +1,31 @@
+const fromval = parseInt(datefrom.value.replaceAll("-", ""), 10);
+const toval = parseInt(dateto.value.replaceAll("-", ""), 10);
+
+let fromx = null;
+let tox = null;
+
+for (let j = 1; j <= 35; j++) {
+    const idx = headers.indexOf(`DateS${j}`);
+    if (idx === -1) continue;
+
+    if (fromx === null && row[idx] && parseInt(row[idx]) === fromval) fromx = j;
+    if (tox === null && row[idx] && parseInt(row[idx]) === toval) tox = j;
+    if (fromx !== null && tox !== null) break;
+}
+
+if (fromx !== null && tox !== null) {
+    visibleCols.push(
+        `DateS${fromx}`, `StartS${fromx}`, `StopS${fromx}`, `ElapsedS${fromx}`,
+        `DateS${tox}`, `StartS${tox}`, `StopS${tox}`, `ElapsedS${tox}`
+    );
+    insertDiffAfter = headers.indexOf(`ElapsedS${tox}`);
+}
+
+
+
+
+
+
 function filterData() {
     updateCompareCheckbox();
 
