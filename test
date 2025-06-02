@@ -1,4 +1,20 @@
+let fromval = parseInt(datefrom.value.replaceAll("-", ""), 10);
+let toval = parseInt(dateto.value.replaceAll("-", ""), 10);
+
+if (fromval > toval) {
+    [fromval, toval] = [toval, fromval];
+}
+
+
+
+
+
+
+
 <script>
+
+
+
 const csvData = 'UI_DATA';
 
 let data = [];
