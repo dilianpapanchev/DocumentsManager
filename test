@@ -1,3 +1,29 @@
+#!/bin/bash
+
+CONFIG_FILE="./config/hosts.list"
+USER="your_ssh_user"  # Смени това с валидно SSH потребителско име
+
+if [ ! -f "$CONFIG_FILE" ]; then
+  echo "⛔ Не е намерен файл: $CONFIG_FILE"
+  exit 1
+fi
+
+while IFS= read -r HOST; do
+  if [ -z "$HOST" ]; then continue; fi
+  echo "👉 Свързване с $HOST..."
+
+  ssh -o BatchMode=yes -o ConnectTimeout=5 "$USER@$HOST" 'echo "Успешно Влизане"' 2>/dev/null
+
+  if [ $? -ne 0 ]; then
+    echo "❌ Грешка при свързване с $HOST"
+  fi
+
+done < "$CONFIG_FILE"
+
+
+
+
+
 # Създай главната директория
 mkdir -p monitoring/{config,logs,tmp,scripts,results}
 
