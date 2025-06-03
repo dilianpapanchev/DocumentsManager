@@ -1,3 +1,161 @@
+body {
+    font-family: 'Segoe UI', sans-serif;
+    margin: 0;
+    padding: 20px;
+    background: #f4f469;
+    color: #333;
+    transition: background 0.3s ease;
+}
+
+h1 {
+    text-align: center;
+    margin-bottom: 20px;
+    font-size: 2.2em;
+    text-shadow: 1px 1px 2px #ccc;
+}
+
+.toolbar {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    gap: 10px;
+    margin-bottom: 20px;
+}
+
+.toolbar input[type="text"],
+.toolbar input[type="date"] {
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 8px;
+    width: 200px;
+    background: #fff;
+    box-shadow: 2px 2px 5px rgba(0,0,0,0.1);
+    transition: all 0.2s ease-in-out;
+}
+
+.toolbar input[type="text"]:focus,
+.toolbar input[type="date"]:focus {
+    outline: none;
+    border-color: #b3e0ff;
+    box-shadow: 0 0 5px #b3e0ff;
+}
+
+.toolbar label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+}
+
+.toolbar input[type="checkbox"] {
+    transform: scale(1.2);
+    transition: transform 0.2s ease-in-out;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    background: #fff;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-radius: 6px;
+    border: 1px solid #b3e0ff;
+    overflow: hidden;
+    transition: box-shadow 0.3s ease;
+}
+
+th, td {
+    padding: 10px;
+    text-align: left;
+    border-bottom: 1px solid #b3e0ff;
+    border-right: 1px solid #b3e0ff;
+}
+
+th {
+    background-color: #b3e0ff;
+    font-weight: bold;
+    cursor: pointer;
+    user-select: none;
+    position: relative;
+    transition: background 0.2s ease;
+    white-space: nowrap;
+}
+
+th:hover {
+    background-color: #e9f0f9;
+}
+
+th.sorted-asc::after,
+th.sorted-desc::after {
+    content: ' ▼';
+    font-weight: bold;
+    font-size: 12px;
+    margin-left: 4px;
+    vertical-align: middle;
+    line-height: 1;
+}
+
+th.sorted-desc::after {
+    content: ' ▲';
+}
+
+td.diff-positive {
+    background-color: #daedda;
+    font-weight: bold;
+    border-radius: 4px;
+    transition: transform 0.2s ease;
+}
+
+td.diff-negative {
+    background-color: #e8d7da;
+    font-weight: bold;
+    border-radius: 4px;
+    transition: transform 0.2s ease;
+}
+
+td.max-elapsed {
+    background-color: #fff3cd;
+    font-weight: bold;
+}
+
+.page-title {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 12px;
+    margin-bottom: 20px;
+}
+
+.page-title .title-icon {
+    width: 30px;
+    height: 30px;
+    position: absolute;
+    left: 20px;
+    top: 10px;
+}
+
+.page-title h1 {
+    margin: 0;
+    font-size: 28px;
+}
+
+/* Responsive */
+@media (max-width: 769px) {
+    .toolbar {
+        flex-direction: column;
+        align-items: center;
+    }
+
+    .toolbar input[type="text"],
+    .toolbar input[type="date"] {
+        width: 100%;
+        max-width: 300px;
+    }
+}
+
+
+
+
+
 #!/usr/bin/env bash
 set -euo pipefail
 
