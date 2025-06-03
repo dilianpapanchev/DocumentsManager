@@ -1,3 +1,68 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+HTML_FILE="${1:-interactive_report.html}"
+
+if [[ ! -f "$HTML_FILE" ]]; then
+  echo "❌ HTML файлът не съществува: $HTML_FILE" >&2
+  exit 1
+fi
+
+# Извличане на CSV данните от HTML-а
+csv=$(awk '/^const rawCSV = `$/,/^`;$/' "$HTML_FILE" | sed '1d;$d')
+
+# Проверка дали има съдържание
+if [[ -z "$csv" ]]; then
+  echo "❌ Не открих CSV данни във файла." >&2
+  exit 1
+fi
+
+# Преобразуване в масив
+IFS=$'\n' read -rd '' -a lines <<< "$csv"
+
+# Заглавия
+IFS=',' read -r -a headers <<< "${lines[0]}"
+N_HEADERS=${#headers[@]}
+N_JOBS=$(( ${#lines[@]} - 1 ))
+N_DATES=$(( (N_HEADERS - 4) / 2 ))
+
+echo "📊 Summary за: $HTML_FILE"
+echo "——————————————"
+echo "Общо jobs:         $N_JOBS"
+echo "Брой дати:         $N_DATES"
+echo "Колони (общо):     $N_HEADERS"
+echo
+
+# Сумарни времена по DateX
+for ((d=0; d<N_DATES; d++)); do
+  elapsed_idx=$((4 + 2*d + 1))
+  total_sec=0
+  count=0
+
+  for ((i=1; i<=N_JOBS; i++)); do
+    line="${lines[i]}"
+    IFS=',' read -r -a fields <<< "$line"
+    time="${fields[elapsed_idx]}"
+    if [[ "$time" =~ ^[0-9]{2}:[0-9]{2}:[0-9]{2}$ ]]; then
+      IFS=: read -r h m s <<< "$time"
+      total_sec=$(( total_sec + h*3600 + m*60 + s ))
+      ((count++))
+    fi
+  done
+
+  if (( count > 0 )); then
+    avg_sec=$(( total_sec / count ))
+    hh=$(( avg_sec / 3600 ))
+    mm=$(( (avg_sec % 3600) / 60 ))
+    ss=$(( avg_sec % 60 ))
+    printf "Date %d average:   %02d:%02d:%02d\n" "$((d+1))" "$hh" "$mm" "$ss"
+  fi
+done
+
+
+
+
+
 #!/bin/bash
 
 CONFIG_FILE="./config/hosts.list"
