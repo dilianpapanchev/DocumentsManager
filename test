@@ -1,3 +1,123 @@
+// disk_usage.cpp
+// Compile with: g++ -std=c++17 disk_usage.cpp -o disk_usage [-lstdc++fs]
+
+#include <iostream>
+#include <filesystem>
+#include <iomanip>
+#include <vector>
+#include <algorithm>
+#include <sstream>
+
+namespace fs = std::filesystem;
+
+struct FileEntry {
+    fs::path path;
+    uintmax_t size;
+};
+
+// Convert a raw byte‐count into a human‐readable string (e.g. "1.23 MB")
+std::string humanReadableSize(uintmax_t size) {
+    const char* units[] = { "B", "KB", "MB", "GB", "TB" };
+    int unitIndex = 0;
+    double readableSize = static_cast<double>(size);
+
+    while (readableSize >= 1024 && unitIndex < 4) {
+        readableSize /= 1024;
+        ++unitIndex;
+    }
+
+    std::ostringstream out;
+    out << std::fixed << std::setprecision(2) << readableSize << " " << units[unitIndex];
+    return out.str();
+}
+
+// Collect files in dirPath up to two levels deep (no recursion beyond grandchildren)
+void collectFilesTwoLevels(const fs::path& dirPath, std::vector<FileEntry>& files) {
+    for (auto const& entry : fs::directory_iterator(dirPath)) {
+        if (fs::is_regular_file(entry.path())) {
+            files.push_back({ entry.path(), fs::file_size(entry.path()) });
+        }
+        else if (fs::is_directory(entry.path())) {
+            // Now iterate one level deeper
+            for (auto const& subEntry : fs::directory_iterator(entry.path())) {
+                if (fs::is_regular_file(subEntry.path())) {
+                    files.push_back({ subEntry.path(), fs::file_size(subEntry.path()) });
+                }
+            }
+        }
+    }
+}
+
+// Recursively collect every file under dirPath
+void collectFilesRecursive(const fs::path& dirPath, std::vector<FileEntry>& files) {
+    for (auto const& entry : fs::recursive_directory_iterator(dirPath)) {
+        if (fs::is_regular_file(entry.path())) {
+            files.push_back({ entry.path(), fs::file_size(entry.path()) });
+        }
+    }
+}
+
+// Analyze disk usage, either two‐levels deep or fully recursive based on 'recursive'
+void analyzeDiskUsage(const fs::path& dirPath, bool recursive) {
+    std::vector<FileEntry> files;
+    uintmax_t totalSize = 0;
+
+    try {
+        if (!fs::exists(dirPath) || !fs::is_directory(dirPath)) {
+            std::cerr << "Invalid directory: " << dirPath << std::endl;
+            return;
+        }
+
+        if (recursive) {
+            collectFilesRecursive(dirPath, files);
+        }
+        else {
+            collectFilesTwoLevels(dirPath, files);
+        }
+
+        // Sort files descending by size
+        std::sort(files.begin(), files.end(),
+                  [](const FileEntry& a, const FileEntry& b) {
+                      return a.size > b.size; 
+                  });
+
+        // Print each file's size and path
+        for (auto const& file : files) {
+            totalSize += file.size;
+            std::cout 
+                << std::setw(10) << humanReadableSize(file.size) 
+                << "\t" 
+                << file.path 
+                << std::endl;
+        }
+
+        std::cout << "\nTotal disk usage: " << humanReadableSize(totalSize) << std::endl;
+    }
+    catch (const fs::filesystem_error& e) {
+        std::cerr << "Filesystem error: " << e.what() << std::endl;
+    }
+}
+
+int main() {
+    std::string pathInput;
+    char recursiveChoice;
+
+    std::cout << "Enter directory path: ";
+    std::cin  >> pathInput;
+
+    std::cout << "Recursive scan? (y/n): ";
+    std::cin  >> recursiveChoice;
+
+    bool recursive = (recursiveChoice == 'y' || recursiveChoice == 'Y');
+    analyzeDiskUsage(pathInput, recursive);
+
+    return 0;
+}
+
+
+
+
+
 #include <iostream>
 #include <filesystem>
 #include <vector>
