@@ -1,3 +1,93 @@
+use std::env;
+use std::fs::{self, DirEntry, Metadata};
+use std::io;
+use std::path::{Path, PathBuf};
+use std::time::Instant;
+
+fn get_size(path: &Path) -> u64 {
+    match fs::metadata(path) {
+        Ok(metadata) => {
+            if metadata.is_file() {
+                metadata.len()
+            } else if metadata.is_dir() {
+                let mut size = 0;
+                if let Ok(entries) = fs::read_dir(path) {
+                    for entry in entries.filter_map(Result::ok) {
+                        let entry_path = entry.path();
+                        size += get_size(&entry_path);
+                    }
+                }
+                size
+            } else {
+                0
+            }
+        }
+        Err(_) => 0,
+    }
+}
+
+fn collect_entries(path: &Path, results: &mut Vec<(PathBuf, u64)>) {
+    if let Ok(entries) = fs::read_dir(path) {
+        for entry in entries.filter_map(Result::ok) {
+            let entry_path = entry.path();
+            let size = get_size(&entry_path);
+            results.push((entry_path.clone(), size));
+            if entry_path.is_dir() {
+                collect_entries(&entry_path, results);
+            }
+        }
+    }
+}
+
+fn main() -> io::Result<()> {
+    let start = Instant::now();
+
+    let args: Vec<String> = env::args().collect();
+    let root_path = if args.len() > 1 {
+        PathBuf::from(&args[1])
+    } else {
+        env::current_dir()?
+    };
+
+    println!("Analyzing: {}", root_path.display());
+
+    let mut results = Vec::new();
+    collect_entries(&root_path, &mut results);
+
+    results.sort_by(|a, b| b.1.cmp(&a.1)); // сортиране по големина (намаляващо)
+
+    println!("\nTop 20 biggest files/directories:");
+    for (path, size) in results.iter().take(20) {
+        println!("{:<10} {}", format_size(*size), path.display());
+    }
+
+    println!("\nDone in {:.2?}", start.elapsed());
+    Ok(())
+}
+
+fn format_size(size: u64) -> String {
+    const KB: u64 = 1024;
+    const MB: u64 = KB * 1024;
+    const GB: u64 = MB * 1024;
+
+    if size >= GB {
+        format!("{:.2} GB", size as f64 / GB as f64)
+    } else if size >= MB {
+        format!("{:.2} MB", size as f64 / MB as f64)
+    } else if size >= KB {
+        format!("{:.2} KB", size as f64 / KB as f64)
+    } else {
+        format!("{} B", size)
+    }
+}
+
+
+
+
+
+
+
+
 #!/usr/bin/env python3
 """
 disk_analyser.py
