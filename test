@@ -1,3 +1,156 @@
+#!/usr/bin/env python3
+"""
+disk_analyser.py
+
+Recursively walks through a directory tree on a Linux system,
+calculates total sizes for each directory (including its children),
+and prints the top-N largest directories/files in human-readable form.
+
+Usage:
+    python3 disk_analyser.py /path/to/scan --top 10
+
+If --top is omitted, it defaults to 10. If no path is given, it uses the current directory.
+"""
+
+import os
+import argparse
+import sys
+from collections import defaultdict
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Scan a directory recursively and report the largest directories or files."
+    )
+    parser.add_argument(
+        "root_path",
+        nargs="?",
+        default=".",
+        help="Path to the directory you want to analyze (default: current directory)."
+    )
+    parser.add_argument(
+        "--top",
+        "-t",
+        type=int,
+        default=10,
+        help="Number of top entries to display (default: 10)."
+    )
+    parser.add_argument(
+        "--dirs-only",
+        action="store_true",
+        help="Show only directories (skip individual files)."
+    )
+    parser.add_argument(
+        "--files-only",
+        action="store_true",
+        help="Show only files (skip aggregating directory totals)."
+    )
+    return parser.parse_args()
+
+def sizeof_fmt(num_bytes, suffix="B"):
+    """
+    Convert a size in bytes to a human-readable string.
+    e.g. 1024 -> "1.0KB", 1048576 -> "1.0MB"
+    """
+    for unit in ["", "K", "M", "G", "T", "P", "E"]:
+        if abs(num_bytes) < 1024.0:
+            return f"{num_bytes:.1f}{unit}{suffix}"
+        num_bytes /= 1024.0
+    return f"{num_bytes:.1f}Z{suffix}"
+
+def accumulate_sizes(root):
+    """
+    Walk through the directory tree starting at `root`.
+    Returns two mappings:
+      1) dir_size_map: maps each directory path to the total size (in bytes) of all files under it.
+      2) file_size_map: maps each file path to its size in bytes.
+    """
+    dir_size_map = defaultdict(int)
+    file_size_map = {}
+
+    # os.walk yields (dirpath, dirnames, filenames)
+    for dirpath, dirnames, filenames in os.walk(root, onerror=_walk_error, followlinks=False):
+        total_size_in_dir = 0
+        for fname in filenames:
+            fpath = os.path.join(dirpath, fname)
+            try:
+                stat = os.stat(fpath, follow_symlinks=False)
+                size = stat.st_size
+            except (OSError, PermissionError):
+                # Skip files we can't access
+                continue
+
+            file_size_map[fpath] = size
+            total_size_in_dir += size
+
+        # Add this directory's own files to its entry
+        dir_size_map[dirpath] += total_size_in_dir
+
+        # Propagate size upward: every parent directory gets this total
+        parent = dirpath
+        while True:
+            parent = os.path.dirname(parent.rstrip(os.sep))
+            if not parent or parent == dirpath:
+                break
+            dir_size_map[parent] += total_size_in_dir
+            dirpath = parent
+
+    return dir_size_map, file_size_map
+
+def _walk_error(err):
+    """
+    Handler for os.walk errors (e.g., permission issues).
+    Just print a warning to stderr and continue.
+    """
+    sys.stderr.write(f"Warning: cannot access {err.filename}: {err.strerror}\n")
+
+def main():
+    args = parse_args()
+    root = os.path.abspath(args.root_path)
+
+    if not os.path.exists(root):
+        print(f"Error: The path '{root}' does not exist.")
+        sys.exit(1)
+
+    # Build maps of sizes
+    dir_size_map, file_size_map = accumulate_sizes(root)
+
+    items = []
+    if not args.files_only:
+        # Include directories (with aggregated sizes)
+        for dpath, total in dir_size_map.items():
+            items.append((total, dpath, "dir"))
+    if not args.dirs_only:
+        # Include individual files
+        for fpath, size in file_size_map.items():
+            items.append((size, fpath, "file"))
+
+    # Sort by size descending
+    items.sort(key=lambda x: x[0], reverse=True)
+
+    # Print header
+    print(f"\nTop {args.top} largest {'directories and files' if not (args.files_only or args.dirs_only) else ('directories' if args.dirs_only else 'files')} under '{root}':\n")
+    print(f"{'Type':<6}  {'Size':>10}  Path")
+    print(f"{'-'*6}  {'-'*10}  {'-'*60}")
+
+    count = 0
+    for total, path, kind in items:
+        human = sizeof_fmt(total)
+        label = "DIR" if kind == "dir" else "FILE"
+        print(f"{label:<6}  {human:>10}  {path}")
+        count += 1
+        if count >= args.top:
+            break
+
+    print()
+
+if __name__ == "__main__":
+    main()
+
+
+
+
+
+
 // disk_usage_html.cpp
 // ==============
 // Compile with:
