@@ -1,3 +1,130 @@
+#include <iostream>
+#include <filesystem>
+#include <vector>
+#include <algorithm>
+#include <ncurses.h>
+#include <iomanip>
+#include <sstream>
+
+namespace fs = std::filesystem;
+
+std::string human_readable(std::uintmax_t size) {
+    const char* suffixes[] = { "B", "KB", "MB", "GB", "TB" };
+    double readable_size = static_cast<double>(size);
+    int i = 0;
+
+    while (readable_size >= 1024 && i < 4) {
+        readable_size /= 1024;
+        ++i;
+    }
+
+    std::ostringstream out;
+    out << std::fixed << std::setprecision(2) << readable_size << " " << suffixes[i];
+    return out.str();
+}
+
+std::uintmax_t get_directory_size(const fs::path& dir_path) {
+    std::uintmax_t size = 0;
+
+    for (const auto& entry : fs::recursive_directory_iterator(dir_path, fs::directory_options::skip_permission_denied)) {
+        try {
+            if (fs::is_regular_file(entry.status()))
+                size += fs::file_size(entry.path());
+        } catch (...) {}
+    }
+
+    return size;
+}
+
+std::vector<std::pair<std::string, std::string>> analyze_usage(const fs::path& root) {
+    std::vector<std::pair<std::string, std::uintmax_t>> dir_sizes;
+
+    for (const auto& entry : fs::directory_iterator(root, fs::directory_options::skip_permission_denied)) {
+        if (fs::is_directory(entry)) {
+            auto size = get_directory_size(entry.path());
+            dir_sizes.emplace_back(entry.path().string(), size);
+        }
+    }
+
+    std::sort(dir_sizes.begin(), dir_sizes.end(),
+              [](const auto& a, const auto& b) { return a.second < b.second; });
+
+    std::vector<std::pair<std::string, std::string>> result;
+    for (const auto& [path, size] : dir_sizes)
+        result.emplace_back(path, human_readable(size));
+
+    return result;
+}
+
+void draw_ui(const std::vector<std::pair<std::string, std::string>>& data) {
+    initscr();
+    noecho();
+    cbreak();
+    keypad(stdscr, TRUE);
+
+    int height, width;
+    getmaxyx(stdscr, height, width);
+
+    int start = 0;
+    int highlight = 0;
+
+    while (true) {
+        clear();
+        mvprintw(0, 0, "Linux Disk Usage Analyzer - Press 'q' to Quit");
+        mvhline(1, 0, '-', width);
+
+        int visible_lines = height - 3;
+        for (int i = 0; i < visible_lines && (start + i) < (int)data.size(); ++i) {
+            if (highlight == (start + i)) {
+                attron(A_REVERSE);
+            }
+
+            std::string name = data[start + i].first;
+            std::string size = data[start + i].second;
+
+            if ((int)name.length() > width - 15)
+                name = name.substr(0, width - 18) + "...";
+
+            mvprintw(i + 2, 0, "%-*s %12s", width - 15, name.c_str(), size.c_str());
+
+            if (highlight == (start + i)) {
+                attroff(A_REVERSE);
+            }
+        }
+
+        int ch = getch();
+        if (ch == 'q') break;
+        else if (ch == KEY_UP && highlight > 0) --highlight;
+        else if (ch == KEY_DOWN && highlight < (int)data.size() - 1) ++highlight;
+
+        if (highlight < start) start = highlight;
+        else if (highlight >= start + visible_lines) start = highlight - visible_lines + 1;
+    }
+
+    endwin();
+}
+
+int main(int argc, char* argv[]) {
+    fs::path target_dir = ".";
+
+    if (argc > 1)
+        target_dir = argv[1];
+
+    if (!fs::exists(target_dir) || !fs::is_directory(target_dir)) {
+        std::cerr << "Invalid directory: " << target_dir << "\n";
+        return 1;
+    }
+
+    auto data = analyze_usage(target_dir);
+    draw_ui(data);
+    return 0;
+}
+
+
+
+
+
+
 body {
     font-family: 'Segoe UI', sans-serif;
     margin: 0;
