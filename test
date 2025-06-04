@@ -1,4 +1,294 @@
 // disk_usage_html.cpp
+// ==============
+// Compile with:
+//   g++ -std=c++17 disk_usage_html.cpp -o disk_usage_html
+// If you see “undefined reference to `std::filesystem::…’” errors, add “-lstdc++fs” at the end:
+//   g++ -std=c++17 disk_usage_html.cpp -o disk_usage_html -lstdc++fs
+
+#include <iostream>
+#include <filesystem>
+#include <iomanip>
+#include <vector>
+#include <algorithm>
+#include <sstream>
+#include <fstream>
+#include <string>
+
+namespace fs = std::filesystem;
+
+struct FileEntry {
+    fs::path path;
+    uintmax_t size;
+};
+
+// Convert a raw byte count into a human-readable string (e.g. "1.23 MB")
+static std::string humanReadableSize(uintmax_t size) {
+    const char* units[] = { "B", "KB", "MB", "GB", "TB" };
+    int unitIndex = 0;
+    double readableSize = static_cast<double>(size);
+
+    while (readableSize >= 1024.0 && unitIndex < 4) {
+        readableSize /= 1024.0;
+        ++unitIndex;
+    }
+    std::ostringstream out;
+    out << std::fixed << std::setprecision(2) << readableSize << " " << units[unitIndex];
+    return out.str();
+}
+
+// URL‐encode a few characters so <a href="file://…"> works
+static std::string urlEncode(const std::string& path) {
+    std::ostringstream oss;
+    for (char c : path) {
+        switch (c) {
+            case ' ' : oss << "%20"; break;
+            case '"' : oss << "%22"; break;
+            case '#' : oss << "%23"; break;
+            case '%' : oss << "%25"; break;
+            case '&' : oss << "%26"; break;
+            case '\'' : oss << "%27"; break;
+            case '+' : oss << "%2B"; break;
+            case ',' : oss << "%2C"; break;
+            case '/' : oss << "/";   break; // leave slash as-is
+            case ':' : oss << "%3A"; break;
+            case ';' : oss << "%3B"; break;
+            case '<' : oss << "%3C"; break;
+            case '=' : oss << "%3D"; break;
+            case '>' : oss << "%3E"; break;
+            case '?' : oss << "%3F"; break;
+            case '[' : oss << "%5B"; break;
+            case '\\': oss << "%5C"; break;
+            case ']' : oss << "%5D"; break;
+            case '^' : oss << "%5E"; break;
+            case '`' : oss << "%60"; break;
+            case '{' : oss << "%7B"; break;
+            case '|' : oss << "%7C"; break;
+            case '}' : oss << "%7D"; break;
+            case '~' : oss << "%7E"; break;
+            default:
+                if (static_cast<unsigned char>(c) >= 0x20 && static_cast<unsigned char>(c) <= 0x7E) {
+                    oss << c;
+                } else {
+                    oss << "%"
+                        << std::uppercase << std::hex << std::setw(2) << std::setfill('0')
+                        << (static_cast<int>(static_cast<unsigned char>(c)))
+                        << std::dec << std::nouppercase;
+                }
+        }
+    }
+    return oss.str();
+}
+
+// Collect files in dirPath up to two levels deep
+static void collectFilesTwoLevels(const fs::path& dirPath, std::vector<FileEntry>& files) {
+    for (auto const& entry : fs::directory_iterator(dirPath)) {
+        if (fs::is_regular_file(entry.path())) {
+            files.push_back({ entry.path(), fs::file_size(entry.path()) });
+        }
+        else if (fs::is_directory(entry.path())) {
+            for (auto const& subEntry : fs::directory_iterator(entry.path())) {
+                if (fs::is_regular_file(subEntry.path())) {
+                    files.push_back({ subEntry.path(), fs::file_size(subEntry.path()) });
+                }
+            }
+        }
+    }
+}
+
+// Recursively collect every file under dirPath
+static void collectFilesRecursive(const fs::path& dirPath, std::vector<FileEntry>& files) {
+    for (auto const& entry : fs::recursive_directory_iterator(dirPath)) {
+        if (fs::is_regular_file(entry.path())) {
+            files.push_back({ entry.path(), fs::file_size(entry.path()) });
+        }
+    }
+}
+
+// Write out a complete HTML report called “disk_usage.html”
+static void generateHtmlReport(const std::vector<FileEntry>& files, uintmax_t totalSize) {
+    std::ofstream html("disk_usage.html");
+    if (!html.is_open()) {
+        std::cerr << "Error: could not open disk_usage.html for writing.\n";
+        return;
+    }
+
+    // Use a raw‐string literal with custom delimiter R"HTML(... )HTML"
+    html << R"HTML(<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Disk Usage Report</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    table { border-collapse: collapse; width: 100%; }
+    th, td { padding: 8px 12px; border: 1px solid #ccc; }
+    th { background-color: #f2f2f2; cursor: pointer; }
+    tr:nth-child(even) { background-color: #fafafa; }
+    tr:hover { background-color: #f1f1f1; }
+    caption { font-size: 1.2em; margin-bottom: 10px; font-weight: bold; }
+    .total-row { font-weight: bold; background-color: #e8e8e8; }
+  </style>
+</head>
+<body>
+
+<h2>Disk Usage Report</h2>
+<p>Generated by <code>disk_usage_html</code>. Click on a column header to sort. Click a file path to open (in your file‐manager or default handler).</p>
+
+<table id="usageTable">
+  <caption>Files and Sizes</caption>
+  <thead>
+    <tr>
+      <th onclick="sortTable(0)">Size</th>
+      <th onclick="sortTable(1)">Path</th>
+    </tr>
+  </thead>
+  <tbody>
+)HTML";
+
+    // One HTML row per file entry
+    for (auto const& fe : files) {
+        std::string hrSize = humanReadableSize(fe.size);
+        std::string filePath = fe.path.string();
+        std::string url = std::string("file://") + urlEncode(filePath);
+
+        html << "    <tr>\n";
+        html << "      <td>" << hrSize << "</td>\n";
+        html << "      <td><a href=\"" << url << "\">" << filePath << "</a></td>\n";
+        html << "    </tr>\n";
+    }
+
+    // Close out the table and insert a “Total” footer row
+    html << R"HTML(  </tbody>
+  <tfoot>
+    <tr class="total-row">
+      <td colspan="2">Total disk usage: )HTML"
+         << humanReadableSize(totalSize)
+         << R"HTML(</td>
+    </tr>
+  </tfoot>
+</table>
+
+<script>
+// Simple table‐sorting script (sort strings or human‐readable sizes).
+function sortTable(colIndex) {
+  var table = document.getElementById("usageTable");
+  var tbody = table.tBodies[0];
+  var rows = Array.from(tbody.querySelectorAll("tr"));
+
+  // If we clicked the same column twice, reverse
+  if (tbody.getAttribute("data-sort-col") == colIndex) {
+    rows.reverse();
+    tbody.setAttribute("data-sort-col", -1);
+  } else {
+    rows.sort(function(a, b) {
+      var aText = a.cells[colIndex].innerText.trim();
+      var bText = b.cells[colIndex].innerText.trim();
+
+      if (colIndex === 0) {
+        // Column 0 is “Size” (like “1.23 MB”). Convert to bytes:
+        function parseHR(s) {
+          var parts = s.split(" ");
+          var num = parseFloat(parts[0]);
+          var unit = parts[1];
+          var factor = 1;
+          switch (unit) {
+            case "TB": factor = 1024 * 1024 * 1024 * 1024; break;
+            case "GB": factor = 1024 * 1024 * 1024; break;
+            case "MB": factor = 1024 * 1024; break;
+            case "KB": factor = 1024; break;
+            default:   factor = 1; break;
+          }
+          return num * factor;
+        }
+        return parseHR(aText) - parseHR(bText);
+      } else {
+        // Column 1 is “Path,” do a string compare
+        return aText.localeCompare(bText);
+      }
+    });
+    tbody.setAttribute("data-sort-col", colIndex);
+  }
+
+  // Re-attach sorted rows
+  rows.forEach(function(r) {
+    tbody.appendChild(r);
+  });
+}
+</script>
+
+</body>
+</html>
+)HTML";
+
+    html.close();
+    std::cout << "HTML report written to disk_usage.html\n"
+              << "Open it in your web browser to view.\n";
+}
+
+// Scans directory (two levels or recursive) and builds the HTML report
+static void analyzeAndGenerate(const fs::path& dirPath, bool recursive) {
+    std::vector<FileEntry> files;
+    uintmax_t totalSize = 0;
+
+    try {
+        if (!fs::exists(dirPath) || !fs::is_directory(dirPath)) {
+            std::cerr << "Invalid directory: " << dirPath << "\n";
+            return;
+        }
+
+        if (recursive) {
+            collectFilesRecursive(dirPath, files);
+        } else {
+            collectFilesTwoLevels(dirPath, files);
+        }
+
+        // Sort descending by size
+        std::sort(files.begin(), files.end(),
+            [](auto const& a, auto const& b) {
+                return a.size > b.size;
+            });
+
+        // Sum up total sizes
+        for (auto const& fe : files) {
+            totalSize += fe.size;
+        }
+
+        // Finally, write the HTML
+        generateHtmlReport(files, totalSize);
+    }
+    catch (const fs::filesystem_error& e) {
+        std::cerr << "Filesystem error: " << e.what() << "\n";
+    }
+}
+
+int main() {
+    std::string pathInput;
+    char recursiveChoice;
+
+    std::cout << "\n=== Disk Usage (HTML report) ===\n\n";
+    std::cout << "Enter directory path: ";
+    std::getline(std::cin, pathInput);
+    if (pathInput.empty()) {
+        std::cerr << "No path entered. Exiting.\n";
+        return 1;
+    }
+
+    std::cout << "Recursive scan? (y/n): ";
+    std::cin >> recursiveChoice;
+    bool recursive = (recursiveChoice == 'y' || recursiveChoice == 'Y');
+
+    analyzeAndGenerate(pathInput, recursive);
+    return 0;
+}
+
+
+
+
+
+
+
+
+// disk_usage_html.cpp
 // Compile with: g++ -std=c++17 disk_usage_html.cpp -o disk_usage_html
 // (If you get undefined-reference errors on std::filesystem, add -lstdc++fs at the end.)
 
