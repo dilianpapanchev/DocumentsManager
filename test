@@ -1,3 +1,228 @@
+#include <iostream>
+#include <filesystem>
+#include <vector>
+#include <algorithm>
+#include <ncurses.h>
+#include <sstream>
+#include <iomanip>
+
+namespace fs = std::filesystem;
+
+std::string human_readable(std::uintmax_t size) {
+    const char* suffixes[] = {"B", "KB", "MB", "GB", "TB"};
+    double readable = static_cast<double>(size);
+    int i = 0;
+    while (readable >= 1024 && i < 4) {
+        readable /= 1024;
+        ++i;
+    }
+    std::ostringstream out;
+    out << std::fixed << std::setprecision(2) << readable << " " << suffixes[i];
+    return out.str();
+}
+
+std::uintmax_t get_size(const fs::path& dir, int depth, int max_depth) {
+    if (depth > max_depth) return 0;
+    std::uintmax_t size = 0;
+    for (const auto& entry : fs::directory_iterator(dir, fs::directory_options::skip_permission_denied)) {
+        try {
+            if (fs::is_directory(entry))
+                size += get_size(entry.path(), depth + 1, max_depth);
+            else if (fs::is_regular_file(entry))
+                size += fs::file_size(entry);
+        } catch (...) {}
+    }
+    return size;
+}
+
+std::vector<std::pair<std::string, std::string>> analyze_dir(const fs::path& base_dir, int max_depth, std::uintmax_t min_size_bytes) {
+    std::vector<std::pair<std::string, std::uintmax_t>> raw_data;
+
+    try {
+        for (const auto& entry : fs::directory_iterator(base_dir, fs::directory_options::skip_permission_denied)) {
+            if (fs::is_directory(entry)) {
+                std::uintmax_t total = get_size(entry.path(), 1, max_depth);
+                if (total >= min_size_bytes)
+                    raw_data.emplace_back(entry.path().string(), total);
+            }
+        }
+    } catch (...) {
+        return {};
+    }
+
+    std::sort(raw_data.begin(), raw_data.end(),
+              [](const auto& a, const auto& b) { return a.second < b.second; });
+
+    std::vector<std::pair<std::string, std::string>> result;
+    for (const auto& [path, size] : raw_data)
+        result.emplace_back(path, human_readable(size));
+
+    return result;
+}
+
+std::string choose_directory() {
+    std::string current_path = fs::current_path().string();
+
+    while (true) {
+        std::vector<std::string> entries;
+        entries.push_back(".. (Back)");
+
+        try {
+            for (const auto& entry : fs::directory_iterator(current_path, fs::directory_options::skip_permission_denied)) {
+                if (fs::is_directory(entry))
+                    entries.push_back(entry.path().string());
+            }
+        } catch (...) {
+            entries.clear();
+        }
+
+        if (entries.size() <= 1) {
+            clear();
+            mvprintw(0, 0, "No accessible subdirectories. Press any key to go back.");
+            getch();
+            current_path = fs::path(current_path).parent_path().string();
+            continue;
+        }
+
+        std::sort(entries.begin() + 1, entries.end());
+        int highlight = 0, start = 0;
+
+        while (true) {
+            clear();
+            int h, w;
+            getmaxyx(stdscr, h, w);
+            mvprintw(0, 0, "Select directory to analyze (Enter = open, q = quit)");
+
+            for (int i = 0; i < h - 2 && (start + i) < (int)entries.size(); ++i) {
+                if (highlight == start + i)
+                    attron(A_REVERSE);
+                std::string display = entries[start + i];
+                if ((int)display.length() > w - 2)
+                    display = display.substr(0, w - 5) + "...";
+                mvprintw(i + 1, 0, "%s", display.c_str());
+                if (highlight == start + i)
+                    attroff(A_REVERSE);
+            }
+
+            int ch = getch();
+            if (ch == 'q') return "";
+            else if (ch == KEY_UP && highlight > 0) --highlight;
+            else if (ch == KEY_DOWN && highlight < (int)entries.size() - 1) ++highlight;
+            else if (ch == 10) {
+                if (highlight == 0) {
+                    current_path = fs::path(current_path).parent_path().string();
+                    break;
+                } else if (highlight > 0 && highlight < (int)entries.size()) {
+                    current_path = entries[highlight];
+                    break;
+                }
+            }
+
+            if (highlight < start) start = highlight;
+            else if (highlight >= start + (h - 2)) start = highlight - (h - 3);
+        }
+
+        clear();
+        mvprintw(0, 0, "Use this directory? %s [y/n]", current_path.c_str());
+        int ch = getch();
+        if (ch == 'y' || ch == 'Y')
+            return current_path;
+    }
+}
+
+int choose_depth() {
+    int depth = 2;
+    while (true) {
+        clear();
+        mvprintw(0, 0, "Select analysis depth (1–5): Use '+' and '-' keys. Press Enter to confirm.");
+        mvprintw(2, 0, "Current depth: %d", depth);
+        int ch = getch();
+        if (ch == 10) break;
+        else if (ch == '+') depth = std::min(depth + 1, 5);
+        else if (ch == '-') depth = std::max(depth - 1, 1);
+    }
+    return depth;
+}
+
+int choose_min_size() {
+    int size_mb = 0;
+    while (true) {
+        clear();
+        mvprintw(0, 0, "Filter out directories smaller than X MB. Use '+' and '-' keys. Press Enter to confirm.");
+        mvprintw(2, 0, "Current minimum size: %d MB", size_mb);
+        int ch = getch();
+        if (ch == 10) break;
+        else if (ch == '+') size_mb = std::min(size_mb + 10, 10000);
+        else if (ch == '-') size_mb = std::max(size_mb - 10, 0);
+    }
+    return size_mb;
+}
+
+void show_results(const std::vector<std::pair<std::string, std::string>>& data) {
+    int highlight = 0, start = 0;
+
+    while (true) {
+        clear();
+        int h, w;
+        getmaxyx(stdscr, h, w);
+        mvprintw(0, 0, "Results (press q to quit)");
+
+        for (int i = 0; i < h - 2 && (start + i) < (int)data.size(); ++i) {
+            if (highlight == start + i)
+                attron(A_REVERSE);
+
+            std::string name = data[start + i].first;
+            std::string size = data[start + i].second;
+            if ((int)name.length() > w - 15)
+                name = name.substr(0, w - 18) + "...";
+
+            mvprintw(i + 1, 0, "%-*s %12s", w - 15, name.c_str(), size.c_str());
+
+            if (highlight == start + i)
+                attroff(A_REVERSE);
+        }
+
+        int ch = getch();
+        if (ch == 'q') break;
+        else if (ch == KEY_UP && highlight > 0) --highlight;
+        else if (ch == KEY_DOWN && highlight < (int)data.size() - 1) ++highlight;
+
+        if (highlight < start) start = highlight;
+        else if (highlight >= start + (h - 2)) start = highlight - (h - 3);
+    }
+}
+
+int main() {
+    initscr();
+    noecho();
+    cbreak();
+    keypad(stdscr, TRUE);
+
+    std::string selected = choose_directory();
+    if (!selected.empty()) {
+        int depth = choose_depth();
+        int min_mb = choose_min_size();
+        auto data = analyze_dir(selected, depth, static_cast<std::uintmax_t>(min_mb) * 1024 * 1024);
+        if (!data.empty())
+            show_results(data);
+        else {
+            clear();
+            mvprintw(0, 0, "No directories matched the criteria. Press any key to exit.");
+            getch();
+        }
+    }
+
+    endwin();
+    return 0;
+}
+
+
+
+
+
+
+
+
 g++ -std=c++17 -o disk_usage_ui_enhanced disk_usage_ui_enhanced.cpp -lncurses -lstdc++fs
 
 
