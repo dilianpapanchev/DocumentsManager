@@ -1,3 +1,34 @@
+# merge_replacements.py
+
+def load_mapping(filepath):
+    mapping = {}
+    with open(filepath, 'r') as f:
+        next(f)  # skip header
+        for line in f:
+            parts = line.strip().split('|')
+            if len(parts) == 2:
+                recid, arr_id = parts
+                mapping[arr_id] = recid
+    return mapping
+
+def update_file(input_file, output_file, mapping):
+    with open(input_file, 'r') as fin, open(output_file, 'w') as fout:
+        header = fin.readline()
+        fout.write(header)
+        for line in fin:
+            parts = line.strip().split('|')
+            if len(parts) == 3:
+                _, arr_id, status = parts
+                new_recid = mapping.get(arr_id, arr_id)
+                fout.write(f"{new_recid}|{arr_id}|{status}\n")
+
+if __name__ == "__main__":
+    id4_map = load_mapping("id4.txt")
+    update_file("id3.txt", "id3_updated.txt", id4_map)
+
+
+
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
