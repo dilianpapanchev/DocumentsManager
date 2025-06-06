@@ -1,3 +1,37 @@
+import os
+import re
+
+# Задай тук основната директория с логовите подпапки
+SOURCE_DIR = "C:/Path/To/Your/Logs"  # <-- промени това
+OUTPUT_FILE = "all_ids_with_logs.txt"
+
+# Регулярно изражение за ID
+pattern = re.compile(r"(WAY4BOOK-\d{5})")
+
+results = []
+
+for root, _, files in os.walk(SOURCE_DIR):
+    for filename in files:
+        if filename.lower().endswith(".log"):
+            file_path = os.path.join(root, filename)
+            try:
+                with open(file_path, "r", encoding="utf-8", errors="ignore") as f:
+                    for line in f:
+                        for match in pattern.findall(line):
+                            results.append(f"{match} | {filename}")
+            except Exception as e:
+                print(f"[Грешка] {file_path}: {e}")
+
+# Запис на резултата
+with open(OUTPUT_FILE, "w", encoding="utf-8") as out_file:
+    out_file.write("\n".join(results))
+
+print(f"[OK] Извлечени {len(results)} ID-та. Записани в: {OUTPUT_FILE}")
+
+
+
+
+
 # merge_replacements.py
 
 def load_mapping(filepath):
