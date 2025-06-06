@@ -1,6 +1,42 @@
 import os
 import re
 
+# Основна директория с логовете
+SOURCE_DIR = "C:/Path/To/Your/Logs"  # <-- смени с твоя път
+OUTPUT_FILE = "all_ids_with_logs.txt"
+
+# Регулярно изражение за WAY4BOOK-xxxxx
+pattern = re.compile(r"(WAY4BOOK-\d{5})")
+
+results = []
+
+for root, dirs, files in os.walk(SOURCE_DIR):
+    for filename in files:
+        if filename.lower().endswith(".log"):
+            file_path = os.path.join(root, filename)
+            try:
+                with open(file_path, "r") as f:
+                    for line in f:
+                        matches = pattern.findall(line)
+                        for match in matches:
+                            results.append("{} | {}".format(match, filename))
+            except Exception as e:
+                print("[Грешка] {}: {}".format(file_path, e))
+
+# Запис във файл
+with open(OUTPUT_FILE, "w") as out_file:
+    out_file.write("\n".join(results))
+
+print("[OK] Извлечени {} ID-та. Записани в: {}".format(len(results), OUTPUT_FILE))
+
+
+
+
+
+
+import os
+import re
+
 # Задай тук основната директория с логовите подпапки
 SOURCE_DIR = "C:/Path/To/Your/Logs"  # <-- промени това
 OUTPUT_FILE = "all_ids_with_logs.txt"
