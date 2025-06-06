@@ -1,5 +1,45 @@
 #!/usr/bin/env python2
 # coding: utf-8
+import os
+import re
+import csv
+
+# Регекс за ID-та, започващи с "WAY4BOOK-"
+pattern = re.compile(r'WAY4BOOK-[A-Za-z0-9_-]+')
+
+# Изходен CSV файл
+output_path = 'way4book_ids.csv'
+
+# Коренова директория
+root_dir = '/cygrive/c/INC'
+
+with open(output_path, 'wb') as out_file:
+    writer = csv.writer(out_file)
+    # Заглавен ред
+    writer.writerow(['file', 'id'])
+    # Рекурсивно обхождане на всички .log файлове
+    for root, dirs, files in os.walk(root_dir):
+        for filename in files:
+            if filename.lower().endswith('.log'):
+                full_path = os.path.join(root, filename)
+                try:
+                    with open(full_path, 'r') as infile:
+                        for line in infile:
+                            for match in pattern.findall(line):
+                                writer.writerow([filename, match])
+                except IOError:
+                    # ако няма права за четене – пропускаме
+                    continue
+
+print "Готово! Всички ID-та са записани в '{}'.".format(output_path)
+
+
+
+
+
+
+#!/usr/bin/env python2
+# coding: utf-8
 # Скрипт за извличане на всички ID-та, които започват с "WAY4BOOK-",
 # от всички файлове в директорията /cygrive/c/INC и нейните поддиректории.
 # За всеки намерен ID се записва името на файла и самото ID.
