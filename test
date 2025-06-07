@@ -1,5 +1,52 @@
 #!/usr/bin/env python2
 # coding: utf-8
+"""
+compare_missing_way4book_ids.py
+
+Сравнява WAY4BOOK IDs от нашия CSV файл с външен репорт файл и извлича само
+тези, които липсват в репорта, като запазва името на оригиналния лог файл.
+
+Настройки:
+  way4_file   – CSV файл с две колони: filename,way4book_id
+  report_file – Текстов файл с по един ID на ред (или CSV/TSV с една колона)
+  output_file – CSV файл, в който ще запишем резултатите
+"""
+
+import csv
+
+# Пътища до файловете – коригирайте ако е нужно
+way4_file   = 'way4book_ids.csv'
+report_file = 'report_ids.txt'
+output_file = 'missing_way4book_ids.csv'
+
+# Прочитаме всички ID-та от външния репорт в множество за бързо търсене
+report_ids = set()
+with open(report_file, 'r') as rf:
+    for line in rf:
+        id_str = line.strip()
+        if id_str:
+            report_ids.add(id_str)
+
+# Сравняваме и записваме само липсващите записи
+with open(way4_file, 'r') as wf, open(output_file, 'w') as out:
+    reader = csv.DictReader(wf)
+    writer = csv.writer(out)
+    # Заглавен ред
+    writer.writerow(['filename', 'way4book_id'])
+    for row in reader:
+        wid = row.get('way4book_id') or row.get('WAY4BOOK_ID') or ''
+        if wid and wid not in report_ids:
+            writer.writerow([row.get('filename', ''), wid])
+
+print("Готово! Липсващите WAY4BOOK IDs са записани в '{}'.".format(output_file))
+
+
+
+
+
+
+#!/usr/bin/env python2
+# coding: utf-8
 # Скрипт за извличане на всички ID-та, които започват с "WAY4BOOK-",
 # от всички файлове в директорията /cygrive/c/INC и нейните поддиректории.
 # За всеки намерен ID се записва името на файла и самото ID, разделени със запетая.
