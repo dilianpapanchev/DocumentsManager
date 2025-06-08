@@ -5,6 +5,105 @@ import csv
 import sys
 import codecs
 
+
+def read_csv_pairs(csv_path):
+    """
+    Чете CSV с колони filename,id (UTF-8)
+    и връща списък от tuple-ове (filename, id) като unicode,
+    като автоматично открива колоните по име (case-insensitive) или по позиция.
+    """
+    with codecs.open(csv_path, 'r', 'utf-8') as f:
+        reader = csv.reader(f)
+        try:
+            header = next(reader)
+        except StopIteration:
+            return []
+        # почиства имената на колоните: маха BOM, разстояния и кара на lowercase
+        clean = [h.strip().lower().lstrip(u'\ufeff') for h in header]
+        # определя индексите за filename и id
+        filename_idx = clean.index('filename') if 'filename' in clean else 0
+        id_idx = clean.index('id') if 'id' in clean else 1
+        pairs = []
+        for row in reader:
+            if len(row) <= max(filename_idx, id_idx):
+                continue
+            fn = row[filename_idx].strip()
+            id_ = row[id_idx].strip()
+            pairs.append((fn, id_))
+        return pairs
+
+
+def read_report_ids(report_path):
+    """
+    Чете репорт файла (UTF-8) ред по ред,
+    разделя всеки ред по '|' и взима първото поле като id.
+    """
+    ids = set()
+    with codecs.open(report_path, 'r', 'utf-8') as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            parts = line.split('|')
+            token = parts[0].strip()
+            if token:
+                ids.add(token)
+    return ids
+
+
+def write_missing(output_path, missing_pairs):
+    """
+    Записва резултата като CSV с header filename,id в UTF-8.
+    """
+    with codecs.open(output_path, 'w', 'utf-8') as out:
+        writer = csv.writer(out)
+        # записва header
+        writer.writerow([u'filename'.encode('utf-8'), u'id'.encode('utf-8')])
+        for fn, id_ in missing_pairs:
+            writer.writerow([fn.encode('utf-8'), id_.encode('utf-8')])
+
+
+def main(csv_path, report_path, output_path=None):
+    csv_pairs = read_csv_pairs(csv_path)
+    report_ids = read_report_ids(report_path)
+
+    missing = [(fn, id_) for fn, id_ in csv_pairs if id_ not in report_ids]
+
+    if output_path:
+        write_missing(output_path, missing)
+        print "Записах липсващите в '{}'.".format(output_path)
+    else:
+        # печатаме header и редовете на stdout
+        sys.stdout.write(u"filename,id\n".encode('utf-8'))
+        for fn, id_ in missing:
+            line = u"{},{}\n".format(fn, id_)
+            sys.stdout.write(line.encode('utf-8'))
+
+if __name__ == '__main__':
+    if len(sys.argv) < 3:
+        sys.stderr.write("Usage: python2 compare_ids.py <input.csv> <report.txt> [output.csv]\n")
+        sys.exit(1)
+    csv_file = sys.argv[1]
+    report_file = sys.argv[2]
+    output_file = sys.argv[3] if len(sys.argv) >= 4 else None
+    main(csv_file, report_file, output_file)
+
+
+
+
+
+
+
+
+#
+
+!/usr/bin/env python2
+# -*- coding: utf-8 -*-
+
+import csv
+import sys
+import codecs
+
 def read_csv_pairs(csv_path):
     """
     Чете CSV с колони filename,id (UTF-8)
