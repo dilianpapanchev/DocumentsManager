@@ -1,3 +1,74 @@
+#!/usr/bin/env python3
+import csv
+import sys
+
+def read_csv_pairs(csv_path):
+    """
+    Чете CSV с колони filename,id
+    и връща списък от tuple-ове (filename, id).
+    """
+    with open(csv_path, newline='', encoding='utf-8') as f:
+        reader = csv.DictReader(f)
+        return [(row['filename'], row['id']) for row in reader]
+
+def read_report_ids(report_path):
+    """
+    Чете репорт файла ред по ред, 
+    взема всеки токен (разделен по whitespace) и го добавя в set.
+    Ако вашият report файл съдържа само сами id-та на ред,
+    може директно да вземете line.strip().
+    """
+    ids = set()
+    with open(report_path, encoding='utf-8') as f:
+        for line in f:
+            # ако редът съдържа само id:
+            token = line.strip()
+            if token:
+                ids.add(token)
+            # ако в реда има текст и id-та в произволна позиция:
+            # for token in line.split():
+            #     ids.add(token)
+    return ids
+
+def write_missing(output, missing_pairs):
+    """
+    Записва резултата като CSV с header filename,id
+    """
+    writer = csv.writer(output)
+    writer.writerow(['filename', 'id'])
+    for fn, id_ in missing_pairs:
+        writer.writerow([fn, id_])
+
+def main(csv_path, report_path, output_path=None):
+    # прочитаме двата файла
+    csv_pairs   = read_csv_pairs(csv_path)
+    report_ids  = read_report_ids(report_path)
+
+    # филтрираме кои id-та от CSV-то липсват в репорт файла
+    missing = [(fn, id_) for fn, id_ in csv_pairs if id_ not in report_ids]
+
+    # записваме или печатаме на stdout
+    if output_path:
+        with open(output_path, 'w', newline='', encoding='utf-8') as out:
+            write_missing(out, missing)
+        print(f"Записах липсващите в '{output_path}'.")
+    else:
+        write_missing(sys.stdout, missing)
+
+if __name__ == '__main__':
+    if len(sys.argv) < 3:
+        print("Usage: python compare_ids.py <input.csv> <report.txt> [output.csv]")
+        sys.exit(1)
+    csv_file    = sys.argv[1]
+    report_file = sys.argv[2]
+    output_file = sys.argv[3] if len(sys.argv) >= 4 else None
+    main(csv_file, report_file, output_file)
+
+
+
+
+
+
 #!/usr/bin/env python2
 # coding: utf-8
 """
