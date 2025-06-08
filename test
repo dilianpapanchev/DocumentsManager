@@ -3,6 +3,69 @@
 """
 extract_missing_way4book_ids.py
 
+Този скрипт сравнява WAY4BOOK IDs от нашия CSV файл с външен репорт и извлича
+само тези, които НЕ присъстват в репорта, като запазва името на оригиналния лог файл.
+
+Вход:
+  - way4book_ids.csv  (колони: filename,way4book_id)
+  - report_ids.txt    (един ID на ред)
+
+Изход:
+  - missing_way4book_ids.csv  (само редовете от way4book_ids.csv, чиито IDs НЕ са в report_ids.txt)
+"""
+
+import csv
+
+# Пътища до файловете – коригирайте при нужда
+WAY4_FILE   = 'way4book_ids.csv'
+REPORT_FILE = 'report_ids.txt'
+OUTPUT_FILE = 'missing_way4book_ids.csv'
+
+# 1. Прочитаме всички ID-та от репорт-файла в множество
+report_ids = set()
+with open(REPORT_FILE, 'r') as rf:
+    for line in rf:
+        id_str = line.strip()
+        if id_str:
+            report_ids.add(id_str)
+
+# 2. Четем нашия CSV и записваме само тези записи, чиито WAY4BOOK ID НЕ е намерен в report_ids
+with open(WAY4_FILE, 'r') as wf, open(OUTPUT_FILE, 'w') as out:
+    reader = csv.reader(wf)
+    writer = csv.writer(out)
+
+    # Прочитаме и пренаписваме заглавния ред
+    headers = next(reader)
+    writer.writerow(headers)
+
+    # Определяме на кои индекси са колоните filename и way4book_id
+    try:
+        idx_filename = headers.index('filename')
+        idx_id       = headers.index('way4book_id')
+    except ValueError:
+        # Ако имената не съвпадат, приемаме, че са първите две колони
+        idx_filename, idx_id = 0, 1
+
+    # Итерираме и филтрираме
+    for row in reader:
+        filename = row[idx_filename].strip()
+        wid      = row[idx_id].strip()
+        # Записваме само липсващите ID-та
+        if wid and wid not in report_ids:
+            writer.writerow([filename, wid])
+
+print("Готово! Липсващите WAY4BOOK IDs са записани в '{}'.".format(OUTPUT_FILE))
+
+
+
+
+
+
+#!/usr/bin/env python2
+# coding: utf-8
+"""
+extract_missing_way4book_ids.py
+
 Сравнява WAY4BOOK IDs от нашия CSV файл с външен репорт и извлича само
 тези, които липсват в репорта, като запазва името на оригиналния лог файл.
 """
