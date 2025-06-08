@@ -7,6 +7,111 @@ import codecs
 
 def read_csv_pairs(csv_path):
     """
+    Връща tuple (pairs, fn_field, id_field):
+      pairs = [(filename, id), ...] като unicode
+      fn_field = името на колоната за filename
+      id_field = името на колоната за id
+    """
+    with codecs.open(csv_path, 'r', 'utf-8') as f:
+        reader = csv.DictReader(f)
+        fields = reader.fieldnames
+
+        # намираме колоната за filename
+        if 'filename' in fields:
+            fn_field = 'filename'
+        else:
+            fn_field = fields[0]
+
+        # намираме колоната, съдържаща 'id' (освен filename)
+        id_candidates = [h for h in fields if h.lower().endswith('id') and h != fn_field]
+        if 'id' in fields:
+            id_field = 'id'
+        elif id_candidates:
+            id_field = id_candidates[0]
+        else:
+            sys.stderr.write(u"Няма подходяща колона за ID в %s\n" % csv_path.encode('utf-8'))
+            sys.exit(1)
+
+        pairs = []
+        for row in reader:
+            fn = row[fn_field]
+            id_ = row[id_field]
+            pairs.append((fn, id_))
+        return pairs, fn_field, id_field
+
+def read_report_ids(report_path):
+    """
+    Чете report.txt като UTF-8, пропуска първия ред (хедър),
+    парсва всяка линия по '|' и взема полето в колоната 'ID'.
+    """
+    ids = set()
+    with codecs.open(report_path, 'r', 'utf-8') as f:
+        header = f.readline().rstrip('\n')
+        cols = header.split('|')
+        try:
+            id_idx = cols.index('ID')
+        except ValueError:
+            id_idx = None
+
+        for line in f:
+            parts = line.rstrip('\n').split('|')
+            if id_idx is not None and id_idx < len(parts):
+                token = parts[id_idx]
+            else:
+                token = line.strip()
+            if token:
+                ids.add(token)
+    return ids
+
+def write_missing(output_path, missing_pairs, fn_field, id_field):
+    """
+    Записва нов CSV с header fn_field,id_field и всички missing_pairs.
+    """
+    with codecs.open(output_path, 'w', 'utf-8') as out:
+        writer = csv.writer(out)
+        writer.writerow([fn_field.encode('utf-8'), id_field.encode('utf-8')])
+        for fn, id_ in missing_pairs:
+            writer.writerow([fn.encode('utf-8'), id_.encode('utf-8')])
+
+def main(csv_path, report_path, output_path=None):
+    csv_pairs, fn_field, id_field = read_csv_pairs(csv_path)
+    report_ids = read_report_ids(report_path)
+
+    missing = [(fn, id_) for fn, id_ in csv_pairs if id_ not in report_ids]
+
+    if output_path:
+        write_missing(output_path, missing, fn_field, id_field)
+        print "Записах липсващите в '{}'.".format(output_path)
+    else:
+        # печатяме на stdout
+        sys.stdout.write((u"{},{}\n".format(fn_field, id_field)).encode('utf-8'))
+        for fn, id_ in missing:
+            sys.stdout.write((u"{},{}\n".format(fn, id_)).encode('utf-8'))
+
+if __name__ == '__main__':
+    if len(sys.argv) < 3:
+        sys.stderr.write("Usage: python2 compare_ids.py <input.csv> <report.txt> [output.csv]\n")
+        sys.exit(1)
+
+    csv_file    = sys.argv[1]
+    report_file = sys.argv[2]
+    output_file = sys.argv[3] if len(sys.argv) >= 4 else None
+    main(csv_file, report_file, output_file)
+
+
+
+
+
+
+#!/usr/bin/env python2
+# -*- coding: utf-8 -*-
+
+import csv
+import sys
+import codecs
+
+def read_csv_pairs(csv_path):
+    """
     Чете CSV с колони filename,id (UTF-8)
     и връща списък от tuple-ове (filename, id) като unicode.
     """
