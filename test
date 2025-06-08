@@ -1,6 +1,47 @@
 #!/usr/bin/env python2
 # coding: utf-8
 """
+extract_missing_way4book_ids.py
+
+Сравнява WAY4BOOK IDs от нашия CSV файл с външен репорт и извлича само
+тези, които липсват в репорта, като запазва името на оригиналния лог файл.
+"""
+
+import csv
+
+# Пътища до файловете – при нужда ги коригирайте
+WAY4_FILE   = 'way4book_ids.csv'       # CSV с колони: filename,way4book_id
+REPORT_FILE = 'report_ids.txt'         # Текстов файл: един ID на ред
+OUTPUT_FILE = 'missing_way4book_ids.csv'
+
+# Прочитаме всички ID-та от документа (report) в множество
+report_ids = set()
+with open(REPORT_FILE, 'r') as rf:
+    for line in rf:
+        id_str = line.strip()
+        if id_str:
+            report_ids.add(id_str)
+
+# Откриваме и записваме само тези ID-та, които НЕ са в report_ids
+with open(WAY4_FILE, 'r') as wf, open(OUTPUT_FILE, 'w') as out:
+    reader = csv.DictReader(wf)
+    writer = csv.writer(out)
+    # Заглавен ред
+    writer.writerow(['filename', 'way4book_id'])
+
+    for row in reader:
+        wid = row.get('way4book_id', '').strip()
+        if wid and wid not in report_ids:
+            writer.writerow([row.get('filename', '').strip(), wid])
+
+print("Готово! Само липсващите IDs са записани в '{}'.".format(OUTPUT_FILE))
+
+
+
+
+#!/usr/bin/env python2
+# coding: utf-8
+"""
 compare_missing_way4book_ids.py
 
 Сравнява WAY4BOOK IDs от нашия CSV файл с външен репорт файл и извлича само
