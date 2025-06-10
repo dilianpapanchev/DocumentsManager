@@ -1,3 +1,47 @@
+.toolbar {
+  position: relative; /* необходимо за absolutely positioned псевдоелемент */
+  z-index: 1;
+}
+
+.toolbar::before {
+  content: "";
+  position: absolute;
+  inset: -4px; /* border-ът да е малко извън контейнера */
+  border-radius: 10px;
+  padding: 0;
+  pointer-events: none;
+  z-index: 2;
+  background: linear-gradient(270deg, #3be0ff, #66afe9, #f3ffcd, #3be0ff);
+  background-size: 400% 400%;
+  width: calc(100% + 8px);
+  height: calc(100% + 8px);
+  border: 3px solid transparent; /* за fallback */
+  box-sizing: border-box;
+  animation: borderAnim 4s linear infinite;
+  mask: 
+    linear-gradient(#fff 0 0) content-box, 
+    linear-gradient(#fff 0 0);
+  -webkit-mask: 
+    linear-gradient(#fff 0 0) content-box, 
+    linear-gradient(#fff 0 0);
+  mask-composite: exclude;
+  -webkit-mask-composite: xor;
+}
+
+@keyframes borderAnim {
+  0% {
+    background-position: 0% 50%;
+  }
+  100% {
+    background-position: 400% 50%;
+  }
+}
+
+
+
+
+
+
 #!/usr/bin/env python2
 # -*- coding: utf-8 -*-
 
