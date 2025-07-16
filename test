@@ -1,3 +1,146 @@
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
+
+############################################
+#  Fixed internal settings (no prompts)    #
+############################################
+BACKUP_DIR="/opt/backups/myapp"
+BASE_TMP_DIR="/tmp"
+LOGFILE="/var/log/deploy.log"
+
+############################################
+#  Logging function: timestamps to log     #
+############################################
+log() {
+  echo "[$(date +'%Y-%m-%d %H:%M:%S')] $*" >> "$LOGFILE"
+}
+
+############################################
+#  1) Prompt only for WAR and JAR paths    #
+############################################
+read -e -p "Enter full path to the WAR file: " WAR_PATH
+read -e -p "Enter full path to the new JAR file: " JAR_SOURCE
+
+# Derive working names
+JAR_NAME="$(basename "$JAR_SOURCE")"
+APP_NAME="$(basename "${WAR_PATH%.*}")"
+WORKDIR="${BASE_TMP_DIR}/${APP_NAME}_deploy_$$"
+TIMESTAMP="$(date +'%Y%m%d_%H%M%S')"
+
+# Prepare filesystem
+mkdir -p "$BACKUP_DIR"
+mkdir -p "$WORKDIR"
+mkdir -p "$(dirname "$LOGFILE")"
+touch   "$LOGFILE"
+
+log "----- Starting deploy for $APP_NAME -----"
+log "WAR path : $WAR_PATH"
+log "JAR path : $JAR_SOURCE"
+
+############################################
+#  2) Verify WAR exists and back it up     #
+############################################
+if [[ ! -f "$WAR_PATH" ]]; then
+  log "ERROR: WAR file not found at $WAR_PATH"
+  echo "Error: see $LOGFILE for details."
+  exit 1
+fi
+
+cp "$WAR_PATH" "$BACKUP_DIR/${APP_NAME}_$TIMESTAMP.war"
+log "Backed up WAR → ${BACKUP_DIR}/${APP_NAME}_$TIMESTAMP.war"
+
+############################################
+#  3) Unpack WAR into temporary directory  #
+############################################
+unzip -q "$WAR_PATH" -d "$WORKDIR"
+log "Unzipped WAR into $WORKDIR"
+
+############################################
+#  4) Extract Implementation-Title from    #
+#     new JAR’s MANIFEST.MF via unzip -p   #
+############################################
+NEW_MANIFEST="$(unzip -p "$JAR_SOURCE" META-INF/MANIFEST.MF 2>/dev/null || true)"
+NEW_TITLE="$(echo "$NEW_MANIFEST" | grep -i '^Implementation-Title:' | sed -E 's/Implementation-Title:[[:space:]]*//I' || true)"
+
+if [[ -z "$NEW_TITLE" ]]; then
+  log "WARNING: No Implementation-Title found in new JAR manifest"
+else
+  log "New JAR Implementation-Title: $NEW_TITLE"
+fi
+
+############################################
+#  5) Scan existing JARs for same title    #
+############################################
+LIB_DIR="$WORKDIR/WEB-INF/lib"
+if [[ ! -d "$LIB_DIR" ]]; then
+  log "ERROR: WEB-INF/lib not found under $WORKDIR"
+  echo "Error: see $LOGFILE for details."
+  exit 1
+fi
+
+FOUND_CONFLICT=0
+for EXISTING in "$LIB_DIR"/*.jar; do
+  # Skip if it's the same file
+  [[ "$(basename "$EXISTING")" == "$JAR_NAME" ]] && continue
+  EXIST_MANIFEST="$(unzip -p "$EXISTING" META-INF/MANIFEST.MF 2>/dev/null || true)"
+  EXIST_TITLE="$(echo "$EXIST_MANIFEST" | grep -i '^Implementation-Title:' | sed -E 's/Implementation-Title:[[:space:]]*//I' || true)"
+  if [[ -n "$NEW_TITLE" && "$EXIST_TITLE" == "$NEW_TITLE" ]]; then
+    log "Conflict: existing JAR $(basename "$EXISTING") has same Title: $EXIST_TITLE"
+    FOUND_CONFLICT=1
+  fi
+done
+
+if (( FOUND_CONFLICT )); then
+  echo
+  echo "One or more existing JARs in WEB-INF/lib share the same Implementation-Title ('$NEW_TITLE')."
+  read -r -p "Do you want to remove those and continue? [y/N] " REPLY
+  if [[ ! "$REPLY" =~ ^[Yy]$ ]]; then
+    log "User aborted due to manifest title conflict."
+    echo "Aborted: see $LOGFILE for details."
+    exit 0
+  fi
+  # Remove conflicting jars
+  for EXISTING in "$LIB_DIR"/*.jar; do
+    EXIST_MANIFEST="$(unzip -p "$EXISTING" META-INF/MANIFEST.MF 2>/dev/null || true)"
+    EXIST_TITLE="$(echo "$EXIST_MANIFEST" | grep -i '^Implementation-Title:' | sed -E 's/Implementation-Title:[[:space:]]*//I' || true)"
+    if [[ "$EXIST_TITLE" == "$NEW_TITLE" ]]; then
+      rm "$EXISTING"
+      log "Removed conflicting JAR: $(basename "$EXISTING")"
+    fi
+  done
+  log "User chose to remove conflicts and proceed."
+else
+  log "No manifest-title conflicts detected; proceeding."
+fi
+
+############################################
+#  6) Copy new JAR into WEB-INF/lib        #
+############################################
+cp "$JAR_SOURCE" "$LIB_DIR/"
+log "Copied new JAR: $JAR_NAME → WEB-INF/lib/"
+
+############################################
+#  7) Repack WAR and replace original      #
+############################################
+pushd "$WORKDIR" > /dev/null
+zip -qr "../${APP_NAME}_updated_$TIMESTAMP.war" .
+popd > /dev/null
+
+mv "$WORKDIR/../${APP_NAME}_updated_$TIMESTAMP.war" "$WAR_PATH"
+log "Repacked and replaced WAR: $WAR_PATH"
+
+############################################
+#  8) Cleanup                              #
+############################################
+rm -rf "$WORKDIR"
+log "Removed work directory: $WORKDIR"
+log "----- Deploy completed successfully -----"
+
+
+
+
+
 .toolbar {
   position: relative; /* необходимо за absolutely positioned псевдоелемент */
   z-index: 1;
