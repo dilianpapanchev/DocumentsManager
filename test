@@ -40,6 +40,183 @@ elif (( ${#ALL_JARS[@]} == 1 )); then
 else
   info "Found ${#ALL_JARS[@]} JARs in $NEW_JAR_DIR:"
   for i in "${!ALL_JARS[@]}"; do
+    idx=$((i + 1))
+    echo "  [$idx] $(basename "${ALL_JARS[i]}")"
+  done
+  echo
+  read -r -p "Enter numbers of JARs to deploy (e.g. 1 2 5): " sel_line
+  # split the line into an array on whitespace
+  read -r -a sel_array <<< "$sel_line"
+  SELECTED_JARS=()
+  for sel in "${sel_array[@]}"; do
+    if [[ "$sel" =~ ^[0-9]+$ ]] && (( sel >= 1 && sel <= ${#ALL_JARS[@]} )); then
+      SELECTED_JARS+=("${ALL_JARS[sel-1]}")
+    else
+      info "Invalid selection ignored: $sel"
+    fi
+  done
+  if (( ${#SELECTED_JARS[@]} == 0 )); then
+    info "No valid selections made; exiting."
+    exit 1
+  fi
+  info "You selected ${#SELECTED_JARS[@]} JAR(s):"
+  for jar in "${SELECTED_JARS[@]}"; do
+    info "  • $(basename "$jar")"
+  done
+fi
+
+############################################
+#  Prepare backup, workdir & log file     #
+############################################
+mkdir -p "$BACKUP_DIR" "$WORKDIR" "$(dirname "$LOGFILE")"
+touch   "$LOGFILE"
+
+info "----- Starting deploy for $APP_NAME -----"
+info "WAR path      : $WAR_PATH"
+
+############################################
+#  2) Verify & backup the WAR              #
+############################################
+if [[ ! -f "$WAR_PATH" ]]; then
+  info "ERROR: WAR file not found at $WAR_PATH"
+  exit 1
+fi
+
+cp "$WAR_PATH" "$BACKUP_DIR/${APP_NAME}_$TIMESTAMP.war"
+info "Backed up WAR → ${BACKUP_DIR}/${APP_NAME}_$TIMESTAMP.war"
+
+############################################
+#  3) Unpack WAR into temp workdir         #
+############################################
+unzip -q "$WAR_PATH" -d "$WORKDIR"
+info "Unpacked WAR into $WORKDIR"
+
+LIB_DIR="$WORKDIR/WEB-INF/lib"
+if [[ ! -d "$LIB_DIR" ]]; then
+  info "ERROR: WEB-INF/lib not found under $WORKDIR"
+  exit 1
+fi
+
+############################################
+#  4) For each selected JAR: scan & resolve#
+############################################
+for NEW_JAR in "${SELECTED_JARS[@]}"; do
+  JAR_NAME="$(basename "$NEW_JAR")"
+  info "Processing new JAR: $JAR_NAME"
+
+  # extract service paths from new JAR
+  mapfile -t new_paths < <(
+    unzip -p "$NEW_JAR" 'services/*' 2>/dev/null \
+      | grep -a 'rest path="' \
+      | sed -E 's/.*rest path="([^"]+)".*/\1/' \
+      | sort -u
+  )
+  info "  Found ${#new_paths[@]} <rest path=> entries in $JAR_NAME"
+
+  # check each existing JAR for conflicts
+  for EXIST in "$LIB_DIR"/*.jar; do
+    EXIST_NAME="$(basename "$EXIST")"
+    [[ "$EXIST_NAME" == "$JAR_NAME" ]] && continue
+
+    mapfile -t exist_paths < <(
+      unzip -p "$EXIST" 'services/*' 2>/dev/null \
+        | grep -a 'rest path="' \
+        | sed -E 's/.*rest path="([^"]+)".*/\1/' \
+        | sort -u
+    )
+
+    for np in "${new_paths[@]}"; do
+      for ep in "${exist_paths[@]}"; do
+        if [[ "$np" == "$ep" ]]; then
+          info "  Conflict: $JAR_NAME ↔ $EXIST_NAME on path '$np'"
+          read -r -p "    Remove old JAR $EXIST_NAME and keep $JAR_NAME? [y/N] " resp
+          if [[ "$resp" =~ ^[Yy]$ ]]; then
+            rm "$EXIST"
+            info "    Removed $EXIST_NAME"
+          else
+            info "    Kept    $EXIST_NAME"
+          fi
+          # once we handle this conflict, stop scanning this existing JAR
+          break 2
+        fi
+      done
+    done
+  done
+done
+
+############################################
+#  5) Copy selected JARs into WEB-INF/lib  #
+############################################
+for NEW_JAR in "${SELECTED_JARS[@]}"; do
+  cp "$NEW_JAR" "$LIB_DIR"/
+  info "Copied new JAR → WEB-INF/lib/$(basename "$NEW_JAR")"
+done
+
+############################################
+#  6) Repack WAR & replace original       #
+############################################
+pushd "$WORKDIR" > /dev/null
+zip -qr "../${APP_NAME}_updated_$TIMESTAMP.war" .
+popd > /dev/null
+
+mv "$WORKDIR/../${APP_NAME}_updated_$TIMESTAMP.war" "$WAR_PATH"
+info "Repacked and replaced WAR at $WAR_PATH"
+
+############################################
+#  7) Cleanup                              #
+############################################
+rm -rf "$WORKDIR"
+info "Removed temp workdir $WORKDIR"
+info "----- Deploy completed successfully -----"
+
+
+
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
+shopt -s nullglob
+
+############################################
+#  Fixed internal settings (no prompts)    #
+############################################
+BACKUP_DIR="/opt/backups/myapp"
+BASE_TMP_DIR="/tmp"
+LOGFILE="/var/log/deploy.log"
+
+############################################
+#  Info fn: echo + timestamp → screen+log #
+############################################
+info() {
+  ts="[$(date +'%Y-%m-%d %H:%M:%S')]"
+  echo "$ts $*" | tee -a "$LOGFILE"
+}
+
+############################################
+#  1) Prompt for WAR file & JAR directory  #
+############################################
+read -e -p "Enter full path to the WAR file: " WAR_PATH
+read -e -p "Enter full path to the directory of new JAR files: " NEW_JAR_DIR
+
+APP_NAME="$(basename "${WAR_PATH%.*}")"
+WORKDIR="${BASE_TMP_DIR}/${APP_NAME}_deploy_$$"
+TIMESTAMP="$(date +'%Y%m%d_%H%M%S')"
+
+# Gather all jars in the directory
+mapfile -t ALL_JARS < <(printf '%s\n' "$NEW_JAR_DIR"/*.jar)
+
+if (( ${#ALL_JARS[@]} == 0 )); then
+  info "ERROR: No .jar files found in $NEW_JAR_DIR"
+  exit 1
+elif (( ${#ALL_JARS[@]} == 1 )); then
+  SELECTED_JARS=("${ALL_JARS[0]}")
+  info "Single JAR found: $(basename "${ALL_JARS[0]}"), proceeding automatically"
+else
+  info "Found ${#ALL_JARS[@]} JARs in $NEW_JAR_DIR:"
+  for i in "${!ALL_JARS[@]}"; do
     idx=$((i+1))
     echo "  [$idx] $(basename "${ALL_JARS[i]}")"
   done
