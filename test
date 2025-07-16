@@ -1,6 +1,145 @@
 #!/usr/bin/env bash
 set -euo pipefail
 IFS=$'\n\t'
+shopt -s nullglob
+
+############################################
+#  Fixed internal settings (no prompts)    #
+############################################
+BACKUP_DIR="/opt/backups/myapp"
+BASE_TMP_DIR="/tmp"
+LOGFILE="/var/log/deploy.log"
+
+############################################
+#  Info fn: echo + timestamp → screen+log #
+############################################
+info() {
+  ts="[$(date +'%Y-%m-%d %H:%M:%S')]"
+  echo "$ts $*" | tee -a "$LOGFILE"
+}
+
+############################################
+#  1) Prompt only for WAR and JAR paths    #
+############################################
+read -e -p "Enter full path to the WAR file: " WAR_PATH
+read -e -p "Enter full path to the new JAR file: " JAR_SOURCE
+
+APP_NAME="$(basename "${WAR_PATH%.*}")"
+JAR_NAME="$(basename "$JAR_SOURCE")"
+WORKDIR="${BASE_TMP_DIR}/${APP_NAME}_deploy_$$"
+TIMESTAMP="$(date +'%Y%m%d_%H%M%S')"
+
+# Prepare filesystem
+mkdir -p "$BACKUP_DIR" "$WORKDIR" "$(dirname "$LOGFILE")"
+touch   "$LOGFILE"
+
+info "----- Starting deploy for $APP_NAME -----"
+info "WAR path : $WAR_PATH"
+info "JAR path : $JAR_SOURCE"
+
+############################################
+#  2) Verify & backup the WAR              #
+############################################
+if [[ ! -f "$WAR_PATH" ]]; then
+  info "ERROR: WAR file not found at $WAR_PATH"
+  exit 1
+fi
+
+cp "$WAR_PATH" "$BACKUP_DIR/${APP_NAME}_$TIMESTAMP.war"
+info "Backed up WAR → ${BACKUP_DIR}/${APP_NAME}_$TIMESTAMP.war"
+
+############################################
+#  3) Unpack WAR into temp workdir         #
+############################################
+unzip -q "$WAR_PATH" -d "$WORKDIR"
+info "Unpacked WAR into $WORKDIR"
+
+############################################
+#  4) Scan new JAR for service paths       #
+############################################
+info "Scanning new JAR for <rest path=> under services/…"
+mapfile -t new_paths < <(
+  unzip -p "$JAR_SOURCE" 'services/*' 2>/dev/null \
+    | grep -a 'rest path="' \
+    | sed -E 's/.*rest path="([^"]+)".*/\1/' \
+    | sort -u
+)
+info "Found ${#new_paths[@]} distinct path(s) in new JAR"
+
+############################################
+#  5) Scan existing JARs for same paths    #
+############################################
+LIB_DIR="$WORKDIR/WEB-INF/lib"
+if [[ ! -d "$LIB_DIR" ]]; then
+  info "ERROR: WEB-INF/lib not found under $WORKDIR"
+  exit 1
+fi
+
+conflict_report=""
+for existing in "$LIB_DIR"/*.jar; do
+  [[ "$(basename "$existing")" == "$JAR_NAME" ]] && continue
+  mapfile -t exist_paths < <(
+    unzip -p "$existing" 'services/*' 2>/dev/null \
+      | grep -a 'rest path="' \
+      | sed -E 's/.*rest path="([^"]+)".*/\1/' \
+      | sort -u
+  )
+  for np in "${new_paths[@]}"; do
+    for ep in "${exist_paths[@]}"; do
+      if [[ "$np" == "$ep" ]]; then
+        conflict_report+="$(basename "$existing"): $np"$'\n'
+      fi
+    done
+  done
+done
+
+if [[ -n "$conflict_report" ]]; then
+  info "Detected service-path conflicts:"
+  while IFS= read -r line; do
+    info "  $line"
+  done <<<"$conflict_report"
+
+  read -r -p "Continue deploy anyway? [y/N] " reply
+  if [[ ! "$reply" =~ ^[Yy]$ ]]; then
+    info "Aborted by user due to service-path conflicts"
+    exit 0
+  fi
+  info "User chose to proceed despite conflicts"
+else
+  info "No service-path conflicts detected; proceeding"
+fi
+
+############################################
+#  6) Copy new JAR into WEB-INF/lib        #
+############################################
+cp "$JAR_SOURCE" "$LIB_DIR/"
+info "Copied new JAR → WEB-INF/lib/$JAR_NAME"
+
+############################################
+#  7) Repack WAR & replace original       #
+############################################
+pushd "$WORKDIR" > /dev/null
+zip -qr "../${APP_NAME}_updated_$TIMESTAMP.war" .
+popd > /dev/null
+
+mv "$WORKDIR/../${APP_NAME}_updated_$TIMESTAMP.war" "$WAR_PATH"
+info "Repacked and replaced WAR at $WAR_PATH"
+
+############################################
+#  8) Cleanup                              #
+############################################
+rm -rf "$WORKDIR"
+info "Removed temporary workdir $WORKDIR"
+info "----- Deploy completed successfully -----"
+
+
+
+
+
+
+#!/usr/bin/env bash
+set -euo pipefail
+IFS=$'\n\t'
 
 ############################################
 #  Fixed internal settings (no prompts)    #
