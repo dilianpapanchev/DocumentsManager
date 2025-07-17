@@ -1,3 +1,63 @@
+print_jar_conflict_box() {
+  local new_path="$1"
+  local old_path="$2"
+
+  # Проверка дали двата файла съществуват
+  if [[ ! -f "$new_path" || ! -f "$old_path" ]]; then
+    echo "Error: file(s) not found" >&2
+    return 1
+  fi
+
+  # ANSI цветове (ако са дефинирани отвън – ще ги използва, иначе fallback към tput)
+  : "${GREEN:=$(tput setaf 2)}"
+  : "${RED:=$(tput setaf 1)}"
+  : "${NC:=$(tput sgr0)}"
+
+  # Извличаме само имената и хешовете
+  local new_name=$(basename "$new_path")
+  local old_name=$(basename "$old_path")
+  local new_hash=$(shasum "$new_path" | awk '{print $1}')
+  local old_hash=$(shasum "$old_path" | awk '{print $1}')
+
+  # Подготвяме „plain” редовете без цветове
+  local lines=(
+    "+ New JAR   | $new_name"
+    "            | $new_hash"
+    "- Old JAR   | $old_name"
+    "            | $old_hash"
+  )
+
+  # Изчисляваме максималната дължина на ред
+  local max_len=0
+  for l in "${lines[@]}"; do
+    (( ${#l} > max_len )) && max_len=${#l}
+  done
+
+  # За бордър използваме (max_len + 2) тирета, за да покриеме
+  # и двете „спейсчета” от ляво/дясно при printf  "| %-*s |"
+  local d=$((max_len + 2))
+  local border_top="+$(printf '%*s' "$d" '' | tr ' ' -)+"
+  local border_mid="+$(printf '%*s' "$d" '' | tr ' ' =)+"
+
+  # 1) Горна рамка
+  printf "%s\n" "$border_top"
+  # 2) Нов JAR (две линии в зелено)
+  printf "| %s%-*s%s |\n" "$GREEN" "$max_len" "${lines[0]}" "$NC"
+  printf "| %s%-*s%s |\n" "$GREEN" "$max_len" "${lines[1]}" "$NC"
+  # 3) Средна рамка
+  printf "%s\n" "$border_mid"
+  # 4) Стар JAR (две линии в червено)
+  printf "| %s%-*s%s |\n" "$RED" "$max_len" "${lines[2]}" "$NC"
+  printf "| %s%-*s%s |\n" "$RED" "$max_len" "${lines[3]}" "$NC"
+  # 5) Долна рамка
+  printf "%s\n" "$border_top"
+}
+
+
+
+
+
+
 #!/usr/bin/env bash
 set -euo pipefail
 IFS=$'\n\t'
