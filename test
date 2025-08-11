@@ -1,3 +1,216 @@
+// compare_pct_numacct.c
+// Build:  gcc -std=c11 -O2 -o compare_pct compare_pct_numacct.c -lm
+// Usage:  ./compare_pct BGN_FILE EUR_FILE PCT_COL
+// - Сравнява по НОМЕР на акаунт (десетични цифри само, без водещи нули).
+// - В EUR файл след акаунта има опционално поле ";<число>" (напр. ;1) -> игнорира се.
+// - PCT_COL е 1-базиран индекс на полето (след акаунта и евентуалното ;<число>).
+// - Закръгляне до 2 знака (5.665→5.67; 5.663→5.66).
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <math.h>
+
+typedef struct {
+    char *acct_norm;      // акаунт като чисти цифри, без водещи нули (0 ако всички са 0)
+    size_t acct_len;      // дължина след нормализация
+    double pct;
+} Row;
+
+static int numstr_cmp(const char *a, size_t la, const char *b, size_t lb) {
+    // числово сравнение по дължина, после лексикално
+    if (la != lb) return (la < lb) ? -1 : 1;
+    return strcmp(a, b);
+}
+
+static int cmp_row(const void *x, const void *y) {
+    const Row *ra = (const Row*)x, *rb = (const Row*)y;
+    return numstr_cmp(ra->acct_norm, ra->acct_len, rb->acct_norm, rb->acct_len);
+}
+
+static double round2(double v) {
+    if (v >= 0.0) return floor(v*100.0 + 0.5) / 100.0;
+    else          return ceil (v*100.0 - 0.5) / 100.0;
+}
+
+static char* strndup_safe(const char *s, size_t n) {
+    char *p = (char*)malloc(n+1);
+    if (!p) { perror("malloc"); exit(1); }
+    memcpy(p, s, n);
+    p[n] = '\0';
+    return p;
+}
+
+static char* trim_ws(char *s) {
+    while (*s && isspace((unsigned char)*s)) s++;
+    char *e = s + strlen(s);
+    while (e > s && isspace((unsigned char)e[-1])) --e;
+    *e = '\0';
+    return s;
+}
+
+static void normalize_digits(char **ps, size_t *plen) {
+    // махни водещите нули; ако всичко е нули -> "0"
+    char *s = *ps;
+    size_t n = *plen;
+    size_t i = 0;
+    while (i < n && s[i] == '0') i++;
+    if (i == n) { free(s); s = strndup_safe("0", 1); n = 1; }
+    else {
+        if (i > 0) {
+            char *t = strndup_safe(s + i, n - i);
+            free(s); s = t; n = n - i;
+        }
+    }
+    *ps = s; *plen = n;
+}
+
+static int is_all_digits(const char *s, size_t n) {
+    for (size_t i=0;i<n;i++) if (!isdigit((unsigned char)s[i])) return 0;
+    return n > 0;
+}
+
+// връща масив {акаунт, pct}
+static Row* parse_file(const char *path, int pct_col_1based, int skip_numeric_after_acct, size_t *out_n) {
+    FILE *fp = fopen(path, "r");
+    if (!fp) { perror(path); exit(1); }
+
+    size_t cap = 1024, n = 0;
+    Row *rows = (Row*)malloc(cap * sizeof(Row));
+    if (!rows) { perror("malloc"); exit(1); }
+
+    char *line = NULL;
+    size_t len = 0;
+    ssize_t r;
+
+    const char *TAG = "ACCOUNTS:";
+
+    while ((r = getline(&line, &len, fp)) != -1) {
+        char *L = trim_ws(line);
+        if (!*L) continue;
+
+        char *p = strstr(L, TAG);
+        if (!p) continue;
+        p += strlen(TAG);
+
+        // вземи САМО цифрите на акаунта
+        char *q = p;
+        while (*q && isdigit((unsigned char)*q)) q++;
+        if (q == p) continue; // няма цифри
+        char *acct = strndup_safe(p, (size_t)(q - p));
+        size_t acct_len = (size_t)(q - p);
+
+        // нормализирай (без водещи нули)
+        normalize_digits(&acct, &acct_len);
+
+        // след акаунта трябва да има ';' преди полетата
+        if (*q != ';') { free(acct); continue; }
+        char *fields = q + 1;
+
+        // EUR: евентуално първото поле е чисто число (напр. 1) -> игнорирай
+        if (skip_numeric_after_acct) {
+            char *e = strchr(fields, ';');
+            size_t toklen = e ? (size_t)(e - fields) : strlen(fields);
+            if (is_all_digits(fields, toklen)) {
+                fields = e ? e + 1 : NULL;
+                if (!fields) { free(acct); continue; }
+            }
+        }
+
+        // намери pct_col_1based
+        int col = 1;
+        char *start = fields;
+        char *end = NULL;
+        while (col < pct_col_1based && start) {
+            end = strchr(start, ';');
+            if (!end) { start = NULL; break; }
+            start = end + 1;
+            col++;
+        }
+        if (!start) { free(acct); continue; }
+
+        end = strchr(start, ';');
+        size_t f_len = end ? (size_t)(end - start) : strlen(start);
+
+        char *val = strndup_safe(start, f_len);
+        char *valt = trim_ws(val);
+        for (char *t = valt; *t; ++t) if (*t == ',') *t = '.';
+
+        char *ep = NULL;
+        double v = strtod(valt, &ep);
+        free(val);
+        if (ep == valt) { free(acct); continue; }
+
+        v = round2(v);
+
+        if (n == cap) {
+            cap *= 2;
+            rows = (Row*)realloc(rows, cap * sizeof(Row));
+            if (!rows) { perror("realloc"); exit(1); }
+        }
+        rows[n].acct_norm = acct;
+        rows[n].acct_len  = acct_len;
+        rows[n].pct       = v;
+        n++;
+    }
+
+    free(line);
+    fclose(fp);
+
+    qsort(rows, n, sizeof(Row), cmp_row);
+    *out_n = n;
+    return rows;
+}
+
+static void free_rows(Row *rows, size_t n) {
+    for (size_t i=0;i<n;i++) free(rows[i].acct_norm);
+    free(rows);
+}
+
+int main(int argc, char **argv) {
+    if (argc < 4) {
+        fprintf(stderr, "Usage: %s BGN_FILE EUR_FILE PCT_COL\n", argv[0]);
+        return 1;
+    }
+    const char *bgn_path = argv[1];
+    const char *eur_path = argv[2];
+    int pct_col = atoi(argv[3]);
+    if (pct_col <= 0) {
+        fprintf(stderr, "PCT_COL must be >= 1\n");
+        return 1;
+    }
+
+    size_t nb=0, ne=0;
+    Row *B = parse_file(bgn_path, pct_col, 0, &nb);
+    Row *E = parse_file(eur_path, pct_col, 1, &ne);
+
+    // merge-join по НОМЕР на акаунт (числово сравнение)
+    size_t i=0, j=0;
+    printf("account\tbgn_pct\teur_pct\tdiff\n");
+    while (i<nb && j<ne) {
+        int c = numstr_cmp(B[i].acct_norm, B[i].acct_len, E[j].acct_norm, E[j].acct_len);
+        if (c == 0) {
+            double diff = round2(B[i].pct - E[j].pct);
+            printf("%s\t%.2f\t%.2f\t%.2f\n", B[i].acct_norm, B[i].pct, E[j].pct, diff);
+            i++; j++;
+        } else if (c < 0) {
+            i++;
+        } else {
+            j++;
+        }
+    }
+
+    free_rows(B, nb);
+    free_rows(E, ne);
+    return 0;
+}
+
+
+
+
+
+
 // compare_pct.c
 // Build:  gcc -std=c11 -O2 -o compare_pct compare_pct.c
 // Usage:  ./compare_pct BGN_FILE EUR_FILE PCT_COL
