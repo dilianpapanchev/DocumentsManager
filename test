@@ -1,3 +1,204 @@
+// compare_pct_autocol.c
+// Build:  gcc -std=c11 -O2 -o compare_pct compare_pct_autocol.c -lm
+// Usage:  ./compare_pct BGN_FILE EUR_FILE [--col N]
+// - Сравнява по НОМЕР на акаунт (само цифри; без водещи нули).
+// - В EUR след акаунта може да има ";<число>" (напр. ;1) – игнорира се.
+// - Колоната с % се открива автоматично. По желание може да override-неш с --col N.
+// - Закръгля до 2 знака (5.665→5.67; 5.663→5.66).
+#define _GNU_SOURCE
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <ctype.h>
+#include <math.h>
+
+typedef struct { char *acct_norm; size_t acct_len; double pct; } Row;
+
+static int numstr_cmp(const char *a, size_t la, const char *b, size_t lb){
+    if (la!=lb) return (la<lb)?-1:1; return strcmp(a,b);
+}
+static int cmp_row(const void *x,const void*y){
+    const Row *ra=x,*rb=y; return numstr_cmp(ra->acct_norm,ra->acct_len,rb->acct_norm,rb->acct_len);
+}
+static double round2(double v){ return (v>=0.0)? floor(v*100.0+0.5)/100.0 : ceil(v*100.0-0.5)/100.0; }
+static char* strndup_safe(const char*s,size_t n){ char*p=malloc(n+1); if(!p){perror("malloc"); exit(1);} memcpy(p,s,n); p[n]='\0'; return p; }
+static char* trim_ws(char*s){ while(*s&&isspace((unsigned char)*s)) s++; char*e=s+strlen(s); while(e>s&&isspace((unsigned char)e[-1])) --e; *e='\0'; return s; }
+static void normalize_digits(char **ps,size_t *plen){
+    char*s=*ps; size_t n=*plen,i=0; while(i<n&&s[i]=='0') i++; if(i==n){ free(s); s=strndup_safe("0",1); n=1; }
+    else if(i>0){ char*t=strndup_safe(s+i,n-i); free(s); s=t; n-=i; } *ps=s; *plen=n;
+}
+static int is_all_digits(const char*s,size_t n){ if(n==0) return 0; for(size_t i=0;i<n;i++) if(!isdigit((unsigned char)s[i])) return 0; return 1; }
+
+typedef struct { int found; int col; } AutoCol;
+
+// опит 1: хедър ред с етикет '%' / 'PCT'
+static AutoCol detect_from_header(FILE *fp, int skip_numeric_after_acct){
+    const char *TAG="ACCOUNTS:"; char *line=NULL; size_t len=0; long pos=ftell(fp);
+    AutoCol res={0,0};
+    while(1){
+        long here=ftell(fp); ssize_t r=getline(&line,&len,fp); if(r==-1) break;
+        char *L=trim_ws(line); if(!*L) continue;
+        if(strncmp(L,"#",1)==0 || strncasecmp(L,"HEADER",6)==0 || strncasecmp(L,"COLUMNS",7)==0){
+            // приемаме, че е хедър с ';'
+            // намери позицията след първата поява на TAG или след първия ';' (ако няма TAG)
+            char *p = strstr(L,TAG); char *fields=NULL;
+            if(p){ p+=strlen(TAG); char *semi=strchr(p,';'); fields = semi? semi+1 : NULL; }
+            else { char *semi=strchr(L,';'); fields = semi? semi+1 : NULL; }
+            if(!fields) continue;
+
+            if(skip_numeric_after_acct){
+                char *e=strchr(fields,';'); size_t toklen=e? (size_t)(e-fields):strlen(fields);
+                if(is_all_digits(fields,toklen)) fields = e? e+1 : NULL;
+                if(!fields) continue;
+            }
+            // обхождаме полетата и търсим точно "%" или съдържа "PCT"/"PERCENT"
+            int col=1; char *start=fields;
+            while(start){
+                char *e=strchr(start,';'); size_t Lf = e? (size_t)(e-start):strlen(start);
+                char *name=strndup_safe(start,Lf); char *nm=trim_ws(name);
+                for(char*t=nm;*t;++t) *t=toupper((unsigned char)*t);
+                if(strcmp(nm,"%")==0 || strstr(nm,"PCT") || strstr(nm,"PERCENT")){
+                    res.found=1; res.col=col; free(name); goto done;
+                }
+                free(name);
+                if(!e) break; start=e+1; col++;
+            }
+        }
+        // срещнем ли първия ред с ACCOUNTS:, спираме хедър търсенето
+        if(strstr(L,TAG)) break;
+        (void)here;
+    }
+done:
+    if(line) free(line);
+    fseek(fp,pos,SEEK_SET);
+    return res;
+}
+
+// опит 2: евристика върху до 200 реда - търси колона, която изглежда като процент (реално число) в >=80% от редовете
+static AutoCol detect_by_sampling(FILE *fp, int skip_numeric_after_acct){
+    const char *TAG="ACCOUNTS:"; char *line=NULL; size_t len=0; long pos=ftell(fp);
+    AutoCol res={0,0};
+    // намери първия ред с данни
+    while(1){ ssize_t r=getline(&line,&len,fp); if(r==-1) break; char *L=trim_ws(line); if(strstr(L,TAG)) { fseek(fp, -(long)r, SEEK_CUR); break; } }
+    if(!line){ fseek(fp,pos,SEEK_SET); return res; }
+
+    // първо преброй максимален брой колони по първите няколко реда
+    int maxcols=0; int samples=0;
+    long pos2=ftell(fp);
+    for(int s=0;s<20;s++){
+        ssize_t r=getline(&line,&len,fp); if(r==-1) break; char *L=trim_ws(line); if(!strstr(L,TAG)) continue;
+        char *p=strstr(L,TAG)+9; while(*p && isdigit((unsigned char)*p)) p++; if(*p!=';') continue; char *fields=p+1;
+        if(skip_numeric_after_acct){
+            char *e=strchr(fields,';'); size_t toklen=e? (size_t)(e-fields):strlen(fields);
+            if(is_all_digits(fields,toklen)) fields = e? e+1 : NULL; if(!fields) continue;
+        }
+        int c=1; for(char *t=fields;;){ char*e=strchr(t,';'); c++; if(!e) break; t=e+1; }
+        if(c-1>maxcols) maxcols=c-1; samples++;
+    }
+    fseek(fp,pos2,SEEK_SET);
+    if(maxcols==0){ free(line); fseek(fp,pos,SEEK_SET); return res; }
+
+    int *ok = calloc((size_t)maxcols+1,sizeof(int));
+    int counted=0;
+
+    for(int s=0;s<200;s++){
+        ssize_t r=getline(&line,&len,fp); if(r==-1) break; char *L=trim_ws(line); if(!strstr(L,TAG)) continue;
+        // parse
+        char *p=strstr(L,TAG)+9; while(*p && isdigit((unsigned char)*p)) p++; if(*p!=';') continue; char *fields=p+1;
+        if(skip_numeric_after_acct){
+            char *e=strchr(fields,';'); size_t toklen=e? (size_t)(e-fields):strlen(fields);
+            if(is_all_digits(fields,toklen)) fields = e? e+1 : NULL; if(!fields) continue;
+        }
+        // за всяка колона – ако е валидно число с десетична точка/запетая и |v|<=1000 -> зачита се
+        int col=1; char *start=fields;
+        while(start && col<=maxcols){
+            char *e=strchr(start,';'); size_t fl = e? (size_t)(e-start):strlen(start);
+            char *val=strndup_safe(start,fl); char *vt=trim_ws(val);
+            for(char*t=vt;*t;++t) if(*t==',') *t='.';
+            char *ep=NULL; double v=strtod(vt,&ep);
+            int is_real = (ep!=vt) && (strchr(vt,'.')!=NULL); // търсим реални, не цели числа
+            if(is_real && fabs(v)<=1000.0) ok[col]++; // праг широк; после ще изберем най-доброто
+            free(val);
+            if(!e) break; start=e+1; col++;
+        }
+        counted++;
+    }
+    // избираме колона с най-много попадения; изискваме >=80% от извадката
+    int best_col=0, best_score=0, threshold = (int)(counted*0.8);
+    for(int c=1;c<=maxcols;c++){ if(ok[c]>best_score){ best_score=ok[c]; best_col=c; } }
+    free(ok);
+    if(best_col>0 && best_score>=threshold){ res.found=1; res.col=best_col; }
+    free(line); fseek(fp,pos,SEEK_SET); return res;
+}
+
+static Row* parse_file(const char *path, int pct_col_1based, int skip_numeric_after_acct, size_t *out_n){
+    FILE *fp=fopen(path,"r"); if(!fp){ perror(path); exit(1); }
+
+    // ако pct_col_1based==0 → авто
+    if(pct_col_1based==0){
+        AutoCol h = detect_from_header(fp, skip_numeric_after_acct);
+        if(!h.found) h = detect_by_sampling(fp, skip_numeric_after_acct);
+        if(!h.found){ fprintf(stderr,"[%s] Не успях да намеря % колона. Можеш да подадеш ръчно с --col N.\n", path); }
+        pct_col_1based = h.col; // може да остане 0 → ще отхвърляме редовете по-долу
+    }
+
+    size_t cap=1024,n=0; Row *rows=malloc(cap*sizeof(Row)); if(!rows){perror("malloc"); exit(1);}
+    char *line=NULL; size_t len=0; ssize_t r; const char *TAG="ACCOUNTS:";
+
+    while((r=getline(&line,&len,fp))!=-1){
+        char *L=trim_ws(line); if(!*L) continue; char *p=strstr(L,TAG); if(!p) continue; p+=strlen(TAG);
+        char *q=p; while(*q && isdigit((unsigned char)*q)) q++; if(q==p||*q!=';') continue;
+        char *acct=strndup_safe(p,(size_t)(q-p)); size_t acct_len=(size_t)(q-p); normalize_digits(&acct,&acct_len);
+        char *fields=q+1; if(skip_numeric_after_acct){
+            char *e=strchr(fields,';'); size_t toklen=e?(size_t)(e-fields):strlen(fields);
+            if(is_all_digits(fields,toklen)) fields = e? e+1 : NULL; if(!fields){ free(acct); continue; }
+        }
+        if(pct_col_1based<=0){ free(acct); continue; } // няма открита % колона
+
+        int col=1; char *start=fields,*end=NULL; while(col<pct_col_1based && start){
+            end=strchr(start,';'); if(!end){ start=NULL; break; } start=end+1; col++;
+        }
+        if(!start){ free(acct); continue; }
+        end=strchr(start,';'); size_t fl=end?(size_t)(end-start):strlen(start);
+        char *val=strndup_safe(start,fl); char*vt=trim_ws(val);
+        for(char*t=vt;*t;++t) if(*t==',') *t='.';
+        char *ep=NULL; double v=strtod(vt,&ep); free(val); if(ep==vt){ free(acct); continue; }
+        v=round2(v);
+
+        if(n==cap){ cap*=2; rows=realloc(rows,cap*sizeof(Row)); if(!rows){perror("realloc"); exit(1);} }
+        rows[n].acct_norm=acct; rows[n].acct_len=acct_len; rows[n].pct=v; n++;
+    }
+    free(line); fclose(fp);
+    qsort(rows,n,sizeof(Row),cmp_row); *out_n=n; return rows;
+}
+
+static void free_rows(Row *rows,size_t n){ for(size_t i=0;i<n;i++) free(rows[i].acct_norm); free(rows); }
+
+int main(int argc,char**argv){
+    if(argc<3){ fprintf(stderr,"Usage: %s BGN_FILE EUR_FILE [--col N]\n", argv[0]); return 1; }
+    const char *bgn_path=argv[1], *eur_path=argv[2]; int override_col=0;
+    if(argc>=5 && strcmp(argv[3],"--col")==0) override_col=atoi(argv[4]);
+
+    size_t nb=0, ne=0;
+    Row *B=parse_file(bgn_path, override_col, 0, &nb);
+    Row *E=parse_file(eur_path, override_col, 1, &ne);
+
+    printf("account\tbgn_pct\teur_pct\tdiff\n");
+    size_t i=0,j=0;
+    while(i<nb && j<ne){
+        int c=numstr_cmp(B[i].acct_norm,B[i].acct_len,E[j].acct_norm,E[j].acct_len);
+        if(c==0){ double diff=round2(B[i].pct - E[j].pct);
+            printf("%s\t%.2f\t%.2f\t%.2f\n", B[i].acct_norm, B[i].pct, E[j].pct, diff); i++; j++; }
+        else if(c<0) i++; else j++;
+    }
+    free_rows(B,nb); free_rows(E,ne); return 0;
+}
+
+
+
+
+
+
 // compare_pct_numacct.c
 // Build:  gcc -std=c11 -O2 -o compare_pct compare_pct_numacct.c -lm
 // Usage:  ./compare_pct BGN_FILE EUR_FILE PCT_COL
