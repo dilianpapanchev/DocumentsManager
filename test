@@ -1,3 +1,386 @@
+# -*- coding: utf-8 -*-
+"""
+COB HTML Reports Comparator
+---------------------------
+Скриптът сравнява няколко HTML репорта (като тези от COB Analyser)
+и прави кратки отчети за тенденциите: "върви добре / средно / забавя се".
+
+✅ Без външни библиотеки.
+✅ Работи с python script.py (Python 2/3 съвместим).
+✅ Има прост GUI за избор на файлове (tkinter).
+✅ Резултат: .txt и .csv резюме + печат в конзолата.
+
+Какво извлича от HTML:
+- Дата на репорта: от <h2> ... - YYYYMMDD
+- От таблица #recordsTable:
+  * дата (първа колона)
+  * COB Elapsed (HH:MM:SS) – 4-та колона
+  * Transactions – 5-та колона
+  * RR Elapsed (HH:MM:SS) – 8-ма колона
+- Изчислява:
+  * средно COB elapsed (часове)
+  * средно RR elapsed (часове)
+  * средни records/minute (RPM) = Transactions / Elapsed(h)*60
+  * брой дни
+- Тренд между репорти по дата:
+  * % промяна на средните COB/RR/RPM
+  * текстов статус: "върви добре" / "средно" / "забавя се"
+
+Забележка: Парсването е устойчиво към <span style="...">, коментари, празни клетки.
+"""
+
+from __future__ import print_function
+import os
+import re
+import csv
+import sys
+import datetime
+
+# --- Tkinter cross-version import ---
+try:
+    import tkinter as tk
+    from tkinter import filedialog, messagebox
+except Exception:
+    try:
+        import Tkinter as tk
+        import tkFileDialog as filedialog
+        import tkMessageBox as messagebox
+    except Exception:
+        tk = None
+        filedialog = None
+        messagebox = None
+
+# ========== Helpers ==========
+
+def read_text(path):
+    with open(path, 'rb') as f:
+        data = f.read()
+    # опитай да дешифрираш като utf-8, иначе остави raw
+    try:
+        return data.decode('utf-8', 'ignore')
+    except Exception:
+        try:
+            return data.decode('cp1251', 'ignore')
+        except Exception:
+            try:
+                return data.decode('latin-1', 'ignore')
+            except Exception:
+                return data if isinstance(data, str) else data.decode('utf-8', 'ignore')
+
+def strip_html(text):
+    """махни тагове, коментари, свий whitespace"""
+    if not text:
+        return u""
+    # махни коментарите
+    text = re.sub(r'<!--.*?-->', u' ', text, flags=re.S)
+    # смени <br> с пробел
+    text = re.sub(r'<br\s*/?>', u' ', text, flags=re.I)
+    # махни всички тагове
+    text = re.sub(r'<[^>]+>', u' ', text)
+    # nbsp -> space
+    text = text.replace(u'\xa0', u' ')
+    # свий whitespace
+    return re.sub(r'\s+', u' ', text).strip()
+
+def parse_hms_to_hours(s):
+    """'HH:MM:SS' -> часове(float)"""
+    if not s:
+        return None
+    parts = s.split(':')
+    if len(parts) < 2:
+        return None
+    h = int(parts[0] or 0)
+    m = int(parts[1] or 0)
+    s2 = int(parts[2] or 0) if len(parts) > 2 else 0
+    return h + m/60.0 + s2/3600.0
+
+def safe_float(s):
+    if s is None:
+        return None
+    m = re.findall(r'[-+]?\d+(?:\.\d+)?', s)
+    if not m:
+        return None
+    try:
+        return float(m[0])
+    except Exception:
+        return None
+
+def avg(values):
+    values = [v for v in values if v is not None]
+    return sum(values)/float(len(values)) if values else None
+
+def pct_change(old, new):
+    if old in (None, 0):
+        return None
+    return (new - old) * 100.0 / float(old)
+
+def status_from_metrics(avg_cob_h, avg_rr_h, avg_rpm, cob_delta=None):
+    """
+    Проста класификация:
+    - "върви добре" ако avg_cob <= 2.5h и няма покачване > 8%
+    - "средно" ако 2.5 < avg_cob <= 3.0h или има малка промяна
+    - "забавя се" ако avg_cob > 3.0h или покачване > 8%
+    """
+    if avg_cob_h is None:
+        return u"недостатъчни данни"
+    if cob_delta is not None and cob_delta > 8:
+        return u"забавя се"
+    if avg_cob_h <= 2.5:
+        return u"върви добре"
+    if avg_cob_h <= 3.0:
+        return u"средно"
+    return u"забавя се"
+
+# ========== HTML parsers ==========
+
+def extract_report_date(html_text):
+    """
+    Търси <h2> ... - YYYYMMDD
+    Връща (date_str 'YYYYMMDD', datetime.date) или (None, None)
+    """
+    m = re.search(r'<h2[^>]*>.*?(\d{8}).*?</h2>', html_text, flags=re.S|re.I)
+    if not m:
+        return None, None
+    ymd = m.group(1)
+    try:
+        dt = datetime.datetime.strptime(ymd, "%Y%m%d").date()
+    except Exception:
+        dt = None
+    return ymd, dt
+
+def extract_table_block(html_text, table_id):
+    """Вади суровия HTML на <table id="...">...</table> (грубо, но достатъчно)"""
+    # толерантен regex: хваща от отварящия <table ... id="table_id" ...> до </table>
+    pat = r'<table[^>]*\bid\s*=\s*["\']%s["\'][^>]*>(.*?)</table>' % re.escape(table_id)
+    m = re.search(pat, html_text, flags=re.S|re.I)
+    return m.group(1) if m else None
+
+def parse_records_table(html_text):
+    """
+    Чете #recordsTable:
+      колони (очаквани):
+        0: Date (дд/мм/гггг или подобно)
+        1: COB Start
+        2: COB Stop
+        3: COB Elapsed (HH:MM:SS)
+        4: Transactions (int)
+        5: RR Start
+        6: RR Stop
+        7: RR Elapsed (HH:MM:SS)
+    Връща списък от dict.
+    """
+    block = extract_table_block(html_text, "recordsTable")
+    if not block:
+        return []
+    # редове
+    rows = re.findall(r'<tr[^>]*>(.*?)</tr>', block, flags=re.S|re.I)
+    out = []
+    for i, row in enumerate(rows):
+        # пропусни header (първия ред)
+        if i == 0:
+            continue
+        cells = re.findall(r'<t[dh][^>]*>(.*?)</t[dh]>', row, flags=re.S|re.I)
+        if len(cells) < 5:
+            continue
+        # текст без тагове
+        cells = [strip_html(c) for c in cells]
+        date_txt     = cells[0] if len(cells) > 0 else ""
+        cob_elapsed  = cells[3] if len(cells) > 3 else ""
+        tx_txt       = cells[4] if len(cells) > 4 else ""
+        rr_elapsed   = cells[7] if len(cells) > 7 else ""
+
+        # транзакции
+        tx = None
+        try:
+            tx = int(re.sub(r'[^\d]', '', tx_txt)) if tx_txt else None
+        except Exception:
+            tx = safe_float(tx_txt)
+            if tx is not None:
+                tx = int(tx)
+
+        out.append({
+            "date": date_txt,
+            "cob_elapsed_h": parse_hms_to_hours(cob_elapsed),
+            "rr_elapsed_h": parse_hms_to_hours(rr_elapsed),
+            "transactions": tx
+        })
+    return out
+
+# ========== Metrics per report ==========
+
+def compute_metrics_for_report(html_text):
+    """
+    Връща dict:
+      {
+        "report_date": "YYYYMMDD",
+        "date_obj": datetime.date,
+        "avg_cob_h": float or None,
+        "avg_rr_h": float or None,
+        "avg_rpm": float or None,
+        "days": int
+      }
+    """
+    ymd, date_obj = extract_report_date(html_text)
+    rows = parse_records_table(html_text)
+
+    cob_h = [r["cob_elapsed_h"] for r in rows if r.get("cob_elapsed_h") is not None]
+    rr_h  = [r["rr_elapsed_h"] for r in rows if r.get("rr_elapsed_h") is not None]
+
+    # RPM по ред (ако има и elapsed и transactions)
+    rpm_vals = []
+    for r in rows:
+        h = r.get("cob_elapsed_h")
+        tx = r.get("transactions")
+        if h and tx and h > 0:
+            rpm_vals.append((tx / (h * 60.0)))
+
+    metrics = {
+        "report_date": ymd or "",
+        "date_obj": date_obj,
+        "avg_cob_h": avg(cob_h),
+        "avg_rr_h": avg(rr_h),
+        "avg_rpm": avg(rpm_vals),
+        "days": len(rows)
+    }
+    return metrics
+
+# ========== Formatting ==========
+
+def fmt(v, unit=""):
+    if v is None:
+        return "-"
+    if unit == "h":
+        return "%.2fh" % v
+    if unit == "rpm":
+        return "%.0f rpm" % v
+    return "%.2f" % v
+
+def short_summary_line(m, prev=None):
+    """Една кратка линия текст за даден репорт"""
+    cob_delta = pct_change(prev["avg_cob_h"], m["avg_cob_h"]) if prev else None
+    rr_delta  = pct_change(prev["avg_rr_h"], m["avg_rr_h"]) if prev else None
+    rpm_delta = pct_change(prev["avg_rpm"], m["avg_rpm"]) if prev else None
+
+    status = status_from_metrics(m["avg_cob_h"], m["avg_rr_h"], m["avg_rpm"], cob_delta)
+
+    parts = [
+        u"📅 %s" % (m["report_date"] or "unknown"),
+        u"COB средно: %s" % fmt(m["avg_cob_h"], "h"),
+        u"RR средно: %s" % fmt(m["avg_rr_h"], "h"),
+        u"RPM средно: %s" % fmt(m["avg_rpm"], "rpm"),
+        u"дни: %s" % m["days"],
+        u"статус: %s" % status
+    ]
+    if prev:
+        if cob_delta is not None:
+            parts.append(u"ΔCOB: %+0.1f%%" % cob_delta)
+        if rr_delta is not None:
+            parts.append(u"ΔRR: %+0.1f%%" % rr_delta)
+        if rpm_delta is not None:
+            parts.append(u"ΔRPM: %+0.1f%%" % rpm_delta)
+    return u" | ".join(parts)
+
+# ========== Main ==========
+
+def pick_files():
+    if filedialog is None:
+        print("Моля, подайте файлове като аргументи: python script.py report1.html report2.html ...")
+        return sys.argv[1:]
+    root = tk.Tk()
+    root.withdraw()
+    paths = filedialog.askopenfilenames(
+        title="Избери COB HTML отчети",
+        filetypes=[("HTML files","*.html;*.htm"), ("All files","*.*")]
+    )
+    root.update()
+    root.destroy()
+    return list(paths)
+
+def main(paths):
+    if not paths:
+        print("Няма избрани файлове.")
+        return
+
+    # Прочети и изчисли метриките за всеки файл
+    items = []
+    for p in paths:
+        try:
+            html = read_text(p)
+            m = compute_metrics_for_report(html)
+            m["file"] = os.path.basename(p)
+            items.append(m)
+        except Exception as e:
+            print("Грешка при %s: %s" % (p, e))
+
+    # сортирай по дата (ако липсва дата – по име)
+    def sort_key(m):
+        return (m["date_obj"] or datetime.date(1970,1,1), m["file"])
+    items.sort(key=sort_key)
+
+    # Изведи кратки редове + CSV
+    ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    txt_name = "summary_%s.txt" % ts
+    csv_name = "summary_%s.csv" % ts
+
+    lines = []
+    csv_rows = [["report_date","file","avg_cob_h","avg_rr_h","avg_rpm","days",
+                 "delta_cob_pct_vs_prev","delta_rr_pct_vs_prev","delta_rpm_pct_vs_prev","status"]]
+
+    prev = None
+    for m in items:
+        line = short_summary_line(m, prev)
+        print(line)
+        lines.append(line)
+
+        cob_delta = pct_change(prev["avg_cob_h"], m["avg_cob_h"]) if prev else None
+        rr_delta  = pct_change(prev["avg_rr_h"],  m["avg_rr_h"])  if prev else None
+        rpm_delta = pct_change(prev["avg_rpm"],   m["avg_rpm"])   if prev else None
+        status = status_from_metrics(m["avg_cob_h"], m["avg_rr_h"], m["avg_rpm"], cob_delta)
+
+        csv_rows.append([
+            m["report_date"], m["file"],
+            "%.4f" % m["avg_cob_h"] if m["avg_cob_h"] is not None else "",
+            "%.4f" % m["avg_rr_h"]  if m["avg_rr_h"]  is not None else "",
+            "%.4f" % m["avg_rpm"]   if m["avg_rpm"]   is not None else "",
+            m["days"],
+            "%.2f" % cob_delta if cob_delta is not None else "",
+            "%.2f" % rr_delta  if rr_delta  is not None else "",
+            "%.2f" % rpm_delta if rpm_delta is not None else "",
+            status
+        ])
+        prev = m
+
+    # запиши файловете
+    with open(txt_name, 'wb') as f:
+        data = (u"\n".join(lines) + u"\n").encode('utf-8')
+        f.write(data)
+    with open(csv_name, 'wb') as f:
+        w = csv.writer(f)
+        for r in csv_rows:
+            # запази кирилица
+            row = [s.encode('utf-8') if isinstance(s, unicode) if sys.version_info[0] == 2 else s for s in r] if sys.version_info[0]==2 else r
+            w.writerow(row)
+
+    print("\nЗаписах отчетите:")
+    print(" -", txt_name)
+    print(" -", csv_name)
+
+if __name__ == "__main__":
+    # съвместимост за Python 2 (unicode)
+    if sys.version_info[0] == 2:
+        import codecs
+        sys.stdout = codecs.getwriter('utf-8')(sys.stdout)
+
+    paths = [p for p in sys.argv[1:] if os.path.isfile(p)]
+    if not paths:
+        paths = pick_files()
+    main(paths)
+
+
+
+
+
+
 // compare_pct_autocol.c
 // Build:  gcc -std=c11 -O2 -o compare_pct compare_pct_autocol.c -lm
 // Usage:  ./compare_pct BGN_FILE EUR_FILE [--col N]
