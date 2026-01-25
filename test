@@ -1,35 +1,466 @@
-function render() {
-  const total = filteredIdx.length;
-  tc.textContent = total.toString();
+#!/usr/bin/env python3
+# csv_to_html_virtual.py
+#
+# Usage:
+#   python3 csv_to_html_virtual.py /path/to/file.csv [output.html]
+#
+# Output is a SINGLE self-contained HTML file (good for emailing).
+# Optimized for ~15k+ rows via virtualized rendering.
 
-  const viewH = wrap.clientHeight;
-  const scrollTop = wrap.scrollTop;
+import csv
+import os
+import sys
+import html
+import json
+from datetime import datetime
 
-  const approxStart = Math.floor(scrollTop / ROW_HEIGHT);
-  let start = Math.max(0, approxStart - OVERSCAN);
-  let end = Math.min(total, approxStart + Math.ceil(viewH / ROW_HEIGHT) + OVERSCAN);
-  if (end - start > MAX_RENDER) end = start + MAX_RENDER;
 
-  topSpacer.style.height = (start * ROW_HEIGHT) + "px";
-  botSpacer.style.height = Math.max(0, (total - end) * ROW_HEIGHT) + "px";
+def read_csv(path: str):
+    with open(path, "r", newline="", encoding="utf-8") as f:
+        sample = f.read(4096)
+        f.seek(0)
+        try:
+            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
+        except Exception:
+            dialect = csv.excel
+        reader = csv.reader(f, dialect)
+        rows = list(reader)
 
-  // clear between spacers
-  while (tb.rows.length > 2) tb.deleteRow(1);
+    if not rows:
+        return [], []
+    return rows[0], rows[1:]
 
-  const frag = document.createDocumentFragment();
-  for (let p = start; p < end; p++) {
-    const i = filteredIdx[p];
-    const r = DATA[i];
 
-    const tr = document.createElement('tr');
-    for (let c = 0; c < HEADERS.length; c++) {
-      const td = document.createElement('td');
-      td.textContent = (r[c] ?? "");
-      tr.appendChild(td);
-    }
-    frag.appendChild(tr);
-  }
-  tb.insertBefore(frag, tb.rows[tb.rows.length - 1]);
+def esc(s):
+    return html.escape("" if s is None else str(s))
 
-  vc.textContent = (end - start).toString();
-}
+
+def build_html(title: str, header, rows):
+    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+    header_js = json.dumps(header, ensure_ascii=False)
+    data_js = json.dumps(rows, ensure_ascii=False)
+
+    ths = "\n".join(f"<th data-idx='{i}' title='{esc(h)}'>{esc(h)}</th>" for i, h in enumerate(header))
+    col_count = len(header)
+
+    return f"""<!doctype html>
+<html lang="bg">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>{esc(title)}</title>
+  <style>
+    body {{ font-family: Arial, sans-serif; margin: 16px; }}
+    .topbar {{ display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-bottom:10px; }}
+    input[type="search"] {{ padding:8px 10px; min-width:280px; }}
+    .meta {{ color:#666; font-size: 12px; }}
+    .hint {{ font-size:12px; color:#777; margin-bottom:8px; }}
+
+    .summary {{
+      border: 1px solid #eee;
+      background: #fafafa;
+      padding: 10px 12px;
+      border-radius: 8px;
+      margin-bottom: 10px;
+      font-size: 13px;
+    }}
+    .summary .row {{ display:flex; gap:14px; flex-wrap:wrap; align-items:baseline; }}
+    .summary .k {{ color:#666; font-size:12px; }}
+    .summary .v {{ font-weight: 600; }}
+    .summary .lists {{ display:flex; gap:18px; flex-wrap:wrap; margin-top: 8px; }}
+    .summary ul {{ margin: 6px 0 0 18px; padding: 0; max-width: 520px; }}
+    .summary li {{ margin: 2px 0; }}
+
+    .wrap {{
+      height: 78vh;
+      overflow: auto;
+      border: 1px solid #eee;
+      position: relative;
+      border-radius: 8px;
+    }}
+    table {{ border-collapse: collapse; width: 100%; table-layout: fixed; }}
+    th, td {{
+      border: 1px solid #ddd;
+      padding: 8px;
+      font-size: 13px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }}
+    th {{
+      position: sticky;
+      top: 0;
+      background: #f5f5f5;
+      cursor: pointer;
+      user-select:none;
+      z-index: 5;
+    }}
+    tr:nth-child(even) td {{ background: #fcfcfc; }}
+
+    .spacer td {{ padding:0; border:0; background: transparent !important; }}
+  </style>
+</head>
+<body>
+  <div class="topbar">
+    <h2 style="margin:0">{esc(title)}</h2>
+    <input id="q" type="search" placeholder="Филтър (търси във всички колони)..." />
+    <span class="meta">Генерирано: {esc(now)} | Видими: <span id="vc"></span> | Общо: <span id="tc"></span></span>
+  </div>
+  <div class="hint">Клик върху заглавие на колона = сортиране (asc/desc). Виртуално рендериране за големи файлове.</div>
+
+  <div id="summary" class="summary" style="display:none">
+    <div class="row">
+      <div><span class="k">Filtered rows:</span> <span class="v" id="s_rows"></span></div>
+      <div><span class="k">Total PROCESSED RECS:</span> <span class="v" id="s_recs"></span></div>
+      <div><span class="k">Total ELAPSED (sum):</span> <span class="v" id="s_elapsed"></span></div>
+    </div>
+    <div class="lists">
+      <div>
+        <div class="k">Top 10 by ELAPSED</div>
+        <ul id="s_top_elapsed"></ul>
+      </div>
+      <div>
+        <div class="k">Top 10 by THROUGHPUT</div>
+        <ul id="s_top_thr"></ul>
+      </div>
+    </div>
+  </div>
+
+  <div id="wrap" class="wrap">
+    <table id="t">
+      <thead><tr>{ths}</tr></thead>
+      <tbody id="tb">
+        <tr class="spacer"><td colspan="{col_count}"><div id="topSpacer" style="height:0px;"></div></td></tr>
+        <tr class="spacer"><td colspan="{col_count}"><div id="botSpacer" style="height:0px;"></div></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+<script>
+const HEADERS = {header_js};
+const DATA = {data_js};
+
+(function() {{
+  const wrap = document.getElementById('wrap');
+  const tb = document.getElementById('tb');
+  const q = document.getElementById('q');
+  const vc = document.getElementById('vc');
+  const tc = document.getElementById('tc');
+  const topSpacer = document.getElementById('topSpacer');
+  const botSpacer = document.getElementById('botSpacer');
+
+  // Summary elements
+  const summaryBox = document.getElementById('summary');
+  const s_rows = document.getElementById('s_rows');
+  const s_recs = document.getElementById('s_recs');
+  const s_elapsed = document.getElementById('s_elapsed');
+  const s_top_elapsed = document.getElementById('s_top_elapsed');
+  const s_top_thr = document.getElementById('s_top_thr');
+
+  // -------- Performance knobs --------
+  const ROW_HEIGHT = 34;      // approximate px
+  const OVERSCAN = 10;        // render extra rows above/below viewport
+  const MAX_RENDER = 400;     // hard cap rendered rows
+
+  // Indices of columns for summary (if present)
+  const COL = {{
+    elapsed: HEADERS.indexOf('ELAPSED'),
+    recs: HEADERS.indexOf('PROCESSED RECS'),
+    thr: HEADERS.indexOf('THROUGHPUT'),
+    batch: HEADERS.indexOf('BATCH'),
+    job: HEADERS.indexOf('JOB.NAME'),
+    stage: HEADERS.indexOf('BATCH.STAGE'),
+  }};
+
+  function getCell(row, i) {{
+    if (i < 0) return '';
+    return (row[i] ?? '');
+  }}
+
+  function normalize(s) {{
+    return (s || "").toString().toLowerCase();
+  }}
+
+  function isNumberLike(v) {{
+    v = (v || "").trim();
+    if (!v) return false;
+    if (/^\\d+:\\d{{2}}:\\d{{2}}$/.test(v)) return true;
+    if (/^\\d+(\\.\\d+)?$/.test(v)) return true;
+    return false;
+  }}
+
+  function parseElapsedToSec(v) {{
+    v = (v || "").trim();
+    if (!v) return 0;
+    if (/^\\d+:\\d{{2}}:\\d{{2}}$/.test(v)) {{
+      const p = v.split(':').map(x => parseInt(x,10));
+      return (p[0]||0)*3600 + (p[1]||0)*60 + (p[2]||0);
+    }}
+    // sometimes could be seconds
+    if (/^\\d+(\\.\\d+)?$/.test(v)) return Math.round(parseFloat(v));
+    return 0;
+  }}
+
+  function fmtHMS(totalSec) {{
+    totalSec = Math.max(0, Math.floor(totalSec || 0));
+    const h = Math.floor(totalSec / 3600);
+    const m = Math.floor((totalSec % 3600) / 60);
+    const s = totalSec % 60;
+    const pad = (x) => String(x).padStart(2,'0');
+    return `${{h}}:${{pad(m)}}:${{pad(s)}}`;
+  }}
+
+  function parseValue(v) {{
+    v = (v || "").trim();
+    if (/^\\d+:\\d{{2}}:\\d{{2}}$/.test(v)) {{
+      const p = v.split(':').map(x => parseInt(x,10));
+      return (p[0]||0)*3600 + (p[1]||0)*60 + (p[2]||0);
+    }}
+    if (/^\\d+(\\.\\d+)?$/.test(v)) return parseFloat(v);
+    return v.toLowerCase();
+  }}
+
+  // State
+  const idx = Array.from({{length: DATA.length}}, (_, i) => i);
+  let filteredIdx = idx.slice();
+  let sortState = {{ col: -1, dir: 1 }};
+
+  // Search cache
+  const searchCache = new Array(DATA.length).fill(null);
+  function rowSearchString(i) {{
+    let s = searchCache[i];
+    if (s !== null) return s;
+    s = normalize(DATA[i].join(" "));
+    searchCache[i] = s;
+    return s;
+  }}
+
+  // Debounced filter
+  let tmr = null;
+  q.addEventListener('input', () => {{
+    if (tmr) clearTimeout(tmr);
+    tmr = setTimeout(() => applyFilter(q.value), 120);
+  }});
+
+  function applyFilter(text) {{
+    const needle = normalize(text).trim();
+    if (!needle) {{
+      filteredIdx = idx.slice();
+    }} else {{
+      const out = [];
+      for (let k = 0; k < idx.length; k++) {{
+        const i = idx[k];
+        if (rowSearchString(i).includes(needle)) out.push(i);
+      }}
+      filteredIdx = out;
+    }}
+    wrap.scrollTop = 0;
+    render();
+    updateSummarySoon();
+  }}
+
+  function sortBy(col) {{
+    const dir = (sortState.col === col) ? -sortState.dir : 1;
+    sortState = {{ col, dir }};
+
+    filteredIdx.sort((ia, ib) => {{
+      const a = DATA[ia][col] ?? "";
+      const b = DATA[ib][col] ?? "";
+      const an = isNumberLike(a);
+      const bn = isNumberLike(b);
+      const pa = parseValue(a);
+      const pb = parseValue(b);
+      if (an && bn) return (pa - pb) * dir;
+      return (pa > pb ? 1 : pa < pb ? -1 : 0) * dir;
+    }});
+
+    wrap.scrollTop = 0;
+    render();
+    updateSummarySoon();
+  }}
+
+  // Header click sorting
+  document.querySelectorAll('th[data-idx]').forEach(th => {{
+    th.addEventListener('click', () => {{
+      sortBy(parseInt(th.getAttribute('data-idx'), 10));
+    }});
+  }});
+
+  // Virtual render on scroll
+  let raf = null;
+  wrap.addEventListener('scroll', () => {{
+    if (raf) return;
+    raf = requestAnimationFrame(() => {{
+      raf = null;
+      render();
+    }});
+  }});
+
+  function clearRenderedRows() {{
+    // Keep only 2 spacer rows
+    while (tb.rows.length > 2) tb.deleteRow(1);
+  }}
+
+  function render() {{
+    const total = filteredIdx.length;
+    tc.textContent = total.toString();
+
+    const viewH = wrap.clientHeight;
+    const scrollTop = wrap.scrollTop;
+
+    const approxStart = Math.floor(scrollTop / ROW_HEIGHT);
+    let start = Math.max(0, approxStart - OVERSCAN);
+    let end = Math.min(total, approxStart + Math.ceil(viewH / ROW_HEIGHT) + OVERSCAN);
+
+    if (end - start > MAX_RENDER) end = start + MAX_RENDER;
+
+    topSpacer.style.height = (start * ROW_HEIGHT) + "px";
+    botSpacer.style.height = Math.max(0, (total - end) * ROW_HEIGHT) + "px";
+
+    clearRenderedRows();
+
+    // DocumentFragment for faster DOM insertion
+    const frag = document.createDocumentFragment();
+    for (let p = start; p < end; p++) {{
+      const i = filteredIdx[p];
+      const r = DATA[i];
+
+      const tr = document.createElement('tr');
+      for (let c = 0; c < HEADERS.length; c++) {{
+        const td = document.createElement('td');
+        td.textContent = (r[c] ?? "");
+        tr.appendChild(td);
+      }}
+      frag.appendChild(tr);
+    }}
+    tb.insertBefore(frag, tb.rows[tb.rows.length - 1]);
+
+    vc.textContent = (end - start).toString();
+  }}
+
+  // ---------- Summary ----------
+  let sumTimer = null;
+  function updateSummarySoon() {{
+    if (sumTimer) clearTimeout(sumTimer);
+    sumTimer = setTimeout(updateSummary, 120);
+  }}
+
+  function updateSummary() {{
+    // Show summary only if we have at least one of these columns
+    const hasAny = (COL.elapsed >= 0) || (COL.recs >= 0) || (COL.thr >= 0);
+    if (!hasAny) {{
+      summaryBox.style.display = "none";
+      return;
+    }}
+    summaryBox.style.display = "block";
+
+    const n = filteredIdx.length;
+    s_rows.textContent = String(n);
+
+    let totalRecs = 0;
+    let totalElapsedSec = 0;
+
+    // Top lists
+    const topElapsed = [];
+    const topThr = [];
+
+    for (let k = 0; k < n; k++) {{
+      const i = filteredIdx[k];
+      const row = DATA[i];
+
+      if (COL.recs >= 0) {{
+        const v = String(getCell(row, COL.recs)).trim();
+        if (/^\\d+$/.test(v)) totalRecs += parseInt(v, 10);
+      }}
+
+      if (COL.elapsed >= 0) {{
+        const sec = parseElapsedToSec(getCell(row, COL.elapsed));
+        totalElapsedSec += sec;
+
+        if (sec > 0) {{
+          topElapsed.push({{ i, sec }});
+        }}
+      }}
+
+      if (COL.thr >= 0) {{
+        const v = String(getCell(row, COL.thr)).trim();
+        if (/^\\d+(\\.\\d+)?$/.test(v)) {{
+          const thr = parseFloat(v);
+          if (thr > 0) topThr.push({{ i, thr }});
+        }}
+      }}
+    }}
+
+    s_recs.textContent = String(totalRecs);
+    s_elapsed.textContent = fmtHMS(totalElapsedSec);
+
+    topElapsed.sort((a,b) => b.sec - a.sec);
+    topThr.sort((a,b) => b.thr - a.thr);
+
+    function labelFor(i) {{
+      const row = DATA[i];
+      const parts = [];
+      const stage = getCell(row, COL.stage);
+      const batch = getCell(row, COL.batch);
+      const job = getCell(row, COL.job);
+      if (stage) parts.push(stage);
+      if (batch) parts.push(batch);
+      if (job) parts.push(job);
+      return parts.join(" | ") || ("Row #" + i);
+    }}
+
+    function setList(el, items, mode) {{
+      el.innerHTML = "";
+      const take = items.slice(0, 10);
+      for (const it of take) {{
+        const li = document.createElement('li');
+        if (mode === "elapsed") {{
+          li.textContent = `${{fmtHMS(it.sec)}} — ${{labelFor(it.i)}}`;
+        }} else {{
+          li.textContent = `${{it.thr}} — ${{labelFor(it.i)}}`;
+        }}
+        el.appendChild(li);
+      }}
+      if (take.length === 0) {{
+        const li = document.createElement('li');
+        li.textContent = "(няма данни)";
+        el.appendChild(li);
+      }}
+    }}
+
+    setList(s_top_elapsed, topElapsed, "elapsed");
+    setList(s_top_thr, topThr, "thr");
+  }}
+
+  // Initial render + summary
+  render();
+  updateSummarySoon();
+}})();
+</script>
+</body>
+</html>
+"""
+
+
+def main():
+    if len(sys.argv) < 2:
+        print("Usage: python3 csv_to_html_virtual.py /path/to/file.csv [output.html]", file=sys.stderr)
+        sys.exit(2)
+
+    csv_path = sys.argv[1]
+    out_path = sys.argv[2] if len(sys.argv) >= 3 else os.path.splitext(csv_path)[0] + ".html"
+
+    header, rows = read_csv(csv_path)
+    title = os.path.basename(csv_path)
+
+    doc = build_html(title, header, rows)
+
+    with open(out_path, "w", encoding="utf-8") as f:
+        f.write(doc)
+
+    print(out_path)
+
+
+if __name__ == "__main__":
+    main()
