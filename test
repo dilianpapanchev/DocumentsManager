@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
-# csv_to_html_anomalies_virtual_chart.py
+# cob_anomalies_report.py
 #
-# Single self-contained HTML (email-friendly).
-# - Virtualized table (fast for 15k+ rows)
-# - Default view: ONLY anomaly rows
-# - If you filter/search by a JOB (or click a row), it shows that job’s rows (including non-anomalies)
-# - Trend chart for selected job: ELAPSED + THROUGHPUT over last 31 BATCH.DATE
+# Generates a single self-contained HTML anomaly report (email-friendly):
+# - Only anomaly rows are shown in the main table (like your screenshot)
+# - Columns: Date, Stage, Batch, Job, Elapsed, Median, P95, Δ%
+# - Search + Reset filter
+# - Click a row -> selects JOB.NAME and shows trend chart for last 31 banking dates:
+#   ELAPSED (left axis) + THROUGHPUT (right axis) with tooltip
+#
+# Baseline grouping: JOB.NAME
 #
 # Usage:
-#   python3 csv_to_html_anomalies_virtual_chart.py /path/to/file.csv [output.html]
+#   python3 cob_anomalies_report.py /path/to/file.csv [output.html]
 
 import csv
 import os
@@ -37,88 +40,104 @@ def esc(s):
     return html.escape("" if s is None else str(s))
 
 
-def build_html(title: str, header, rows):
+def build_html(source_name: str, header, rows):
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
     header_js = json.dumps(header, ensure_ascii=False)
     data_js = json.dumps(rows, ensure_ascii=False)
 
-    ths = "\n".join(
-        "<th data-idx='{i}' title='{t}'>{h}</th>".format(
-            i=i, t=esc(h), h=esc(h)
-        )
-        for i, h in enumerate(header)
-    )
-    col_count = len(header)
+    # Simple header map for readability in JS
+    idx_map = {h: i for i, h in enumerate(header)}
+    idx_map_js = json.dumps(idx_map, ensure_ascii=False)
 
     base_html = r"""<!doctype html>
 <html lang="bg">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>%%TITLE%%</title>
+  <title>COB Batch – Anomalies</title>
   <style>
-    body { font-family: Arial, sans-serif; margin: 16px; color:#111; }
-    .topbar {
-      display:flex; gap:12px; align-items:center; flex-wrap:wrap;
-      margin-bottom:10px;
+    :root {
+      --bg: #ffffff;
+      --panel: #f6f7f8;
+      --border: #e6e6e6;
+      --text: #111;
+      --muted: #666;
+      --header: #1f2a44;
+      --row1: #fff0f0;
+      --row2: #fff6e6;
+      --row3: #eef6ff;
     }
-    h2 { margin:0; font-size:18px; }
-    input[type="search"] { padding:8px 10px; min-width:320px; }
-    .meta { color:#666; font-size: 12px; }
-    .hint { font-size:12px; color:#777; margin-bottom:10px; line-height:1.35; }
+    body { font-family: Arial, sans-serif; margin: 18px; color: var(--text); background: var(--bg); }
+    h1 { margin: 0 0 8px 0; font-size: 22px; letter-spacing: 0.2px; }
 
-    .controls {
-      display:flex; gap:12px; flex-wrap:wrap; align-items:center;
-      margin: 6px 0 10px 0;
-      padding: 10px 12px;
-      border: 1px solid #eee;
-      border-radius: 10px;
-      background: #fafafa;
+    .sub {
+      display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+      color: var(--muted); font-size: 12px; margin-bottom: 10px;
     }
-    .controls label { font-size: 13px; color:#222; display:flex; gap:8px; align-items:center; }
-    .pill {
-      font-size: 12px; padding: 4px 8px; border-radius: 999px; border:1px solid #e5e5e5;
-      background:#fff; color:#333;
+    .toolbar {
+      display:flex; gap:10px; flex-wrap:wrap; align-items:center;
+      background: var(--panel); border:1px solid var(--border);
+      border-radius: 10px; padding: 10px 12px; margin-bottom: 10px;
     }
-    .pill strong { font-weight:700; }
-    .btn {
-      border:1px solid #ddd; background:#fff; padding:6px 10px; border-radius:8px;
-      cursor:pointer; font-size: 13px;
-    }
-    .btn:hover { background:#f3f3f3; }
-    .sep { width:1px; height:18px; background:#e5e5e5; }
+    .toolbar input[type="search"] { padding: 8px 10px; min-width: 320px; border:1px solid #d9d9d9; border-radius: 8px; }
+    .btn { border:1px solid #d2d2d2; background:#fff; padding: 7px 10px; border-radius: 8px; cursor:pointer; font-size: 13px; }
+    .btn:hover { background:#f1f1f1; }
+    .pill { font-size: 12px; padding: 4px 8px; border-radius: 999px; border:1px solid var(--border); background:#fff; color:#333; }
+    .pill strong { font-weight: 700; }
 
-    .kpi { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
-    .kpi .box {
-      border:1px solid #eee; background:#fff; border-radius:10px; padding:8px 10px;
+    .wrap {
+      border:1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      background: #fff;
+    }
+
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    thead th {
+      background: var(--header);
+      color: #fff;
+      padding: 10px 10px;
       font-size: 13px;
+      text-align: left;
+      border-right: 1px solid rgba(255,255,255,0.14);
+      user-select: none;
+      cursor: pointer;
     }
-    .k { color:#666; font-size:12px; }
-    .v { font-weight:700; }
+    thead th:last-child { border-right: none; }
 
-    .panel {
-      border: 1px solid #eee;
+    tbody td {
+      padding: 8px 10px;
+      font-size: 13px;
+      border-bottom: 1px solid #efefef;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    tbody tr:hover td { outline: 1px solid rgba(0,0,0,0.06); background: #fbfbfb; }
+    tbody tr.hidden { display:none; }
+
+    .sev-critical td { background: #ffecec; }
+    .sev-warning  td { background: #fff3e0; }
+    .sev-info     td { background: #eef6ff; }
+
+    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+    .right { text-align: right; }
+
+    .chartPanel {
+      margin-top: 10px;
+      border:1px solid var(--border);
       border-radius: 12px;
       background: #fff;
       padding: 12px;
-      margin: 0 0 10px 0;
+      display:none;
     }
-    .panel-title { font-size: 13px; font-weight:700; margin: 0 0 8px 0; color:#222; }
-    .panel-sub { font-size: 12px; color:#666; margin:0 0 8px 0; }
-
-    .chart-wrap { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start; }
-    #chart {
-      width: 980px;
-      max-width: 100%;
-      height: 280px;
-      border:1px solid #eee;
-      border-radius: 12px;
-      background: #fafafa;
-    }
-    .chart-side { min-width: 260px; max-width: 100%; flex: 1; }
-    .chart-side .line { font-size: 12px; color:#444; margin: 4px 0; word-break: break-word; }
-    .chart-side .line b { color:#111; }
+    .chartTitle { font-weight: 700; font-size: 13px; margin: 0 0 6px 0; }
+    .chartSub { color: var(--muted); font-size: 12px; margin: 0 0 10px 0; }
+    .chartWrap { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start; }
+    #chart { width: 980px; max-width: 100%; height: 280px; border:1px solid var(--border); border-radius: 12px; background: #fafafa; }
+    .chartSide { min-width: 240px; flex: 1; }
+    .chartSide .line { font-size: 12px; color:#444; margin: 4px 0; }
+    .chartSide b { color:#111; }
 
     .tooltip {
       position: fixed;
@@ -128,106 +147,61 @@ def build_html(title: str, header, rows):
       font-size: 12px;
       padding: 8px 10px;
       border-radius: 10px;
-      max-width: 320px;
+      max-width: 340px;
       display: none;
       z-index: 9999;
       line-height: 1.25;
     }
-
-    .wrap {
-      height: 70vh;
-      overflow: auto;
-      border: 1px solid #eee;
-      border-radius: 12px;
-      position: relative;
-    }
-    table { border-collapse: collapse; width: 100%; table-layout: fixed; }
-    th, td {
-      border: 1px solid #ddd;
-      padding: 8px;
-      font-size: 13px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    th {
-      position: sticky;
-      top: 0;
-      background: #f5f5f5;
-      cursor: pointer;
-      user-select:none;
-      z-index: 5;
-    }
-
-    tr[data-sev="critical"] td { background: #ffecec; }
-    tr[data-sev="warning"]  td { background: #fff3e0; }
-    tr[data-sev="info"]     td { background: #eef6ff; }
-
-    .badge {
-      display:inline-flex; align-items:center; gap:6px;
-      border-radius: 999px; padding: 2px 8px;
-      font-size: 12px; border: 1px solid #ddd; background:#fff;
-    }
-    .b-critical { border-color:#f2b8b8; }
-    .b-warning  { border-color:#f0d3a1; }
-    .b-info     { border-color:#b7d7ff; }
-    .dot { width:8px; height:8px; border-radius:999px; display:inline-block; }
-    .d-critical { background:#d21b1b; }
-    .d-warning  { background:#c97a00; }
-    .d-info     { background:#0b62c4; }
-
-    .spacer td { padding:0; border:0; background: transparent !important; }
   </style>
 </head>
 <body>
-  <div class="topbar">
-    <h2>%%TITLE%%</h2>
-    <input id="q" type="search" placeholder="Филтър (търси във всички колони). Пример: EB.CYCLE.DATES или част от JOB.NAME" />
-    <span class="meta">Генерирано: %%NOW%% | Видими: <span id="vc"></span> | Общо (във филтъра): <span id="tc"></span></span>
-  </div>
-
-  <div class="hint">
-    Default: виждаш само аномалии. Ако филтрираш по JOB (или кликнеш ред), ще се покажат всички редове за този JOB и ще излезе графика за последните 31 банкови дена (ELAPSED + THROUGHPUT).
-  </div>
-
-  <div class="controls">
-    <label><input id="onlyAnoms" type="checkbox" checked /> Само аномалии (default)</label>
-    <button id="clearSel" class="btn" type="button">Clear selection</button>
-    <span class="sep"></span>
+  <h1>COB Batch – Anomalies</h1>
+  <div class="sub">
+    <span>Source: <b>%%SOURCE%%</b></span>
+    <span>|</span>
+    <span>Generated: <b>%%NOW%%</b></span>
+    <span>|</span>
+    <span class="pill">Rows: <strong id="rowCount">0</strong></span>
     <span class="pill">Selected JOB: <strong id="selJob">(none)</strong></span>
-    <span class="pill">JOB class: <strong id="selClass">-</strong></span>
-    <span class="pill">History N: <strong id="selN">-</strong></span>
-    <span class="pill">Dates: <strong id="selDates">-</strong></span>
-    <span class="sep"></span>
-    <div class="kpi">
-      <div class="box"><div class="k">Critical</div><div class="v" id="kCrit">0</div></div>
-      <div class="box"><div class="k">Warning</div><div class="v" id="kWarn">0</div></div>
-      <div class="box"><div class="k">Info</div><div class="v" id="kInfo">0</div></div>
-    </div>
   </div>
 
-  <div id="chartPanel" class="panel" style="display:none;">
-    <div class="panel-title">JOB Trend (31 banking dates)</div>
-    <div class="panel-sub" id="chartSub"></div>
-    <div class="chart-wrap">
+  <div class="toolbar">
+    <button class="btn" id="resetBtn" type="button">Reset filter</button>
+    <input id="q" type="search" placeholder="Search (any column or header)..." />
+    <span class="pill">Tip: click row to show job trend (31 dates)</span>
+  </div>
+
+  <div class="wrap">
+    <table id="t">
+      <thead>
+        <tr>
+          <th data-col="Date">Date</th>
+          <th data-col="Stage">Stage</th>
+          <th data-col="Batch">Batch</th>
+          <th data-col="Job">Job</th>
+          <th data-col="Elapsed" class="right">Elapsed</th>
+          <th data-col="Median" class="right">Median</th>
+          <th data-col="P95" class="right">P95</th>
+          <th data-col="Delta" class="right">Δ %</th>
+        </tr>
+      </thead>
+      <tbody id="tb">
+      </tbody>
+    </table>
+  </div>
+
+  <div id="chartPanel" class="chartPanel">
+    <div class="chartTitle">JOB Trend (31 banking dates)</div>
+    <div id="chartSub" class="chartSub"></div>
+    <div class="chartWrap">
       <canvas id="chart" width="980" height="280"></canvas>
-      <div class="chart-side">
+      <div class="chartSide">
         <div class="line"><b>ELAPSED</b> = left axis (seconds / hh:mm:ss)</div>
         <div class="line"><b>THROUGHPUT</b> = right axis</div>
         <div class="line" id="chartInfo"></div>
-        <div class="line" style="color:#666">Tip: hover върху точка за tooltip. Клик върху ред избира JOB.</div>
+        <div class="line" style="color:#666">Hover точка → tooltip.</div>
       </div>
     </div>
-  </div>
-
-  <div id="wrap" class="wrap">
-    <table id="t">
-      <thead><tr>%%THS%%</tr></thead>
-      <tbody id="tb">
-        <tr class="spacer"><td colspan="%%COLCOUNT%%"><div id="topSpacer" style="height:0px;"></div></td></tr>
-        <tr class="spacer"><td colspan="%%COLCOUNT%%"><div id="botSpacer" style="height:0px;"></div></td></tr>
-      </tbody>
-    </table>
   </div>
 
   <div id="tt" class="tooltip"></div>
@@ -235,27 +209,14 @@ def build_html(title: str, header, rows):
 <script>
 const HEADERS = %%HEADER_JS%%;
 const DATA = %%DATA_JS%%;
+const IDX = %%IDX_MAP_JS%%;
 
 (function() {
-  const wrap = document.getElementById('wrap');
   const tb = document.getElementById('tb');
   const q = document.getElementById('q');
-  const vc = document.getElementById('vc');
-  const tc = document.getElementById('tc');
-  const topSpacer = document.getElementById('topSpacer');
-  const botSpacer = document.getElementById('botSpacer');
-
-  const onlyAnoms = document.getElementById('onlyAnoms');
-  const clearSel = document.getElementById('clearSel');
-
+  const resetBtn = document.getElementById('resetBtn');
+  const rowCount = document.getElementById('rowCount');
   const selJobEl = document.getElementById('selJob');
-  const selClassEl = document.getElementById('selClass');
-  const selNEl = document.getElementById('selN');
-  const selDatesEl = document.getElementById('selDates');
-
-  const kCrit = document.getElementById('kCrit');
-  const kWarn = document.getElementById('kWarn');
-  const kInfo = document.getElementById('kInfo');
 
   const chartPanel = document.getElementById('chartPanel');
   const chartSub = document.getElementById('chartSub');
@@ -264,36 +225,23 @@ const DATA = %%DATA_JS%%;
   const ctx = chart.getContext('2d');
   const tt = document.getElementById('tt');
 
-  // -------- Performance knobs --------
-  const ROW_HEIGHT = 34;
-  const OVERSCAN = 10;
-  const MAX_RENDER = 400;
-
-  // Classification knobs
-  const REGULAR_MIN = 10;   // >= 10 of 31 -> regular
-  const OCC_MIN = 2;        // 2..9 -> occasional; 1 -> rare
-
-  // Column indices
-  const COL = {
-    stage: HEADERS.indexOf('BATCH.STAGE'),
-    batch: HEADERS.indexOf('BATCH'),
-    job: HEADERS.indexOf('JOB.NAME'),
-    bdate: HEADERS.indexOf('BATCH.DATE'),
-    start: HEADERS.indexOf('START.TIME'),
-    end: HEADERS.indexOf('END.TIME'),
-    elapsed: HEADERS.indexOf('ELAPSED'),
-    recs: HEADERS.indexOf('PROCESSED RECS'),
-    thr: HEADERS.indexOf('THROUGHPUT'),
+  // ---- Column helpers (safe) ----
+  function col(name) { return (IDX[name] != null) ? IDX[name] : -1; }
+  const C = {
+    stage: col('BATCH.STAGE'),
+    batch: col('BATCH'),
+    job: col('JOB.NAME'),
+    bdate: col('BATCH.DATE'),
+    start: col('START.TIME'),
+    end: col('END.TIME'),
+    elapsed: col('ELAPSED'),
+    recs: col('PROCESSED RECS'),
+    thr: col('THROUGHPUT'),
   };
 
-  function getCell(row, i) {
-    if (i < 0) return '';
-    return (row[i] ?? '');
-  }
-
-  function normalize(s) {
-    return (s || "").toString().toLowerCase();
-  }
+  function getCell(row, i) { return (i < 0) ? "" : (row[i] ?? ""); }
+  function normalize(s) { return (s || "").toString().toLowerCase(); }
+  function isNum(v) { v = (v || "").trim(); return /^\d+(\.\d+)?$/.test(v); }
 
   function fmtHMS(sec) {
     if (sec == null || !isFinite(sec)) return "";
@@ -303,11 +251,6 @@ const DATA = %%DATA_JS%%;
     const s = sec % 60;
     const pad = (x) => String(x).padStart(2, '0');
     return `${h}:${pad(m)}:${pad(s)}`;
-  }
-
-  function isNum(v) {
-    v = (v || "").trim();
-    return /^\d+(\.\d+)?$/.test(v);
   }
 
   function parseElapsedToSec(v) {
@@ -354,434 +297,306 @@ const DATA = %%DATA_JS%%;
   function computeStats(nums) {
     const arr = nums.filter(x => isFinite(x)).slice().sort((a,b)=>a-b);
     if (arr.length === 0) return null;
-    const q1 = quantile(arr, 0.25);
     const med = quantile(arr, 0.50);
-    const q3 = quantile(arr, 0.75);
     const p95 = quantile(arr, 0.95);
-    const p5  = quantile(arr, 0.05);
-    const iqr = q3 - q1;
-    return { n: arr.length, q1, med, q3, iqr, p95, p5 };
+    return { n: arr.length, med, p95 };
   }
 
-  // Build per-job history (by banking date)
-  const jobInfo = new Map();
+  // ---- Collect all dates + per-job history (JOB.NAME baseline) ----
   const allDatesSet = new Set();
+  const jobInfo = new Map(); // job -> { dates:Set, elapsedVals:[], thrVals:[], byDate: Map(date->{elapsedSec,thr,recs}), stats }
 
   for (let i=0; i<DATA.length; i++) {
     const row = DATA[i];
-    const job = String(getCell(row, COL.job)).trim();
-    const bdate = String(getCell(row, COL.bdate)).trim();
-    if (bdate) allDatesSet.add(bdate);
+    const job = String(getCell(row, C.job)).trim();
+    const d = String(getCell(row, C.bdate)).trim();
+    if (d) allDatesSet.add(d);
     if (!job) continue;
 
     if (!jobInfo.has(job)) {
-      jobInfo.set(job, {
-        dates: new Set(),
-        elapsedVals: [],
-        thrVals: [],
-        byDate: new Map(), // bdate -> { elapsedSec, thr, recs }
-      });
+      jobInfo.set(job, { dates:new Set(), elapsedVals:[], thrVals:[], byDate:new Map(), stats:null });
     }
-
     const ji = jobInfo.get(job);
-    if (bdate) ji.dates.add(bdate);
+    if (d) ji.dates.add(d);
 
-    const e = parseElapsedToSec(getCell(row, COL.elapsed));
+    const e = parseElapsedToSec(getCell(row, C.elapsed));
     if (isFinite(e) && e >= 0) ji.elapsedVals.push(e);
 
-    const tStr = String(getCell(row, COL.thr)).trim();
+    const tStr = String(getCell(row, C.thr)).trim();
     const t = isNum(tStr) ? parseFloat(tStr) : NaN;
     if (isFinite(t) && t >= 0) ji.thrVals.push(t);
 
-    if (bdate) {
-      const recsStr = String(getCell(row, COL.recs)).trim();
+    if (d) {
+      const recsStr = String(getCell(row, C.recs)).trim();
       const recs = /^\d+$/.test(recsStr) ? parseInt(recsStr, 10) : NaN;
-
-      const prev = ji.byDate.get(bdate) || { elapsedSec: NaN, thr: NaN, recs: 0 };
+      const prev = ji.byDate.get(d) || { elapsedSec: NaN, thr: NaN, recs: 0 };
       const next = {
         elapsedSec: isFinite(e) ? Math.max((prev.elapsedSec || 0), e) : prev.elapsedSec,
         thr: isFinite(t) ? t : prev.thr,
         recs: isFinite(recs) ? (prev.recs + recs) : prev.recs
       };
-      ji.byDate.set(bdate, next);
+      ji.byDate.set(d, next);
     }
   }
 
   const allDates = Array.from(allDatesSet).sort();
 
+  // Compute baseline stats per job (median + p95) for elapsed
   for (const [job, ji] of jobInfo.entries()) {
-    const dn = ji.dates.size;
-    let cls = "RARE";
-    if (dn >= REGULAR_MIN) cls = "REGULAR";
-    else if (dn >= OCC_MIN) cls = "OCCASIONAL";
-    ji.class = cls;
-    ji.nDates = dn;
-    ji.statsElapsed = computeStats(ji.elapsedVals);
-    ji.statsThr = computeStats(ji.thrVals);
+    ji.stats = computeStats(ji.elapsedVals);
+    ji.nDates = ji.dates.size;
   }
 
-  // Row anomaly evaluation
-  const rowMeta = new Array(DATA.length);
-  let baseCrit=0, baseWarn=0, baseInfo=0;
+  // ---- Determine anomalies list ----
+  // Rules:
+  // - Performance anomaly: elapsed > p95 (only if job has enough history)
+  // - Data-quality anomaly always included
+  const REGULAR_MIN = 10;
 
-  function maxSev(a,b) {
-    const rank = { none:0, info:1, warning:2, critical:3 };
-    return (rank[b] > rank[a]) ? b : a;
-  }
-
-  function evalRow(i) {
-    const row = DATA[i];
-    const job = String(getCell(row, COL.job)).trim();
-    const bdate = String(getCell(row, COL.bdate)).trim();
-
+  function dataQualityReasons(row) {
     let sev = "none";
     const reasons = [];
 
-    // Data-quality checks
-    const st = parseTimeToSec(getCell(row, COL.start));
-    const en = parseTimeToSec(getCell(row, COL.end));
-    const el = parseElapsedToSec(getCell(row, COL.elapsed));
-
-    const recsStr = String(getCell(row, COL.recs)).trim();
-    const thrStr  = String(getCell(row, COL.thr)).trim();
-
+    const d = String(getCell(row, C.bdate)).trim();
+    const st = parseTimeToSec(getCell(row, C.start));
+    const en = parseTimeToSec(getCell(row, C.end));
+    const el = parseElapsedToSec(getCell(row, C.elapsed));
+    const recsStr = String(getCell(row, C.recs)).trim();
+    const thrStr = String(getCell(row, C.thr)).trim();
     const recs = /^\d+$/.test(recsStr) ? parseInt(recsStr,10) : NaN;
     const thr = isNum(thrStr) ? parseFloat(thrStr) : NaN;
 
-    if (!bdate || !/^\d{8}$/.test(bdate)) {
-      sev = maxSev(sev, "warning");
-      reasons.push("Invalid/missing BATCH.DATE");
+    function bump(s) {
+      const rank = { none:0, info:1, warning:2, critical:3 };
+      if (rank[s] > rank[sev]) sev = s;
     }
-    if (COL.start >= 0 && !isFinite(st)) {
-      sev = maxSev(sev, "warning");
-      reasons.push("Missing/invalid START.TIME");
-    }
-    if (COL.end >= 0 && !isFinite(en)) {
-      sev = maxSev(sev, "warning");
-      reasons.push("Missing/invalid END.TIME");
-    }
-    if (isFinite(st) && isFinite(en) && en < st) {
-      sev = maxSev(sev, "warning");
-      reasons.push("END.TIME < START.TIME");
-    }
-    if (isFinite(el) && el < 0) {
-      sev = maxSev(sev, "warning");
-      reasons.push("Negative ELAPSED");
-    }
+
+    if (!d || !/^\d{8}$/.test(d)) { bump("warning"); reasons.push("Invalid/missing BATCH.DATE"); }
+    if (C.start >= 0 && !isFinite(st)) { bump("warning"); reasons.push("Missing/invalid START.TIME"); }
+    if (C.end >= 0 && !isFinite(en)) { bump("warning"); reasons.push("Missing/invalid END.TIME"); }
+    if (isFinite(st) && isFinite(en) && en < st) { bump("warning"); reasons.push("END.TIME < START.TIME"); }
+    if (isFinite(el) && el < 0) { bump("warning"); reasons.push("Negative ELAPSED"); }
     if (isFinite(recs) && recs > 0 && (thrStr === "0" || thrStr === "" || (!isFinite(thr) || thr === 0))) {
-      sev = maxSev(sev, "warning");
-      reasons.push("PROCESSED RECS > 0 but THROUGHPUT missing/0");
+      bump("warning"); reasons.push("PROCESSED RECS > 0 but THROUGHPUT missing/0");
     }
     if (isFinite(recs) && recs > 0 && isFinite(el) && el === 0) {
-      sev = maxSev(sev, "warning");
-      reasons.push("PROCESSED RECS > 0 but ELAPSED = 0");
+      bump("warning"); reasons.push("PROCESSED RECS > 0 but ELAPSED = 0");
     }
 
-    // Performance anomaly
-    if (job && jobInfo.has(job)) {
-      const ji = jobInfo.get(job);
-
-      if (ji.class === "REGULAR" && ji.statsElapsed && isFinite(el)) {
-        const s = ji.statsElapsed;
-        const critA = isFinite(s.p95) && el > s.p95 * 1.2;
-        const critB = isFinite(s.med) && isFinite(s.iqr) && s.iqr > 0 && el > (s.med + 2*s.iqr);
-        const warnA = isFinite(s.p95) && el > s.p95;
-
-        if (critA || critB) {
-          sev = maxSev(sev, "critical");
-          reasons.push(`ELAPSED spike: ${fmtHMS(el)} (median ${fmtHMS(s.med)}, p95 ${fmtHMS(s.p95)})`);
-        } else if (warnA) {
-          sev = maxSev(sev, "warning");
-          reasons.push(`ELAPSED high: ${fmtHMS(el)} (p95 ${fmtHMS(s.p95)})`);
-        }
-      } else if (ji.class === "OCCASIONAL" && ji.statsElapsed && isFinite(el)) {
-        const s = ji.statsElapsed;
-        if (isFinite(s.p95) && el > s.p95) {
-          sev = maxSev(sev, "warning");
-          reasons.push(`ELAPSED high (limited history N=${ji.nDates}): ${fmtHMS(el)} (p95 ${fmtHMS(s.p95)})`);
-        }
-      }
-
-      // Throughput low -> info
-      if (ji.class !== "RARE" && ji.statsThr && isFinite(thr)) {
-        const s = ji.statsThr;
-        if (isFinite(s.p5) && thr < s.p5) {
-          sev = maxSev(sev, "info");
-          reasons.push(`THROUGHPUT low: ${thr} (p5 ${s.p5})`);
-        }
-      }
-    }
-
-    return { sev, reason: reasons.join(" | "), job, bdate };
+    return { sev, reasons };
   }
+
+  // Build anomaly rows for display
+  // Each item: {date, stage, batch, job, elapsedSec, elapsedStr, medSec, p95Sec, medStr, p95Str, deltaPct, sev, reason, srcIndex}
+  const anomalies = [];
 
   for (let i=0; i<DATA.length; i++) {
-    const m = evalRow(i);
-    rowMeta[i] = m;
-    if (m.sev === "critical") baseCrit++;
-    else if (m.sev === "warning") baseWarn++;
-    else if (m.sev === "info") baseInfo++;
-  }
+    const row = DATA[i];
+    const job = String(getCell(row, C.job)).trim();
+    if (!job) continue;
 
-  function updateKPIsForCurrentView() {
-    let c=0,w=0,inf=0;
-    for (let k=0; k<filteredIdx.length; k++) {
-      const sev = rowMeta[filteredIdx[k]].sev;
-      if (sev === "critical") c++;
-      else if (sev === "warning") w++;
-      else if (sev === "info") inf++;
+    const dq = dataQualityReasons(row);
+
+    const e = parseElapsedToSec(getCell(row, C.elapsed));
+    const ji = jobInfo.get(job);
+    const st = ji ? ji.stats : null;
+
+    const med = st ? st.med : NaN;
+    const p95 = st ? st.p95 : NaN;
+
+    const enoughHist = ji && ji.nDates >= REGULAR_MIN && isFinite(p95) && isFinite(e);
+
+    let isPerfAnom = false;
+    if (enoughHist) {
+      isPerfAnom = (e > p95);
     }
-    kCrit.textContent = String(c);
-    kWarn.textContent = String(w);
-    kInfo.textContent = String(inf);
-  }
 
-  // Search cache
-  const searchCache = new Array(DATA.length).fill(null);
-  function rowSearchString(i) {
-    let s = searchCache[i];
-    if (s !== null) return s;
-    s = normalize(DATA[i].join(" "));
-    searchCache[i] = s;
-    return s;
-  }
+    const isDqAnom = (dq.sev !== "none");
 
-  // Sorting
-  let sortState = { col: -1, dir: 1 };
-  function isNumberLike(v) {
-    v = (v || "").trim();
-    if (!v) return false;
-    if (/^\d+:\d{2}:\d{2}$/.test(v)) return true;
-    if (/^\d+(\.\d+)?$/.test(v)) return true;
-    return false;
-  }
-  function parseValue(v) {
-    v = (v || "").trim();
-    if (/^\d+:\d{2}:\d{2}$/.test(v)) {
-      const p = v.split(':').map(x=>parseInt(x,10));
-      return (p[0]||0)*3600 + (p[1]||0)*60 + (p[2]||0);
+    if (!isPerfAnom && !isDqAnom) continue;
+
+    // severity for row coloring
+    let sev = "info";
+    if (isDqAnom) sev = "warning";
+    if (isPerfAnom) sev = "critical";
+
+    const date = String(getCell(row, C.bdate)).trim();
+    const stage = String(getCell(row, C.stage)).trim();
+    const batch = String(getCell(row, C.batch)).trim();
+
+    const elapsedStr = isFinite(e) ? fmtHMS(e) : String(getCell(row, C.elapsed)).trim();
+    const medStr = (isFinite(med) && med > 0) ? fmtHMS(med) : "";
+    const p95Str = (isFinite(p95) && p95 > 0) ? fmtHMS(p95) : "";
+
+    let deltaPct = "";
+    if (isFinite(e) && isFinite(med) && med > 0) {
+      deltaPct = ((e / med - 1) * 100);
     }
-    if (/^\d+(\.\d+)?$/.test(v)) return parseFloat(v);
-    return v.toLowerCase();
+
+    const reasonParts = [];
+    if (isPerfAnom && isFinite(e) && isFinite(med) && isFinite(p95)) {
+      reasonParts.push(`ELAPSED>${p95Str} (median ${medStr})`);
+    } else if (isPerfAnom) {
+      reasonParts.push("ELAPSED above P95");
+    }
+    if (isDqAnom) reasonParts.push(dq.reasons.join(" | "));
+    const reason = reasonParts.join(" | ");
+
+    anomalies.push({
+      date, stage, batch, job,
+      elapsedSec: e,
+      elapsedStr,
+      medSec: med,
+      p95Sec: p95,
+      medStr,
+      p95Str,
+      deltaPct,
+      sev,
+      reason,
+      srcIndex: i
+    });
   }
 
-  // Main index
-  const idx = Array.from({length: DATA.length}, (_, i) => i);
-  let filteredIdx = idx.slice();
+  // Default sort: Δ% desc, then elapsed desc
+  anomalies.sort((a,b) => {
+    const ad = (typeof a.deltaPct === "number" && isFinite(a.deltaPct)) ? a.deltaPct : -Infinity;
+    const bd = (typeof b.deltaPct === "number" && isFinite(b.deltaPct)) ? b.deltaPct : -Infinity;
+    if (bd !== ad) return bd - ad;
+    const ae = isFinite(a.elapsedSec) ? a.elapsedSec : -Infinity;
+    const be = isFinite(b.elapsedSec) ? b.elapsedSec : -Infinity;
+    return be - ae;
+  });
 
-  // Selection
-  let selectedJob = null;
+  // ---- Render anomaly table ----
+  function fmtDelta(v) {
+    if (typeof v !== "number" || !isFinite(v)) return "";
+    return Math.round(v).toString() + "%";
+  }
 
-  function setSelectedJob(job) {
-    if (!job) {
-      selectedJob = null;
-      selJobEl.textContent = "(none)";
-      selClassEl.textContent = "-";
-      selNEl.textContent = "-";
-      selDatesEl.textContent = "-";
-      chartPanel.style.display = "none";
+  function rowClass(sev) {
+    if (sev === "critical") return "sev-critical";
+    if (sev === "warning") return "sev-warning";
+    return "sev-info";
+  }
+
+  function renderTable(items) {
+    tb.innerHTML = "";
+    const frag = document.createDocumentFragment();
+
+    for (const it of items) {
+      const tr = document.createElement('tr');
+      tr.className = rowClass(it.sev);
+      tr.setAttribute("data-job", it.job);
+      tr.setAttribute("data-reason", it.reason || "");
+      tr.innerHTML = `
+        <td class="mono" title="${escapeHtml(it.reason)}">${escapeHtml(it.date)}</td>
+        <td class="mono" title="${escapeHtml(it.stage)}">${escapeHtml(it.stage)}</td>
+        <td title="${escapeHtml(it.batch)}">${escapeHtml(it.batch)}</td>
+        <td title="${escapeHtml(it.job)}">${escapeHtml(it.job)}</td>
+        <td class="mono right" title="${escapeHtml(it.elapsedStr)}">${escapeHtml(it.elapsedStr)}</td>
+        <td class="mono right" title="${escapeHtml(it.medStr)}">${escapeHtml(it.medStr)}</td>
+        <td class="mono right" title="${escapeHtml(it.p95Str)}">${escapeHtml(it.p95Str)}</td>
+        <td class="mono right" title="${escapeHtml(fmtDelta(it.deltaPct))}">${escapeHtml(fmtDelta(it.deltaPct))}</td>
+      `;
+      frag.appendChild(tr);
+    }
+
+    tb.appendChild(frag);
+    rowCount.textContent = String(items.length);
+    wireRowHandlers();
+  }
+
+  // ---- Search / filter ----
+  let current = anomalies.slice();
+
+  function applySearch(text) {
+    const needle = normalize(text).trim();
+    if (!needle) {
+      current = anomalies.slice();
+      renderTable(current);
       return;
     }
-    selectedJob = job;
-    selJobEl.textContent = job;
+    current = anomalies.filter(r => {
+      const hay = normalize([r.date, r.stage, r.batch, r.job, r.elapsedStr, r.medStr, r.p95Str, fmtDelta(r.deltaPct)].join(" "));
+      return hay.includes(needle);
+    });
+    renderTable(current);
 
-    const ji = jobInfo.get(job);
-    if (ji) {
-      selClassEl.textContent = ji.class;
-      selNEl.textContent = String(ji.nDates);
-      selDatesEl.textContent = `${ji.nDates} / ${allDates.length}`;
-    } else {
-      selClassEl.textContent = "-";
-      selNEl.textContent = "-";
-      selDatesEl.textContent = "-";
-    }
-    drawChartFor(job);
-  }
-
-  clearSel.addEventListener('click', () => {
-    setSelectedJob(null);
-    render();
-  });
-
-  // Filtering
-  let tmr = null;
-  q.addEventListener('input', () => {
-    if (tmr) clearTimeout(tmr);
-    tmr = setTimeout(() => applyFilter(q.value), 140);
-  });
-
-  onlyAnoms.addEventListener('change', () => {
-    applyFilter(q.value);
-  });
-
-  function maybeAutoSelectJob(needle) {
-    if (!needle) return;
-    const jobs = new Set();
-    for (let k=0; k<filteredIdx.length; k++) {
-      const j = rowMeta[filteredIdx[k]].job;
-      if (j) jobs.add(j);
-      if (jobs.size > 1) break;
-    }
+    // auto-select if unique job
+    const jobs = new Set(current.map(x => x.job));
     if (jobs.size === 1) {
       setSelectedJob(jobs.values().next().value);
     }
   }
 
-  function applyFilter(text) {
-    const needle = normalize(text).trim();
-    const anomaliesOnly = !!onlyAnoms.checked;
-
-    if (!needle) {
-      filteredIdx = anomaliesOnly ? idx.filter(i => rowMeta[i].sev !== "none") : idx.slice();
-      wrap.scrollTop = 0;
-      render();
-      updateKPIsForCurrentView();
-      return;
-    }
-
-    // with filter: show matches including non-anomalies
-    const out = [];
-    for (let k=0; k<idx.length; k++) {
-      const i = idx[k];
-      if (rowSearchString(i).includes(needle)) out.push(i);
-    }
-    filteredIdx = out;
-
-    maybeAutoSelectJob(needle);
-
-    wrap.scrollTop = 0;
-    render();
-    updateKPIsForCurrentView();
-  }
-
-  // Sorting headers
-  document.querySelectorAll('th[data-idx]').forEach(th => {
-    th.addEventListener('click', () => {
-      const col = parseInt(th.getAttribute('data-idx'), 10);
-      const dir = (sortState.col === col) ? -sortState.dir : 1;
-      sortState = { col, dir };
-
-      filteredIdx.sort((ia, ib) => {
-        const a = DATA[ia][col] ?? "";
-        const b = DATA[ib][col] ?? "";
-        const an = isNumberLike(a);
-        const bn = isNumberLike(b);
-        const pa = parseValue(a);
-        const pb = parseValue(b);
-        if (an && bn) return (pa - pb) * dir;
-        return (pa > pb ? 1 : pa < pb ? -1 : 0) * dir;
-      });
-
-      wrap.scrollTop = 0;
-      render();
-    });
+  q.addEventListener('input', () => applySearch(q.value));
+  resetBtn.addEventListener('click', () => {
+    q.value = "";
+    applySearch("");
+    setSelectedJob(null);
   });
 
-  // Virtual render
-  let raf = null;
-  wrap.addEventListener('scroll', () => {
-    if (raf) return;
-    raf = requestAnimationFrame(() => {
-      raf = null;
-      render();
-    });
-  });
-
-  function clearRenderedRows() {
-    while (tb.rows.length > 2) tb.deleteRow(1);
+  // ---- Row hover tooltip + click selection ----
+  function showTooltip(px, py, html) {
+    tt.innerHTML = html;
+    tt.style.display = "block";
+    tt.style.left = (px + 12) + "px";
+    tt.style.top = (py + 12) + "px";
   }
 
-  function labelSeverity(sev) {
-    if (sev === "critical") return `<span class="badge b-critical"><span class="dot d-critical"></span>CRIT</span>`;
-    if (sev === "warning")  return `<span class="badge b-warning"><span class="dot d-warning"></span>WARN</span>`;
-    if (sev === "info")     return `<span class="badge b-info"><span class="dot d-info"></span>INFO</span>`;
-    return "";
-  }
-
-  function buildRowHTML(row, i) {
-    const meta = rowMeta[i];
-    const sevBadge = labelSeverity(meta.sev);
-    const reason = meta.reason ? meta.reason.replaceAll('"','&quot;') : "";
-    const sev = meta.sev;
-    const job = meta.job ? meta.job.replaceAll('"','&quot;') : "";
-
-    let tds = "";
-    for (let c=0; c<HEADERS.length; c++) {
-      const val = (row[c] ?? "");
-      if (c === 0 && sevBadge) {
-        tds += `<td title="${reason}">${sevBadge}&nbsp;${escapeHtml(String(val))}</td>`;
-      } else {
-        tds += `<td title="${escapeHtml(String(val))}">${escapeHtml(String(val))}</td>`;
-      }
-    }
-    return `<tr data-sev="${sev}" data-reason="${reason}" data-job="${job}">${tds}</tr>`;
-  }
+  function hideTooltip() { tt.style.display = "none"; }
 
   function wireRowHandlers() {
-    for (let r=1; r<tb.rows.length-1; r++) {
-      const tr = tb.rows[r];
-      if (tr.__wired) continue;
+    const rows = tb.querySelectorAll("tr");
+    rows.forEach(tr => {
+      if (tr.__wired) return;
       tr.__wired = true;
 
-      tr.addEventListener('click', () => {
-        const job = tr.getAttribute('data-job');
+      tr.addEventListener("mousemove", (e) => {
+        const reason = tr.getAttribute("data-reason") || "";
+        if (!reason) { hideTooltip(); return; }
+        showTooltip(e.clientX, e.clientY, `<div style="font-weight:700;margin-bottom:4px;">Anomaly</div><div>${escapeHtml(reason)}</div>`);
+      });
+      tr.addEventListener("mouseleave", hideTooltip);
+
+      tr.addEventListener("click", () => {
+        const job = tr.getAttribute("data-job");
         if (job) setSelectedJob(job);
       });
-
-      tr.addEventListener('mousemove', (e) => {
-        const reason = tr.getAttribute('data-reason') || "";
-        if (!reason) { tt.style.display = "none"; return; }
-        tt.innerHTML = `<div style="font-weight:700;margin-bottom:4px;">Anomaly</div><div>${escapeHtml(reason)}</div>`;
-        tt.style.display = "block";
-        tt.style.left = (e.clientX + 12) + "px";
-        tt.style.top = (e.clientY + 12) + "px";
-      });
-      tr.addEventListener('mouseleave', () => { tt.style.display = "none"; });
-    }
+    });
   }
 
-  function render() {
-    const total = filteredIdx.length;
-    tc.textContent = total.toString();
-
-    const viewH = wrap.clientHeight;
-    const scrollTop = wrap.scrollTop;
-
-    const approxStart = Math.floor(scrollTop / ROW_HEIGHT);
-    let start = Math.max(0, approxStart - OVERSCAN);
-    let end = Math.min(total, approxStart + Math.ceil(viewH / ROW_HEIGHT) + OVERSCAN);
-    if (end - start > MAX_RENDER) end = start + MAX_RENDER;
-
-    topSpacer.style.height = (start * ROW_HEIGHT) + "px";
-    botSpacer.style.height = Math.max(0, (total - end) * ROW_HEIGHT) + "px";
-
-    clearRenderedRows();
-
-    const frag = document.createDocumentFragment();
-    for (let p=start; p<end; p++) {
-      const idxRow = filteredIdx[p];
-      const tmp = document.createElement('tbody');
-      tmp.innerHTML = buildRowHTML(DATA[idxRow], idxRow);
-      frag.appendChild(tmp.firstElementChild);
-    }
-    tb.insertBefore(frag, tb.rows[tb.rows.length - 1]);
-
-    vc.textContent = (end - start).toString();
-    wireRowHandlers();
-  }
-
-  // ---------------- Chart ----------------
+  // ---- Chart (selected JOB): ELAPSED + THROUGHPUT ----
+  let selectedJob = null;
   let chartPoints = null;
+
+  function setSelectedJob(job) {
+    if (!job) {
+      selectedJob = null;
+      selJobEl.textContent = "(none)";
+      chartPanel.style.display = "none";
+      return;
+    }
+    selectedJob = job;
+    selJobEl.textContent = job;
+    drawChartFor(job);
+  }
 
   function drawChartFor(job) {
     const ji = jobInfo.get(job);
-    if (!ji) { chartPanel.style.display = "none"; return; }
+    if (!ji) {
+      chartPanel.style.display = "none";
+      return;
+    }
+
     chartPanel.style.display = "block";
 
-    chartSub.textContent = `${job} | class=${ji.class} | history N=${ji.nDates} | banking dates=${allDates.length}`;
+    const cls = (ji.nDates >= 10) ? "REGULAR" : (ji.nDates >= 2) ? "OCCASIONAL" : "RARE";
+    chartSub.textContent = `${job} | class=${cls} | history N=${ji.nDates} | banking dates=${allDates.length}`;
+
     chartInfo.textContent =
-      (ji.class === "RARE") ? "RARE (EOM/EOY вероятно) – малко точки е нормално."
-      : (ji.class === "OCCASIONAL") ? "OCCASIONAL – baseline е ограничен."
+      (cls === "RARE") ? "RARE (EOM/EOY вероятно) – малко точки е нормално."
+      : (cls === "OCCASIONAL") ? "OCCASIONAL – baseline е ограничен."
       : "REGULAR – baseline е стабилен.";
 
     const xs = allDates.slice();
@@ -905,9 +720,7 @@ const DATA = %%DATA_JS%%;
 
     chartPoints = xs.map((d, i) => {
       const x = L + (PW * (i/(n-1 || 1)));
-      const e = elapsed[i];
-      const t = thr[i];
-      return { d, x, e, t, recs: recs[i] };
+      return { d, x, e: elapsed[i], t: thr[i], r: recs[i] };
     });
   }
 
@@ -933,7 +746,7 @@ const DATA = %%DATA_JS%%;
 
     const eVal = isFinite(best.e) ? `${fmtHMS(best.e)} (${Math.round(best.e)}s)` : "(no run)";
     const tVal = isFinite(best.t) ? String(best.t) : "(no run)";
-    const rVal = (best.recs != null && isFinite(best.recs)) ? String(best.recs) : "-";
+    const rVal = (best.r != null && isFinite(best.r)) ? String(best.r) : "-";
 
     const html = `
       <div style="font-weight:700;margin-bottom:4px;">${escapeHtml(selectedJob)}</div>
@@ -946,13 +759,45 @@ const DATA = %%DATA_JS%%;
   });
   chart.addEventListener('mouseleave', () => { tt.style.display = "none"; });
 
-  // Init KPIs baseline (for initial anomalies-only view)
-  kCrit.textContent = String(baseCrit);
-  kWarn.textContent = String(baseWarn);
-  kInfo.textContent = String(baseInfo);
+  // ---- Sorting in anomalies table ----
+  let sortCol = "Delta";
+  let sortDir = -1; // desc
 
-  // Initial view: anomalies only
-  applyFilter("");
+  function sortKey(row, colName) {
+    if (colName === "Delta") return (typeof row.deltaPct === "number" && isFinite(row.deltaPct)) ? row.deltaPct : -Infinity;
+    if (colName === "Elapsed") return isFinite(row.elapsedSec) ? row.elapsedSec : -Infinity;
+    if (colName === "Median") return isFinite(row.medSec) ? row.medSec : -Infinity;
+    if (colName === "P95") return isFinite(row.p95Sec) ? row.p95Sec : -Infinity;
+    if (colName === "Date") return row.date || "";
+    if (colName === "Stage") return row.stage || "";
+    if (colName === "Batch") return row.batch || "";
+    if (colName === "Job") return row.job || "";
+    return "";
+  }
+
+  function applySort() {
+    current.sort((a,b) => {
+      const ka = sortKey(a, sortCol);
+      const kb = sortKey(b, sortCol);
+      if (ka === kb) return 0;
+      return (ka > kb ? 1 : -1) * sortDir;
+    });
+    renderTable(current);
+  }
+
+  document.querySelectorAll('thead th[data-col]').forEach(th => {
+    th.addEventListener('click', () => {
+      const c = th.getAttribute('data-col');
+      if (c === sortCol) sortDir *= -1;
+      else { sortCol = c; sortDir = -1; }
+      applySort();
+    });
+  });
+
+  // Initial render
+  current = anomalies.slice();
+  applySort();
+
 })();
 </script>
 </body>
@@ -960,27 +805,26 @@ const DATA = %%DATA_JS%%;
 """
 
     out = base_html
-    out = out.replace("%%TITLE%%", esc(title))
+    out = out.replace("%%SOURCE%%", esc(source_name))
     out = out.replace("%%NOW%%", esc(now))
-    out = out.replace("%%THS%%", ths)
-    out = out.replace("%%COLCOUNT%%", str(col_count))
     out = out.replace("%%HEADER_JS%%", header_js)
     out = out.replace("%%DATA_JS%%", data_js)
+    out = out.replace("%%IDX_MAP_JS%%", idx_map_js)
     return out
 
 
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python3 csv_to_html_anomalies_virtual_chart.py /path/to/file.csv [output.html]", file=sys.stderr)
+        print("Usage: python3 cob_anomalies_report.py /path/to/file.csv [output.html]", file=sys.stderr)
         sys.exit(2)
 
     csv_path = sys.argv[1]
-    out_path = sys.argv[2] if len(sys.argv) >= 3 else os.path.splitext(csv_path)[0] + ".html"
+    out_path = sys.argv[2] if len(sys.argv) >= 3 else os.path.splitext(csv_path)[0] + "_anomalies.html"
 
     header, rows = read_csv(csv_path)
-    title = os.path.basename(csv_path)
+    source_name = os.path.basename(csv_path)
 
-    doc = build_html(title, header, rows)
+    doc = build_html(source_name, header, rows)
 
     with open(out_path, "w", encoding="utf-8") as f:
         f.write(doc)
