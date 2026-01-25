@@ -43,90 +43,84 @@ def build_html(title: str, header, rows):
     header_js = json.dumps(header, ensure_ascii=False)
     data_js = json.dumps(rows, ensure_ascii=False)
 
-    ths = "\n".join(f"<th data-idx='{i}' title='{esc(h)}'>{esc(h)}</th>" for i, h in enumerate(header))
+    ths = "\n".join(
+        "<th data-idx='{i}' title='{t}'>{h}</th>".format(
+            i=i, t=esc(h), h=esc(h)
+        )
+        for i, h in enumerate(header)
+    )
     col_count = len(header)
 
-    return f"""<!doctype html>
+    base_html = r"""<!doctype html>
 <html lang="bg">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>{esc(title)}</title>
+  <title>%%TITLE%%</title>
   <style>
-    body {{ font-family: Arial, sans-serif; margin: 16px; color:#111; }}
-    .topbar {{
+    body { font-family: Arial, sans-serif; margin: 16px; color:#111; }
+    .topbar {
       display:flex; gap:12px; align-items:center; flex-wrap:wrap;
       margin-bottom:10px;
-    }}
-    h2 {{ margin:0; font-size:18px; }}
-    input[type="search"] {{ padding:8px 10px; min-width:320px; }}
-    .meta {{ color:#666; font-size: 12px; }}
-    .hint {{ font-size:12px; color:#777; margin-bottom:10px; line-height:1.35; }}
+    }
+    h2 { margin:0; font-size:18px; }
+    input[type="search"] { padding:8px 10px; min-width:320px; }
+    .meta { color:#666; font-size: 12px; }
+    .hint { font-size:12px; color:#777; margin-bottom:10px; line-height:1.35; }
 
-    .controls {{
+    .controls {
       display:flex; gap:12px; flex-wrap:wrap; align-items:center;
       margin: 6px 0 10px 0;
       padding: 10px 12px;
       border: 1px solid #eee;
       border-radius: 10px;
       background: #fafafa;
-    }}
-    .controls label {{ font-size: 13px; color:#222; display:flex; gap:8px; align-items:center; }}
-    .pill {{
+    }
+    .controls label { font-size: 13px; color:#222; display:flex; gap:8px; align-items:center; }
+    .pill {
       font-size: 12px; padding: 4px 8px; border-radius: 999px; border:1px solid #e5e5e5;
       background:#fff; color:#333;
-    }}
-    .pill strong {{ font-weight:700; }}
-    .btn {{
+    }
+    .pill strong { font-weight:700; }
+    .btn {
       border:1px solid #ddd; background:#fff; padding:6px 10px; border-radius:8px;
       cursor:pointer; font-size: 13px;
-    }}
-    .btn:hover {{ background:#f3f3f3; }}
-    .sep {{ width:1px; height:18px; background:#e5e5e5; }}
+    }
+    .btn:hover { background:#f3f3f3; }
+    .sep { width:1px; height:18px; background:#e5e5e5; }
 
-    .kpi {{
-      display:flex; gap:10px; flex-wrap:wrap; align-items:center;
-    }}
-    .kpi .box {{
+    .kpi { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .kpi .box {
       border:1px solid #eee; background:#fff; border-radius:10px; padding:8px 10px;
       font-size: 13px;
-    }}
-    .k {{ color:#666; font-size:12px; }}
-    .v {{ font-weight:700; }}
+    }
+    .k { color:#666; font-size:12px; }
+    .v { font-weight:700; }
 
-    .panel {{
+    .panel {
       border: 1px solid #eee;
       border-radius: 12px;
       background: #fff;
       padding: 12px;
       margin: 0 0 10px 0;
-    }}
-    .panel-title {{ font-size: 13px; font-weight:700; margin: 0 0 8px 0; color:#222; }}
-    .panel-sub {{ font-size: 12px; color:#666; margin:0 0 8px 0; }}
+    }
+    .panel-title { font-size: 13px; font-weight:700; margin: 0 0 8px 0; color:#222; }
+    .panel-sub { font-size: 12px; color:#666; margin:0 0 8px 0; }
 
-    .chart-wrap {{
-      display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start;
-    }}
-    #chart {{
+    .chart-wrap { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start; }
+    #chart {
       width: 980px;
       max-width: 100%;
       height: 280px;
       border:1px solid #eee;
       border-radius: 12px;
       background: #fafafa;
-    }}
-    .chart-side {{
-      min-width: 260px;
-      max-width: 100%;
-      flex: 1;
-    }}
-    .chart-side .line {{
-      font-size: 12px; color:#444; margin: 4px 0;
-      word-break: break-word;
-    }}
-    .chart-side .line b {{ color:#111; }}
+    }
+    .chart-side { min-width: 260px; max-width: 100%; flex: 1; }
+    .chart-side .line { font-size: 12px; color:#444; margin: 4px 0; word-break: break-word; }
+    .chart-side .line b { color:#111; }
 
-    .tooltip {{
+    .tooltip {
       position: fixed;
       pointer-events: none;
       background: rgba(17,17,17,0.92);
@@ -138,59 +132,58 @@ def build_html(title: str, header, rows):
       display: none;
       z-index: 9999;
       line-height: 1.25;
-    }}
+    }
 
-    .wrap {{
+    .wrap {
       height: 70vh;
       overflow: auto;
       border: 1px solid #eee;
       border-radius: 12px;
       position: relative;
-    }}
-    table {{ border-collapse: collapse; width: 100%; table-layout: fixed; }}
-    th, td {{
+    }
+    table { border-collapse: collapse; width: 100%; table-layout: fixed; }
+    th, td {
       border: 1px solid #ddd;
       padding: 8px;
       font-size: 13px;
       white-space: nowrap;
       overflow: hidden;
       text-overflow: ellipsis;
-    }}
-    th {{
+    }
+    th {
       position: sticky;
       top: 0;
       background: #f5f5f5;
       cursor: pointer;
       user-select:none;
       z-index: 5;
-    }}
+    }
 
-    /* Row severity highlight */
-    tr[data-sev="critical"] td {{ background: #ffecec; }}
-    tr[data-sev="warning"]  td {{ background: #fff3e0; }}
-    tr[data-sev="info"]     td {{ background: #eef6ff; }}
+    tr[data-sev="critical"] td { background: #ffecec; }
+    tr[data-sev="warning"]  td { background: #fff3e0; }
+    tr[data-sev="info"]     td { background: #eef6ff; }
 
-    .badge {{
+    .badge {
       display:inline-flex; align-items:center; gap:6px;
       border-radius: 999px; padding: 2px 8px;
       font-size: 12px; border: 1px solid #ddd; background:#fff;
-    }}
-    .b-critical {{ border-color:#f2b8b8; }}
-    .b-warning  {{ border-color:#f0d3a1; }}
-    .b-info     {{ border-color:#b7d7ff; }}
-    .dot {{ width:8px; height:8px; border-radius:999px; display:inline-block; }}
-    .d-critical {{ background:#d21b1b; }}
-    .d-warning  {{ background:#c97a00; }}
-    .d-info     {{ background:#0b62c4; }}
+    }
+    .b-critical { border-color:#f2b8b8; }
+    .b-warning  { border-color:#f0d3a1; }
+    .b-info     { border-color:#b7d7ff; }
+    .dot { width:8px; height:8px; border-radius:999px; display:inline-block; }
+    .d-critical { background:#d21b1b; }
+    .d-warning  { background:#c97a00; }
+    .d-info     { background:#0b62c4; }
 
-    .spacer td {{ padding:0; border:0; background: transparent !important; }}
+    .spacer td { padding:0; border:0; background: transparent !important; }
   </style>
 </head>
 <body>
   <div class="topbar">
-    <h2>{esc(title)}</h2>
+    <h2>%%TITLE%%</h2>
     <input id="q" type="search" placeholder="Филтър (търси във всички колони). Пример: EB.CYCLE.DATES или част от JOB.NAME" />
-    <span class="meta">Генерирано: {esc(now)} | Видими: <span id="vc"></span> | Общо (във филтъра): <span id="tc"></span></span>
+    <span class="meta">Генерирано: %%NOW%% | Видими: <span id="vc"></span> | Общо (във филтъра): <span id="tc"></span></span>
   </div>
 
   <div class="hint">
@@ -229,10 +222,10 @@ def build_html(title: str, header, rows):
 
   <div id="wrap" class="wrap">
     <table id="t">
-      <thead><tr>{ths}</tr></thead>
+      <thead><tr>%%THS%%</tr></thead>
       <tbody id="tb">
-        <tr class="spacer"><td colspan="{col_count}"><div id="topSpacer" style="height:0px;"></div></td></tr>
-        <tr class="spacer"><td colspan="{col_count}"><div id="botSpacer" style="height:0px;"></div></td></tr>
+        <tr class="spacer"><td colspan="%%COLCOUNT%%"><div id="topSpacer" style="height:0px;"></div></td></tr>
+        <tr class="spacer"><td colspan="%%COLCOUNT%%"><div id="botSpacer" style="height:0px;"></div></td></tr>
       </tbody>
     </table>
   </div>
@@ -240,10 +233,10 @@ def build_html(title: str, header, rows):
   <div id="tt" class="tooltip"></div>
 
 <script>
-const HEADERS = {header_js};
-const DATA = {data_js};
+const HEADERS = %%HEADER_JS%%;
+const DATA = %%DATA_JS%%;
 
-(function() {{
+(function() {
   const wrap = document.getElementById('wrap');
   const tb = document.getElementById('tb');
   const q = document.getElementById('q');
@@ -281,7 +274,7 @@ const DATA = {data_js};
   const OCC_MIN = 2;        // 2..9 -> occasional; 1 -> rare
 
   // Column indices
-  const COL = {{
+  const COL = {
     stage: HEADERS.indexOf('BATCH.STAGE'),
     batch: HEADERS.indexOf('BATCH'),
     job: HEADERS.indexOf('JOB.NAME'),
@@ -291,55 +284,63 @@ const DATA = {data_js};
     elapsed: HEADERS.indexOf('ELAPSED'),
     recs: HEADERS.indexOf('PROCESSED RECS'),
     thr: HEADERS.indexOf('THROUGHPUT'),
-  }};
+  };
 
-  function getCell(row, i) {{
+  function getCell(row, i) {
     if (i < 0) return '';
     return (row[i] ?? '');
-  }}
+  }
 
-  function normalize(s) {{
+  function normalize(s) {
     return (s || "").toString().toLowerCase();
-  }}
+  }
 
-  function isNum(v) {{
-    v = (v || "").trim();
-    return /^\\d+(\\.\\d+)?$/.test(v);
-  }}
-
-  function parseElapsedToSec(v) {{
-    v = (v || "").trim();
-    if (!v) return NaN;
-    if (/^\\d+:\\d{{2}}:\\d{{2}}$/.test(v)) {{
-      const p = v.split(':').map(x => parseInt(x,10));
-      return (p[0]||0)*3600 + (p[1]||0)*60 + (p[2]||0);
-    }}
-    if (isNum(v)) return parseFloat(v);
-    return NaN;
-  }}
-
-  function fmtHMS(sec) {{
+  function fmtHMS(sec) {
     if (sec == null || !isFinite(sec)) return "";
     sec = Math.max(0, Math.floor(sec));
-    const h = Math.floor(sec/3600);
-    const m = Math.floor((sec%3600)/60);
-    const s = sec%60;
-    const pad = (x)=>String(x).padStart(2,'0');
-    return `${{h}}:${{pad(m)}}:${{pad(s)}}`;
-  }}
+    const h = Math.floor(sec / 3600);
+    const m = Math.floor((sec % 3600) / 60);
+    const s = sec % 60;
+    const pad = (x) => String(x).padStart(2, '0');
+    return `${h}:${pad(m)}:${pad(s)}`;
+  }
 
-  function parseTimeToSec(v) {{
+  function isNum(v) {
+    v = (v || "").trim();
+    return /^\d+(\.\d+)?$/.test(v);
+  }
+
+  function parseElapsedToSec(v) {
     v = (v || "").trim();
     if (!v) return NaN;
-    if (/^\\d+:\\d{{2}}:\\d{{2}}$/.test(v)) {{
+    if (/^\d+:\d{2}:\d{2}$/.test(v)) {
+      const p = v.split(':').map(x => parseInt(x,10));
+      return (p[0]||0)*3600 + (p[1]||0)*60 + (p[2]||0);
+    }
+    if (isNum(v)) return parseFloat(v);
+    return NaN;
+  }
+
+  function parseTimeToSec(v) {
+    v = (v || "").trim();
+    if (!v) return NaN;
+    if (/^\d+:\d{2}:\d{2}$/.test(v)) {
       const p = v.split(':').map(x=>parseInt(x,10));
       return (p[0]||0)*3600 + (p[1]||0)*60 + (p[2]||0);
-    }}
+    }
     return NaN;
-  }}
+  }
 
-  function quantile(sorted, q) {{
-    // sorted array of numbers
+  function escapeHtml(s) {
+    return (s||"")
+      .replaceAll("&","&amp;")
+      .replaceAll("<","&lt;")
+      .replaceAll(">","&gt;")
+      .replaceAll('"',"&quot;")
+      .replaceAll("'","&#39;");
+  }
+
+  function quantile(sorted, q) {
     const n = sorted.length;
     if (n === 0) return NaN;
     const pos = (n - 1) * q;
@@ -348,9 +349,9 @@ const DATA = {data_js};
     const a = sorted[base];
     const b = sorted[Math.min(base + 1, n - 1)];
     return a + rest * (b - a);
-  }}
+  }
 
-  function computeStats(nums) {{
+  function computeStats(nums) {
     const arr = nums.filter(x => isFinite(x)).slice().sort((a,b)=>a-b);
     if (arr.length === 0) return null;
     const q1 = quantile(arr, 0.25);
@@ -359,54 +360,56 @@ const DATA = {data_js};
     const p95 = quantile(arr, 0.95);
     const p5  = quantile(arr, 0.05);
     const iqr = q3 - q1;
-    return {{ n: arr.length, q1, med, q3, iqr, p95, p5 }};
-  }}
+    return { n: arr.length, q1, med, q3, iqr, p95, p5 };
+  }
 
   // Build per-job history (by banking date)
-  const jobInfo = new Map(); // jobName -> {{ dates:Set, elapsedArr:[], thrArr:[], class, statsElapsed, statsThr }}
+  const jobInfo = new Map();
   const allDatesSet = new Set();
 
-  for (let i=0; i<DATA.length; i++) {{
+  for (let i=0; i<DATA.length; i++) {
     const row = DATA[i];
     const job = String(getCell(row, COL.job)).trim();
     const bdate = String(getCell(row, COL.bdate)).trim();
     if (bdate) allDatesSet.add(bdate);
-
     if (!job) continue;
-    if (!jobInfo.has(job)) {{
-      jobInfo.set(job, {{
+
+    if (!jobInfo.has(job)) {
+      jobInfo.set(job, {
         dates: new Set(),
         elapsedVals: [],
         thrVals: [],
-        byDate: new Map(), // bdate -> {{ elapsedSec, thr, recs }}
-      }});
-    }}
+        byDate: new Map(), // bdate -> { elapsedSec, thr, recs }
+      });
+    }
+
     const ji = jobInfo.get(job);
     if (bdate) ji.dates.add(bdate);
 
     const e = parseElapsedToSec(getCell(row, COL.elapsed));
     if (isFinite(e) && e >= 0) ji.elapsedVals.push(e);
 
-    const t = parseFloat(String(getCell(row, COL.thr)).trim());
+    const tStr = String(getCell(row, COL.thr)).trim();
+    const t = isNum(tStr) ? parseFloat(tStr) : NaN;
     if (isFinite(t) && t >= 0) ji.thrVals.push(t);
 
-    // Keep representative per-date metrics (if multiple rows/day, take max elapsed and latest thr)
-    if (bdate) {{
-      const recs = parseInt(String(getCell(row, COL.recs)).trim(), 10);
-      const prev = ji.byDate.get(bdate) || {{ elapsedSec: NaN, thr: NaN, recs: 0 }};
-      const next = {{
-        elapsedSec: isFinite(e) ? Math.max(prev.elapsedSec || 0, e) : prev.elapsedSec,
+    if (bdate) {
+      const recsStr = String(getCell(row, COL.recs)).trim();
+      const recs = /^\d+$/.test(recsStr) ? parseInt(recsStr, 10) : NaN;
+
+      const prev = ji.byDate.get(bdate) || { elapsedSec: NaN, thr: NaN, recs: 0 };
+      const next = {
+        elapsedSec: isFinite(e) ? Math.max((prev.elapsedSec || 0), e) : prev.elapsedSec,
         thr: isFinite(t) ? t : prev.thr,
         recs: isFinite(recs) ? (prev.recs + recs) : prev.recs
-      }};
+      };
       ji.byDate.set(bdate, next);
-    }}
-  }}
+    }
+  }
 
-  const allDates = Array.from(allDatesSet).sort(); // banking dates ascending (as strings YYYYMMDD)
+  const allDates = Array.from(allDatesSet).sort();
 
-  // Classify jobs + compute stats
-  for (const [job, ji] of jobInfo.entries()) {{
+  for (const [job, ji] of jobInfo.entries()) {
     const dn = ji.dates.size;
     let cls = "RARE";
     if (dn >= REGULAR_MIN) cls = "REGULAR";
@@ -415,153 +418,162 @@ const DATA = {data_js};
     ji.nDates = dn;
     ji.statsElapsed = computeStats(ji.elapsedVals);
     ji.statsThr = computeStats(ji.thrVals);
-  }}
+  }
 
   // Row anomaly evaluation
-  const rowMeta = new Array(DATA.length); // {{ sev: 'none|info|warning|critical', reason, job, bdate }}
+  const rowMeta = new Array(DATA.length);
   let baseCrit=0, baseWarn=0, baseInfo=0;
 
-  function maxSev(a,b) {{
-    const rank = {{ none:0, info:1, warning:2, critical:3 }};
+  function maxSev(a,b) {
+    const rank = { none:0, info:1, warning:2, critical:3 };
     return (rank[b] > rank[a]) ? b : a;
-  }}
+  }
 
-  function evalRow(i) {{
+  function evalRow(i) {
     const row = DATA[i];
     const job = String(getCell(row, COL.job)).trim();
     const bdate = String(getCell(row, COL.bdate)).trim();
 
     let sev = "none";
-    let reasons = [];
+    const reasons = [];
 
     // Data-quality checks
     const st = parseTimeToSec(getCell(row, COL.start));
     const en = parseTimeToSec(getCell(row, COL.end));
     const el = parseElapsedToSec(getCell(row, COL.elapsed));
+
     const recsStr = String(getCell(row, COL.recs)).trim();
     const thrStr  = String(getCell(row, COL.thr)).trim();
-    const recs = /^\\d+$/.test(recsStr) ? parseInt(recsStr,10) : NaN;
+
+    const recs = /^\d+$/.test(recsStr) ? parseInt(recsStr,10) : NaN;
     const thr = isNum(thrStr) ? parseFloat(thrStr) : NaN;
 
-    if (!bdate || !/^\\d{{8}}$/.test(bdate)) {{
+    if (!bdate || !/^\d{8}$/.test(bdate)) {
       sev = maxSev(sev, "warning");
       reasons.push("Invalid/missing BATCH.DATE");
-    }}
-    if (COL.start >= 0 && !isFinite(st)) {{
+    }
+    if (COL.start >= 0 && !isFinite(st)) {
       sev = maxSev(sev, "warning");
       reasons.push("Missing/invalid START.TIME");
-    }}
-    if (COL.end >= 0 && !isFinite(en)) {{
+    }
+    if (COL.end >= 0 && !isFinite(en)) {
       sev = maxSev(sev, "warning");
       reasons.push("Missing/invalid END.TIME");
-    }}
-    if (isFinite(st) && isFinite(en) && en < st) {{
+    }
+    if (isFinite(st) && isFinite(en) && en < st) {
       sev = maxSev(sev, "warning");
       reasons.push("END.TIME < START.TIME");
-    }}
-    if (isFinite(el) && el < 0) {{
+    }
+    if (isFinite(el) && el < 0) {
       sev = maxSev(sev, "warning");
       reasons.push("Negative ELAPSED");
-    }}
-    if (isFinite(recs) && recs > 0 && (thrStr === "0" || thrStr === "" || (!isFinite(thr) || thr === 0))) {{
+    }
+    if (isFinite(recs) && recs > 0 && (thrStr === "0" || thrStr === "" || (!isFinite(thr) || thr === 0))) {
       sev = maxSev(sev, "warning");
       reasons.push("PROCESSED RECS > 0 but THROUGHPUT missing/0");
-    }}
-    if (isFinite(recs) && recs > 0 && isFinite(el) && el === 0) {{
+    }
+    if (isFinite(recs) && recs > 0 && isFinite(el) && el === 0) {
       sev = maxSev(sev, "warning");
       reasons.push("PROCESSED RECS > 0 but ELAPSED = 0");
-    }}
+    }
 
-    // Performance anomaly (only if we have job + stable history)
-    if (job && jobInfo.has(job)) {{
+    // Performance anomaly
+    if (job && jobInfo.has(job)) {
       const ji = jobInfo.get(job);
-      if (ji.class === "REGULAR" && ji.statsElapsed && isFinite(el)) {{
+
+      if (ji.class === "REGULAR" && ji.statsElapsed && isFinite(el)) {
         const s = ji.statsElapsed;
-        // critical: > p95*1.2 OR > med + 2*IQR (IQR needs to be meaningful)
         const critA = isFinite(s.p95) && el > s.p95 * 1.2;
         const critB = isFinite(s.med) && isFinite(s.iqr) && s.iqr > 0 && el > (s.med + 2*s.iqr);
         const warnA = isFinite(s.p95) && el > s.p95;
 
-        if (critA || critB) {{
+        if (critA || critB) {
           sev = maxSev(sev, "critical");
           reasons.push(`ELAPSED spike: ${fmtHMS(el)} (median ${fmtHMS(s.med)}, p95 ${fmtHMS(s.p95)})`);
-        }} else if (warnA) {{
+        } else if (warnA) {
           sev = maxSev(sev, "warning");
           reasons.push(`ELAPSED high: ${fmtHMS(el)} (p95 ${fmtHMS(s.p95)})`);
-        }}
-      }} else if (ji.class === "OCCASIONAL" && ji.statsElapsed && isFinite(el)) {{
-        // limited history -> never critical, only warning if beyond p95
+        }
+      } else if (ji.class === "OCCASIONAL" && ji.statsElapsed && isFinite(el)) {
         const s = ji.statsElapsed;
-        if (isFinite(s.p95) && el > s.p95) {{
+        if (isFinite(s.p95) && el > s.p95) {
           sev = maxSev(sev, "warning");
           reasons.push(`ELAPSED high (limited history N=${ji.nDates}): ${fmtHMS(el)} (p95 ${fmtHMS(s.p95)})`);
-        }}
-      }}
+        }
+      }
 
-      // Throughput low signal (info)
-      if (ji.class !== "RARE" && ji.statsThr && isFinite(thr)) {{
+      // Throughput low -> info
+      if (ji.class !== "RARE" && ji.statsThr && isFinite(thr)) {
         const s = ji.statsThr;
-        if (isFinite(s.p5) && thr < s.p5) {{
+        if (isFinite(s.p5) && thr < s.p5) {
           sev = maxSev(sev, "info");
           reasons.push(`THROUGHPUT low: ${thr} (p5 ${s.p5})`);
-        }}
-      }}
-    }}
+        }
+      }
+    }
 
-    const reason = reasons.join(" | ");
-    return {{ sev, reason, job, bdate }};
-  }}
+    return { sev, reason: reasons.join(" | "), job, bdate };
+  }
 
-  for (let i=0; i<DATA.length; i++) {{
+  for (let i=0; i<DATA.length; i++) {
     const m = evalRow(i);
     rowMeta[i] = m;
     if (m.sev === "critical") baseCrit++;
     else if (m.sev === "warning") baseWarn++;
     else if (m.sev === "info") baseInfo++;
-  }}
+  }
 
-  // KPI initial
-  kCrit.textContent = String(baseCrit);
-  kWarn.textContent = String(baseWarn);
-  kInfo.textContent = String(baseInfo);
+  function updateKPIsForCurrentView() {
+    let c=0,w=0,inf=0;
+    for (let k=0; k<filteredIdx.length; k++) {
+      const sev = rowMeta[filteredIdx[k]].sev;
+      if (sev === "critical") c++;
+      else if (sev === "warning") w++;
+      else if (sev === "info") inf++;
+    }
+    kCrit.textContent = String(c);
+    kWarn.textContent = String(w);
+    kInfo.textContent = String(inf);
+  }
 
-  // Search cache (for fast filtering)
+  // Search cache
   const searchCache = new Array(DATA.length).fill(null);
-  function rowSearchString(i) {{
+  function rowSearchString(i) {
     let s = searchCache[i];
     if (s !== null) return s;
     s = normalize(DATA[i].join(" "));
     searchCache[i] = s;
     return s;
-  }}
+  }
 
-  // Sort state
-  let sortState = {{ col: -1, dir: 1 }};
-  function isNumberLike(v) {{
+  // Sorting
+  let sortState = { col: -1, dir: 1 };
+  function isNumberLike(v) {
     v = (v || "").trim();
     if (!v) return false;
-    if (/^\\d+:\\d{{2}}:\\d{{2}}$/.test(v)) return true;
-    if (/^\\d+(\\.\\d+)?$/.test(v)) return true;
+    if (/^\d+:\d{2}:\d{2}$/.test(v)) return true;
+    if (/^\d+(\.\d+)?$/.test(v)) return true;
     return false;
-  }}
-  function parseValue(v) {{
+  }
+  function parseValue(v) {
     v = (v || "").trim();
-    if (/^\\d+:\\d{{2}}:\\d{{2}}$/.test(v)) {{
+    if (/^\d+:\d{2}:\d{2}$/.test(v)) {
       const p = v.split(':').map(x=>parseInt(x,10));
       return (p[0]||0)*3600 + (p[1]||0)*60 + (p[2]||0);
-    }}
-    if (/^\\d+(\\.\\d+)?$/.test(v)) return parseFloat(v);
+    }
+    if (/^\d+(\.\d+)?$/.test(v)) return parseFloat(v);
     return v.toLowerCase();
-  }}
+  }
 
   // Main index
-  const idx = Array.from({{length: DATA.length}}, (_, i) => i);
+  const idx = Array.from({length: DATA.length}, (_, i) => i);
   let filteredIdx = idx.slice();
 
   // Selection
-  let selectedJob = null; // string
-  function setSelectedJob(job, source) {{
-    if (!job) {{
+  let selectedJob = null;
+
+  function setSelectedJob(job) {
+    if (!job) {
       selectedJob = null;
       selJobEl.textContent = "(none)";
       selClassEl.textContent = "-";
@@ -569,130 +581,87 @@ const DATA = {data_js};
       selDatesEl.textContent = "-";
       chartPanel.style.display = "none";
       return;
-    }}
+    }
     selectedJob = job;
     selJobEl.textContent = job;
 
     const ji = jobInfo.get(job);
-    if (ji) {{
+    if (ji) {
       selClassEl.textContent = ji.class;
       selNEl.textContent = String(ji.nDates);
-      selDatesEl.textContent = `${{ji.nDates}} / ${{allDates.length}}`;
-    }} else {{
+      selDatesEl.textContent = `${ji.nDates} / ${allDates.length}`;
+    } else {
       selClassEl.textContent = "-";
       selNEl.textContent = "-";
       selDatesEl.textContent = "-";
-    }}
+    }
     drawChartFor(job);
-  }}
+  }
 
-  clearSel.addEventListener('click', () => {{
-    setSelectedJob(null, "clear");
-    // keep current filter; just remove chart selection
+  clearSel.addEventListener('click', () => {
+    setSelectedJob(null);
     render();
-  }});
+  });
 
-  // Filtering logic:
-  // - If no filter text: show ONLY anomalies if onlyAnoms checked
-  // - If filter text present: show matches; if a unique JOB emerges, auto-select it + show chart
+  // Filtering
   let tmr = null;
-  q.addEventListener('input', () => {{
+  q.addEventListener('input', () => {
     if (tmr) clearTimeout(tmr);
-    tmr = setTimeout(() => {{
-      applyFilter(q.value);
-    }}, 140);
-  }});
+    tmr = setTimeout(() => applyFilter(q.value), 140);
+  });
 
-  onlyAnoms.addEventListener('change', () => {{
+  onlyAnoms.addEventListener('change', () => {
     applyFilter(q.value);
-  }});
+  });
 
-  function applyFilter(text) {{
+  function maybeAutoSelectJob(needle) {
+    if (!needle) return;
+    const jobs = new Set();
+    for (let k=0; k<filteredIdx.length; k++) {
+      const j = rowMeta[filteredIdx[k]].job;
+      if (j) jobs.add(j);
+      if (jobs.size > 1) break;
+    }
+    if (jobs.size === 1) {
+      setSelectedJob(jobs.values().next().value);
+    }
+  }
+
+  function applyFilter(text) {
     const needle = normalize(text).trim();
     const anomaliesOnly = !!onlyAnoms.checked;
 
-    if (!needle) {{
-      // No filter: anomalies-only if enabled
-      if (anomaliesOnly) {{
-        filteredIdx = idx.filter(i => rowMeta[i].sev !== "none");
-      }} else {{
-        filteredIdx = idx.slice();
-      }}
-      // No filter -> do not auto-select
-      if (selectedJob && !anomaliesOnly) {{
-        // keep selection; chart stays
-      }} else if (!needle) {{
-        // keep selection as is; user might have clicked
-      }}
+    if (!needle) {
+      filteredIdx = anomaliesOnly ? idx.filter(i => rowMeta[i].sev !== "none") : idx.slice();
       wrap.scrollTop = 0;
       render();
       updateKPIsForCurrentView();
-      maybeAutoSelectJob(needle); // none
       return;
-    }}
+    }
 
-    // With filter: show all matched rows (including non-anomalies)
+    // with filter: show matches including non-anomalies
     const out = [];
-    for (let k=0; k<idx.length; k++) {{
+    for (let k=0; k<idx.length; k++) {
       const i = idx[k];
       if (rowSearchString(i).includes(needle)) out.push(i);
-    }}
+    }
     filteredIdx = out;
 
-    // Auto-select job if unique among filtered rows
     maybeAutoSelectJob(needle);
 
     wrap.scrollTop = 0;
     render();
     updateKPIsForCurrentView();
-  }}
-
-  function maybeAutoSelectJob(needle) {{
-    if (!needle) return;
-    // Determine unique JOB.NAME among filteredIdx
-    const jobs = new Set();
-    for (let k=0; k<filteredIdx.length; k++) {{
-      const i = filteredIdx[k];
-      const j = rowMeta[i].job;
-      if (j) jobs.add(j);
-      if (jobs.size > 1) break;
-    }}
-    if (jobs.size === 1) {{
-      const onlyJob = jobs.values().next().value;
-      setSelectedJob(onlyJob, "auto");
-    }} else {{
-      // If multiple jobs match, keep previous selection (if any) but do not force chart
-      if (!selectedJob) {{
-        chartPanel.style.display = "none";
-        selJobEl.textContent = "(none)";
-        selClassEl.textContent = "-";
-        selNEl.textContent = "-";
-        selDatesEl.textContent = "-";
-      }}
-    }}
-  }}
-
-  function updateKPIsForCurrentView() {{
-    let c=0,w=0,inf=0;
-    for (let k=0; k<filteredIdx.length; k++) {{
-      const sev = rowMeta[filteredIdx[k]].sev;
-      if (sev === "critical") c++;
-      else if (sev === "warning") w++;
-      else if (sev === "info") inf++;
-    }}
-    kCrit.textContent = String(c);
-    kWarn.textContent = String(w);
-    kInfo.textContent = String(inf);
-  }}
+  }
 
   // Sorting headers
-  document.querySelectorAll('th[data-idx]').forEach(th => {{
-    th.addEventListener('click', () => {{
+  document.querySelectorAll('th[data-idx]').forEach(th => {
+    th.addEventListener('click', () => {
       const col = parseInt(th.getAttribute('data-idx'), 10);
       const dir = (sortState.col === col) ? -sortState.dir : 1;
-      sortState = {{ col, dir }};
+      sortState = { col, dir };
 
-      filteredIdx.sort((ia, ib) => {{
+      filteredIdx.sort((ia, ib) => {
         const a = DATA[ia][col] ?? "";
         const b = DATA[ib][col] ?? "";
         const an = isNumberLike(a);
@@ -701,65 +670,77 @@ const DATA = {data_js};
         const pb = parseValue(b);
         if (an && bn) return (pa - pb) * dir;
         return (pa > pb ? 1 : pa < pb ? -1 : 0) * dir;
-      }});
+      });
 
       wrap.scrollTop = 0;
       render();
-    }});
-  }});
+    });
+  });
 
   // Virtual render
   let raf = null;
-  wrap.addEventListener('scroll', () => {{
+  wrap.addEventListener('scroll', () => {
     if (raf) return;
-    raf = requestAnimationFrame(() => {{
+    raf = requestAnimationFrame(() => {
       raf = null;
       render();
-    }});
-  }});
+    });
+  });
 
-  function clearRenderedRows() {{
+  function clearRenderedRows() {
     while (tb.rows.length > 2) tb.deleteRow(1);
-  }}
+  }
 
-  function labelSeverity(sev) {{
+  function labelSeverity(sev) {
     if (sev === "critical") return `<span class="badge b-critical"><span class="dot d-critical"></span>CRIT</span>`;
     if (sev === "warning")  return `<span class="badge b-warning"><span class="dot d-warning"></span>WARN</span>`;
     if (sev === "info")     return `<span class="badge b-info"><span class="dot d-info"></span>INFO</span>`;
     return "";
-  }}
+  }
 
-  function buildRowHTML(row, i) {{
-    // Add severity badge into the first column cell (non-destructive)
-    // We do not alter headers; just prefix cell 0.
+  function buildRowHTML(row, i) {
     const meta = rowMeta[i];
     const sevBadge = labelSeverity(meta.sev);
     const reason = meta.reason ? meta.reason.replaceAll('"','&quot;') : "";
-
-    let tds = "";
-    for (let c=0; c<HEADERS.length; c++) {{
-      const val = (row[c] ?? "");
-      if (c === 0 && sevBadge) {{
-        tds += `<td title="${{reason}}">${{sevBadge}}&nbsp;${{escapeHtml(val)}}</td>`;
-      }} else {{
-        tds += `<td title="${{escapeHtml(String(val))}}">${{escapeHtml(String(val))}}</td>`;
-      }}
-    }}
     const sev = meta.sev;
     const job = meta.job ? meta.job.replaceAll('"','&quot;') : "";
-    return `<tr data-sev="${{sev}}" data-reason="${{reason}}" data-job="${{job}}">${{tds}}</tr>`;
-  }}
 
-  function escapeHtml(s) {{
-    return (s||"")
-      .replaceAll("&","&amp;")
-      .replaceAll("<","&lt;")
-      .replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;")
-      .replaceAll("'","&#39;");
-  }}
+    let tds = "";
+    for (let c=0; c<HEADERS.length; c++) {
+      const val = (row[c] ?? "");
+      if (c === 0 && sevBadge) {
+        tds += `<td title="${reason}">${sevBadge}&nbsp;${escapeHtml(String(val))}</td>`;
+      } else {
+        tds += `<td title="${escapeHtml(String(val))}">${escapeHtml(String(val))}</td>`;
+      }
+    }
+    return `<tr data-sev="${sev}" data-reason="${reason}" data-job="${job}">${tds}</tr>`;
+  }
 
-  function render() {{
+  function wireRowHandlers() {
+    for (let r=1; r<tb.rows.length-1; r++) {
+      const tr = tb.rows[r];
+      if (tr.__wired) continue;
+      tr.__wired = true;
+
+      tr.addEventListener('click', () => {
+        const job = tr.getAttribute('data-job');
+        if (job) setSelectedJob(job);
+      });
+
+      tr.addEventListener('mousemove', (e) => {
+        const reason = tr.getAttribute('data-reason') || "";
+        if (!reason) { tt.style.display = "none"; return; }
+        tt.innerHTML = `<div style="font-weight:700;margin-bottom:4px;">Anomaly</div><div>${escapeHtml(reason)}</div>`;
+        tt.style.display = "block";
+        tt.style.left = (e.clientX + 12) + "px";
+        tt.style.top = (e.clientY + 12) + "px";
+      });
+      tr.addEventListener('mouseleave', () => { tt.style.display = "none"; });
+    }
+  }
+
+  function render() {
     const total = filteredIdx.length;
     tc.textContent = total.toString();
 
@@ -777,126 +758,75 @@ const DATA = {data_js};
     clearRenderedRows();
 
     const frag = document.createDocumentFragment();
-    for (let p=start; p<end; p++) {{
+    for (let p=start; p<end; p++) {
       const idxRow = filteredIdx[p];
-      const tr = document.createElement('tr');
-
-      // build via innerHTML for speed (small slice only)
-      tr.outerHTML = buildRowHTML(DATA[idxRow], idxRow); // not applied here
-      // Create element properly
       const tmp = document.createElement('tbody');
       tmp.innerHTML = buildRowHTML(DATA[idxRow], idxRow);
       frag.appendChild(tmp.firstElementChild);
-    }}
+    }
     tb.insertBefore(frag, tb.rows[tb.rows.length - 1]);
 
     vc.textContent = (end - start).toString();
     wireRowHandlers();
-  }}
+  }
 
-  // Row handlers: click selects job; hover shows anomaly reason tooltip
-  function wireRowHandlers() {{
-    // Only attach to currently rendered rows (between spacers)
-    for (let r=1; r<tb.rows.length-1; r++) {{
-      const tr = tb.rows[r];
-      if (tr.__wired) continue;
-      tr.__wired = true;
+  // ---------------- Chart ----------------
+  let chartPoints = null;
 
-      tr.addEventListener('click', () => {{
-        const job = tr.getAttribute('data-job');
-        if (job) {{
-          setSelectedJob(job, "click");
-          // If only anomalies is checked and filter is empty, we still keep anomalies-only,
-          // but selection should show chart anyway.
-          chartPanel.style.display = "block";
-        }}
-      }});
-
-      tr.addEventListener('mousemove', (e) => {{
-        const reason = tr.getAttribute('data-reason') || "";
-        if (!reason) {{
-          tt.style.display = "none";
-          return;
-        }}
-        tt.innerHTML = `<div style="font-weight:700;margin-bottom:4px;">Anomaly</div><div>${{escapeHtml(reason)}}</div>`;
-        tt.style.display = "block";
-        const x = e.clientX + 12;
-        const y = e.clientY + 12;
-        tt.style.left = x + "px";
-        tt.style.top = y + "px";
-      }});
-      tr.addEventListener('mouseleave', () => {{
-        tt.style.display = "none";
-      }});
-    }}
-  }}
-
-  // ---------------- Chart (ELAPSED + THROUGHPUT) ----------------
-  let chartPoints = null; // computed points for hover
-  function drawChartFor(job) {{
+  function drawChartFor(job) {
     const ji = jobInfo.get(job);
-    if (!ji) {{
-      chartPanel.style.display = "none";
-      return;
-    }}
+    if (!ji) { chartPanel.style.display = "none"; return; }
     chartPanel.style.display = "block";
 
-    const cls = ji.class;
-    const nDates = ji.nDates;
+    chartSub.textContent = `${job} | class=${ji.class} | history N=${ji.nDates} | banking dates=${allDates.length}`;
+    chartInfo.textContent =
+      (ji.class === "RARE") ? "RARE (EOM/EOY вероятно) – малко точки е нормално."
+      : (ji.class === "OCCASIONAL") ? "OCCASIONAL – baseline е ограничен."
+      : "REGULAR – baseline е стабилен.";
 
-    chartSub.textContent = `${{job}} | class=${{cls}} | history N=${{nDates}} | banking dates=${{allDates.length}}`;
-
-    // Build series for all dates (31)
     const xs = allDates.slice();
-    const elapsed = xs.map(d => {{
+    const elapsed = xs.map(d => {
       const v = ji.byDate.get(d);
       return v ? v.elapsedSec : null;
-    }});
-    const thr = xs.map(d => {{
+    });
+    const thr = xs.map(d => {
       const v = ji.byDate.get(d);
       return v ? v.thr : null;
-    }});
-    const recs = xs.map(d => {{
+    });
+    const recs = xs.map(d => {
       const v = ji.byDate.get(d);
       return v ? v.recs : null;
-    }});
+    });
 
-    // scale ranges
     const eVals = elapsed.filter(x=>isFinite(x));
     const tVals = thr.filter(x=>isFinite(x));
     const eMax = eVals.length ? Math.max(...eVals) : 1;
     const tMax = tVals.length ? Math.max(...tVals) : 1;
 
     const padMax = (m)=> (m<=0 ? 1 : m*1.1);
-
     const eTop = padMax(eMax);
     const tTop = padMax(tMax);
 
-    // draw
     const W = chart.width, H = chart.height;
     ctx.clearRect(0,0,W,H);
 
-    // layout
     const L = 56, R = 56, T = 14, B = 34;
     const PW = W - L - R;
     const PH = H - T - B;
 
-    // background
     ctx.fillStyle = "#fafafa";
     ctx.fillRect(0,0,W,H);
 
-    // grid
     ctx.strokeStyle = "#e8e8e8";
     ctx.lineWidth = 1;
-    for (let i=0;i<=5;i++) {{
+    for (let i=0;i<=5;i++) {
       const y = T + (PH*i/5);
       ctx.beginPath();
       ctx.moveTo(L, y);
       ctx.lineTo(W-R, y);
       ctx.stroke();
-    }}
+    }
 
-    // axes
     ctx.strokeStyle = "#cfcfcf";
     ctx.beginPath();
     ctx.moveTo(L, T);
@@ -904,74 +834,55 @@ const DATA = {data_js};
     ctx.lineTo(W-R, H-B);
     ctx.stroke();
 
-    // labels (left elapsed, right throughput)
     ctx.fillStyle = "#333";
     ctx.font = "12px Arial";
 
-    function yElapsed(v) {{
-      return T + (PH * (1 - (v / eTop)));
-    }}
-    function yThr(v) {{
-      return T + (PH * (1 - (v / tTop)));
-    }}
+    function yElapsed(v) { return T + (PH * (1 - (v / eTop))); }
+    function yThr(v) { return T + (PH * (1 - (v / tTop))); }
 
-    // left ticks (elapsed)
-    for (let i=0;i<=5;i++) {{
+    for (let i=0;i<=5;i++) {
       const v = eTop * (1 - i/5);
       const y = T + (PH*i/5);
-      const label = fmtHMS(v);
-      ctx.fillText(label, 6, y+4);
-    }}
-    // right ticks (thr)
-    for (let i=0;i<=5;i++) {{
+      ctx.fillText(fmtHMS(v), 6, y+4);
+    }
+    for (let i=0;i<=5;i++) {
       const v = tTop * (1 - i/5);
       const y = T + (PH*i/5);
       const label = (Math.round(v*100)/100).toString();
       const textW = ctx.measureText(label).width;
       ctx.fillText(label, W - textW - 6, y+4);
-    }}
+    }
 
-    // x labels (sparse)
     const n = xs.length;
     const step = Math.max(1, Math.floor(n/6));
-    for (let i=0; i<n; i+=step) {{
+    for (let i=0; i<n; i+=step) {
       const x = L + (PW * (i/(n-1 || 1)));
       const d = xs[i];
-      const lbl = d.slice(4,6) + "-" + d.slice(6,8); // MM-DD
+      const lbl = d.slice(4,6) + "-" + d.slice(6,8);
       ctx.fillText(lbl, x-14, H-12);
-    }}
+    }
 
-    // title inside
     ctx.fillStyle = "#111";
     ctx.font = "12px Arial";
     ctx.fillText("ELAPSED (left) + THROUGHPUT (right)", L+8, T+12);
 
-    // lines
-    function drawLine(series, yMap, stroke) {{
+    function drawLine(series, yMap, stroke) {
       ctx.strokeStyle = stroke;
       ctx.lineWidth = 2;
       ctx.beginPath();
       let started = false;
-      for (let i=0; i<n; i++) {{
+      for (let i=0; i<n; i++) {
         const v = series[i];
-        if (!isFinite(v)) {{
-          started = false;
-          continue;
-        }}
+        if (!isFinite(v)) { started = false; continue; }
         const x = L + (PW * (i/(n-1 || 1)));
         const y = yMap(v);
-        if (!started) {{
-          ctx.moveTo(x,y);
-          started = true;
-        }} else {{
-          ctx.lineTo(x,y);
-        }}
-      }}
+        if (!started) { ctx.moveTo(x,y); started = true; }
+        else ctx.lineTo(x,y);
+      }
       ctx.stroke();
 
-      // points
       ctx.fillStyle = stroke;
-      for (let i=0; i<n; i++) {{
+      for (let i=0; i<n; i++) {
         const v = series[i];
         if (!isFinite(v)) continue;
         const x = L + (PW * (i/(n-1 || 1)));
@@ -979,95 +890,83 @@ const DATA = {data_js};
         ctx.beginPath();
         ctx.arc(x,y,3,0,Math.PI*2);
         ctx.fill();
-      }}
-    }}
+      }
+    }
 
-    // Use neutral colors (no hard theme; still readable)
-    drawLine(elapsed, yElapsed, "#d21b1b");  // elapsed
-    drawLine(thr, yThr, "#0b62c4");          // throughput
+    drawLine(elapsed, yElapsed, "#d21b1b");
+    drawLine(thr, yThr, "#0b62c4");
 
-    // legend
     ctx.font = "12px Arial";
     ctx.fillStyle = "#111";
     ctx.fillText("● ELAPSED", L+8, H-B+18);
-    ctx.fillStyle = "#111";
     ctx.fillText("● THROUGHPUT", L+110, H-B+18);
-    // colored dots
     ctx.fillStyle = "#d21b1b"; ctx.beginPath(); ctx.arc(L+2, H-B+14, 4, 0, Math.PI*2); ctx.fill();
     ctx.fillStyle = "#0b62c4"; ctx.beginPath(); ctx.arc(L+104, H-B+14, 4, 0, Math.PI*2); ctx.fill();
 
-    chartInfo.textContent = (cls === "RARE")
-      ? "Този JOB е RARE (EOM/EOY вероятно). Графиката ще има малко точки – това е очаквано."
-      : (cls === "OCCASIONAL")
-        ? "Този JOB е OCCASIONAL – baseline е ограничен."
-        : "Този JOB е REGULAR – baseline е стабилен.";
-
-    // Prepare hover points
-    chartPoints = xs.map((d, i) => {{
+    chartPoints = xs.map((d, i) => {
       const x = L + (PW * (i/(n-1 || 1)));
       const e = elapsed[i];
       const t = thr[i];
-      const yE = isFinite(e) ? yElapsed(e) : null;
-      const yT = isFinite(t) ? yThr(t) : null;
-      return {{
-        d, i,
-        x,
-        e, t,
-        yE, yT,
-        recs: recs[i]
-      }};
-    }});
-  }}
+      return { d, x, e, t, recs: recs[i] };
+    });
+  }
 
-  function showChartTooltip(px, py, html) {{
+  function showChartTooltip(px, py, html) {
     tt.innerHTML = html;
     tt.style.display = "block";
     tt.style.left = (px + 12) + "px";
     tt.style.top = (py + 12) + "px";
-  }}
+  }
 
-  chart.addEventListener('mousemove', (e) => {{
+  chart.addEventListener('mousemove', (e) => {
     if (!chartPoints || !selectedJob) return;
     const rect = chart.getBoundingClientRect();
     const mx = e.clientX - rect.left;
-    // find nearest x
+
     let best = null;
     let bestDist = 1e9;
-    for (const p of chartPoints) {{
+    for (const p of chartPoints) {
       const d = Math.abs(p.x - mx);
-      if (d < bestDist) {{ bestDist = d; best = p; }}
-    }}
-    if (!best || bestDist > 18) {{
-      tt.style.display = "none";
-      return;
-    }}
+      if (d < bestDist) { bestDist = d; best = p; }
+    }
+    if (!best || bestDist > 18) { tt.style.display = "none"; return; }
 
-    const d = best.d;
-    const eVal = isFinite(best.e) ? fmtHMS(best.e) + ` (${Math.round(best.e)}s)` : "(no run)";
+    const eVal = isFinite(best.e) ? `${fmtHMS(best.e)} (${Math.round(best.e)}s)` : "(no run)";
     const tVal = isFinite(best.t) ? String(best.t) : "(no run)";
     const rVal = (best.recs != null && isFinite(best.recs)) ? String(best.recs) : "-";
 
     const html = `
-      <div style="font-weight:700;margin-bottom:4px;">${{escapeHtml(selectedJob)}}</div>
-      <div><b>Date:</b> ${{escapeHtml(d)}}</div>
-      <div><b>ELAPSED:</b> ${{escapeHtml(eVal)}}</div>
-      <div><b>THROUGHPUT:</b> ${{escapeHtml(tVal)}}</div>
-      <div><b>PROCESSED RECS:</b> ${{escapeHtml(rVal)}}</div>
+      <div style="font-weight:700;margin-bottom:4px;">${escapeHtml(selectedJob)}</div>
+      <div><b>Date:</b> ${escapeHtml(best.d)}</div>
+      <div><b>ELAPSED:</b> ${escapeHtml(eVal)}</div>
+      <div><b>THROUGHPUT:</b> ${escapeHtml(tVal)}</div>
+      <div><b>PROCESSED RECS:</b> ${escapeHtml(rVal)}</div>
     `;
     showChartTooltip(e.clientX, e.clientY, html);
-  }});
-  chart.addEventListener('mouseleave', () => {{
-    tt.style.display = "none";
-  }});
+  });
+  chart.addEventListener('mouseleave', () => { tt.style.display = "none"; });
+
+  // Init KPIs baseline (for initial anomalies-only view)
+  kCrit.textContent = String(baseCrit);
+  kWarn.textContent = String(baseWarn);
+  kInfo.textContent = String(baseInfo);
 
   // Initial view: anomalies only
   applyFilter("");
-
-}})();
+})();
 </script>
 </body>
 </html>
 """
+
+    out = base_html
+    out = out.replace("%%TITLE%%", esc(title))
+    out = out.replace("%%NOW%%", esc(now))
+    out = out.replace("%%THS%%", ths)
+    out = out.replace("%%COLCOUNT%%", str(col_count))
+    out = out.replace("%%HEADER_JS%%", header_js)
+    out = out.replace("%%DATA_JS%%", data_js)
+    return out
 
 
 def main():
