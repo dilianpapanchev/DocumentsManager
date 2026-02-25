@@ -1,836 +1,1496 @@
-#!/usr/bin/env python3
-# cob_anomalies_report.py
-#
-# Generates a single self-contained HTML anomaly report (email-friendly):
-# - Only anomaly rows are shown in the main table (like your screenshot)
-# - Columns: Date, Stage, Batch, Job, Elapsed, Median, P95, Δ%
-# - Search + Reset filter
-# - Click a row -> selects JOB.NAME and shows trend chart for last 31 banking dates:
-#   ELAPSED (left axis) + THROUGHPUT (right axis) with tooltip
-#
-# Baseline grouping: JOB.NAME
-#
-# Usage:
-#   python3 cob_anomalies_report.py /path/to/file.csv [output.html]
+/* COB Analyser Chat Engine (Parts 3–5) — Blueprint Implementation
+   Drop-in JS (vanilla). Expects DOM:
+   - #chatWindow, #chatLog, #msg (input), #sendBtn, #statusPill
+   - A data table (default: #mainTable). Rows: tbody tr. Cells may include:
+     date, job, batch, elapsed, processed, throughput, delta
+   - Optional: a header element with [data-sort="delta"] for sorting by delta.
+*/
 
-import csv
-import os
-import sys
-import html
-import json
-from datetime import datetime
+(() => {
+  "use strict";
 
+  // =========================
+  // Utils
+  // =========================
+  const $ = (sel, root = document) => root.querySelector(sel);
+  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+  const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
-def read_csv(path: str):
-    with open(path, "r", newline="", encoding="utf-8") as f:
-        sample = f.read(4096)
-        f.seek(0)
-        try:
-            dialect = csv.Sniffer().sniff(sample, delimiters=",;\t|")
-        except Exception:
-            dialect = csv.excel
-        reader = csv.reader(f, dialect)
-        rows = list(reader)
-    if not rows:
-        return [], []
-    return rows[0], rows[1:]
+  const norm = (s) =>
+    String(s ?? "")
+      .trim()
+      .replace(/\s+/g, " ");
 
+  const lower = (s) => norm(s).toLowerCase();
 
-def esc(s):
-    return html.escape("" if s is None else str(s))
-
-
-def build_html(source_name: str, header, rows):
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    header_js = json.dumps(header, ensure_ascii=False)
-    data_js = json.dumps(rows, ensure_ascii=False)
-
-    # Simple header map for readability in JS
-    idx_map = {h: i for i, h in enumerate(header)}
-    idx_map_js = json.dumps(idx_map, ensure_ascii=False)
-
-    base_html = r"""<!doctype html>
-<html lang="bg">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>COB Batch – Anomalies</title>
-  <style>
-    :root {
-      --bg: #ffffff;
-      --panel: #f6f7f8;
-      --border: #e6e6e6;
-      --text: #111;
-      --muted: #666;
-      --header: #1f2a44;
-      --row1: #fff0f0;
-      --row2: #fff6e6;
-      --row3: #eef6ff;
-    }
-    body { font-family: Arial, sans-serif; margin: 18px; color: var(--text); background: var(--bg); }
-    h1 { margin: 0 0 8px 0; font-size: 22px; letter-spacing: 0.2px; }
-
-    .sub {
-      display:flex; gap:10px; flex-wrap:wrap; align-items:center;
-      color: var(--muted); font-size: 12px; margin-bottom: 10px;
-    }
-    .toolbar {
-      display:flex; gap:10px; flex-wrap:wrap; align-items:center;
-      background: var(--panel); border:1px solid var(--border);
-      border-radius: 10px; padding: 10px 12px; margin-bottom: 10px;
-    }
-    .toolbar input[type="search"] { padding: 8px 10px; min-width: 320px; border:1px solid #d9d9d9; border-radius: 8px; }
-    .btn { border:1px solid #d2d2d2; background:#fff; padding: 7px 10px; border-radius: 8px; cursor:pointer; font-size: 13px; }
-    .btn:hover { background:#f1f1f1; }
-    .pill { font-size: 12px; padding: 4px 8px; border-radius: 999px; border:1px solid var(--border); background:#fff; color:#333; }
-    .pill strong { font-weight: 700; }
-
-    .wrap {
-      border:1px solid var(--border);
-      border-radius: 12px;
-      overflow: hidden;
-      background: #fff;
-    }
-
-    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-    thead th {
-      background: var(--header);
-      color: #fff;
-      padding: 10px 10px;
-      font-size: 13px;
-      text-align: left;
-      border-right: 1px solid rgba(255,255,255,0.14);
-      user-select: none;
-      cursor: pointer;
-    }
-    thead th:last-child { border-right: none; }
-
-    tbody td {
-      padding: 8px 10px;
-      font-size: 13px;
-      border-bottom: 1px solid #efefef;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-    tbody tr:hover td { outline: 1px solid rgba(0,0,0,0.06); background: #fbfbfb; }
-    tbody tr.hidden { display:none; }
-
-    .sev-critical td { background: #ffecec; }
-    .sev-warning  td { background: #fff3e0; }
-    .sev-info     td { background: #eef6ff; }
-
-    .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
-    .right { text-align: right; }
-
-    .chartPanel {
-      margin-top: 10px;
-      border:1px solid var(--border);
-      border-radius: 12px;
-      background: #fff;
-      padding: 12px;
-      display:none;
-    }
-    .chartTitle { font-weight: 700; font-size: 13px; margin: 0 0 6px 0; }
-    .chartSub { color: var(--muted); font-size: 12px; margin: 0 0 10px 0; }
-    .chartWrap { display:flex; gap:12px; flex-wrap:wrap; align-items:flex-start; }
-    #chart { width: 980px; max-width: 100%; height: 280px; border:1px solid var(--border); border-radius: 12px; background: #fafafa; }
-    .chartSide { min-width: 240px; flex: 1; }
-    .chartSide .line { font-size: 12px; color:#444; margin: 4px 0; }
-    .chartSide b { color:#111; }
-
-    .tooltip {
-      position: fixed;
-      pointer-events: none;
-      background: rgba(17,17,17,0.92);
-      color: #fff;
-      font-size: 12px;
-      padding: 8px 10px;
-      border-radius: 10px;
-      max-width: 340px;
-      display: none;
-      z-index: 9999;
-      line-height: 1.25;
-    }
-  </style>
-</head>
-<body>
-  <h1>COB Batch – Anomalies</h1>
-  <div class="sub">
-    <span>Source: <b>%%SOURCE%%</b></span>
-    <span>|</span>
-    <span>Generated: <b>%%NOW%%</b></span>
-    <span>|</span>
-    <span class="pill">Rows: <strong id="rowCount">0</strong></span>
-    <span class="pill">Selected JOB: <strong id="selJob">(none)</strong></span>
-  </div>
-
-  <div class="toolbar">
-    <button class="btn" id="resetBtn" type="button">Reset filter</button>
-    <input id="q" type="search" placeholder="Search (any column or header)..." />
-    <span class="pill">Tip: click row to show job trend (31 dates)</span>
-  </div>
-
-  <div class="wrap">
-    <table id="t">
-      <thead>
-        <tr>
-          <th data-col="Date">Date</th>
-          <th data-col="Stage">Stage</th>
-          <th data-col="Batch">Batch</th>
-          <th data-col="Job">Job</th>
-          <th data-col="Elapsed" class="right">Elapsed</th>
-          <th data-col="Median" class="right">Median</th>
-          <th data-col="P95" class="right">P95</th>
-          <th data-col="Delta" class="right">Δ %</th>
-        </tr>
-      </thead>
-      <tbody id="tb">
-      </tbody>
-    </table>
-  </div>
-
-  <div id="chartPanel" class="chartPanel">
-    <div class="chartTitle">JOB Trend (31 banking dates)</div>
-    <div id="chartSub" class="chartSub"></div>
-    <div class="chartWrap">
-      <canvas id="chart" width="980" height="280"></canvas>
-      <div class="chartSide">
-        <div class="line"><b>ELAPSED</b> = left axis (seconds / hh:mm:ss)</div>
-        <div class="line"><b>THROUGHPUT</b> = right axis</div>
-        <div class="line" id="chartInfo"></div>
-        <div class="line" style="color:#666">Hover точка → tooltip.</div>
-      </div>
-    </div>
-  </div>
-
-  <div id="tt" class="tooltip"></div>
-
-<script>
-const HEADERS = %%HEADER_JS%%;
-const DATA = %%DATA_JS%%;
-const IDX = %%IDX_MAP_JS%%;
-
-(function() {
-  const tb = document.getElementById('tb');
-  const q = document.getElementById('q');
-  const resetBtn = document.getElementById('resetBtn');
-  const rowCount = document.getElementById('rowCount');
-  const selJobEl = document.getElementById('selJob');
-
-  const chartPanel = document.getElementById('chartPanel');
-  const chartSub = document.getElementById('chartSub');
-  const chartInfo = document.getElementById('chartInfo');
-  const chart = document.getElementById('chart');
-  const ctx = chart.getContext('2d');
-  const tt = document.getElementById('tt');
-
-  // ---- Column helpers (safe) ----
-  function col(name) { return (IDX[name] != null) ? IDX[name] : -1; }
-  const C = {
-    stage: col('BATCH.STAGE'),
-    batch: col('BATCH'),
-    job: col('JOB.NAME'),
-    bdate: col('BATCH.DATE'),
-    start: col('START.TIME'),
-    end: col('END.TIME'),
-    elapsed: col('ELAPSED'),
-    recs: col('PROCESSED RECS'),
-    thr: col('THROUGHPUT'),
+  const isYMD = (s) => /^\d{8}$/.test(s);
+  const ymdToDate = (ymd) => {
+    if (!isYMD(ymd)) return null;
+    const y = Number(ymd.slice(0, 4));
+    const m = Number(ymd.slice(4, 6));
+    const d = Number(ymd.slice(6, 8));
+    if (!y || m < 1 || m > 12 || d < 1 || d > 31) return null;
+    const dt = new Date(Date.UTC(y, m - 1, d));
+    // validate
+    if (
+      dt.getUTCFullYear() !== y ||
+      dt.getUTCMonth() !== m - 1 ||
+      dt.getUTCDate() !== d
+    )
+      return null;
+    return dt;
+  };
+  const dateToYMD = (dt) => {
+    const y = String(dt.getUTCFullYear()).padStart(4, "0");
+    const m = String(dt.getUTCMonth() + 1).padStart(2, "0");
+    const d = String(dt.getUTCDate()).padStart(2, "0");
+    return `${y}${m}${d}`;
   };
 
-  function getCell(row, i) { return (i < 0) ? "" : (row[i] ?? ""); }
-  function normalize(s) { return (s || "").toString().toLowerCase(); }
-  function isNum(v) { v = (v || "").trim(); return /^\d+(\.\d+)?$/.test(v); }
+  const parseElapsedToSeconds = (s) => {
+    // accepts: HH:MM:SS, MM:SS, "123", "123s", "12m", "1h 2m 3s"
+    const t = lower(s);
+    if (!t) return 0;
 
-  function fmtHMS(sec) {
-    if (sec == null || !isFinite(sec)) return "";
-    sec = Math.max(0, Math.floor(sec));
-    const h = Math.floor(sec / 3600);
-    const m = Math.floor((sec % 3600) / 60);
-    const s = sec % 60;
-    const pad = (x) => String(x).padStart(2, '0');
-    return `${h}:${pad(m)}:${pad(s)}`;
-  }
+    const hms = t.match(/^(\d+):(\d{1,2}):(\d{1,2})$/);
+    if (hms) return Number(hms[1]) * 3600 + Number(hms[2]) * 60 + Number(hms[3]);
 
-  function parseElapsedToSec(v) {
-    v = (v || "").trim();
-    if (!v) return NaN;
-    if (/^\d+:\d{2}:\d{2}$/.test(v)) {
-      const p = v.split(':').map(x => parseInt(x,10));
-      return (p[0]||0)*3600 + (p[1]||0)*60 + (p[2]||0);
+    const ms = t.match(/^(\d+):(\d{1,2})$/);
+    if (ms) return Number(ms[1]) * 60 + Number(ms[2]);
+
+    const numOnly = t.match(/^\d+(\.\d+)?$/);
+    if (numOnly) return Math.round(Number(t));
+
+    let sec = 0;
+    const re = /(\d+(\.\d+)?)\s*(h|hr|hrs|hour|hours|m|min|mins|minute|minutes|s|sec|secs|second|seconds)\b/g;
+    let m;
+    while ((m = re.exec(t))) {
+      const v = Number(m[1]);
+      const u = m[3];
+      if (u.startsWith("h")) sec += v * 3600;
+      else if (u.startsWith("m")) sec += v * 60;
+      else sec += v;
     }
-    if (isNum(v)) return parseFloat(v);
-    return NaN;
-  }
+    if (sec > 0) return Math.round(sec);
 
-  function parseTimeToSec(v) {
-    v = (v || "").trim();
-    if (!v) return NaN;
-    if (/^\d+:\d{2}:\d{2}$/.test(v)) {
-      const p = v.split(':').map(x=>parseInt(x,10));
-      return (p[0]||0)*3600 + (p[1]||0)*60 + (p[2]||0);
+    const lastNum = t.match(/(\d+(\.\d+)?)/);
+    return lastNum ? Math.round(Number(lastNum[1])) : 0;
+  };
+
+  const parseNumber = (s) => {
+    const t = String(s ?? "").replace(/[, ]+/g, "").trim();
+    const v = Number(t);
+    return Number.isFinite(v) ? v : NaN;
+  };
+
+  const pearson = (xs, ys) => {
+    const n = Math.min(xs.length, ys.length);
+    if (n < 2) return NaN;
+    let sx = 0,
+      sy = 0,
+      sxx = 0,
+      syy = 0,
+      sxy = 0;
+    for (let i = 0; i < n; i++) {
+      const x = xs[i],
+        y = ys[i];
+      sx += x;
+      sy += y;
+      sxx += x * x;
+      syy += y * y;
+      sxy += x * y;
     }
-    return NaN;
-  }
+    const cov = sxy - (sx * sy) / n;
+    const vx = sxx - (sx * sx) / n;
+    const vy = syy - (sy * sy) / n;
+    const den = Math.sqrt(vx * vy);
+    return den === 0 ? NaN : cov / den;
+  };
 
-  function escapeHtml(s) {
-    return (s||"")
-      .replaceAll("&","&amp;")
-      .replaceAll("<","&lt;")
-      .replaceAll(">","&gt;")
-      .replaceAll('"',"&quot;")
-      .replaceAll("'","&#39;");
-  }
+  const percentile = (arr, p) => {
+    const xs = arr.filter(Number.isFinite).slice().sort((a, b) => a - b);
+    if (!xs.length) return NaN;
+    const idx = (xs.length - 1) * p;
+    const lo = Math.floor(idx);
+    const hi = Math.ceil(idx);
+    if (lo === hi) return xs[lo];
+    const w = idx - lo;
+    return xs[lo] * (1 - w) + xs[hi] * w;
+  };
 
-  function quantile(sorted, q) {
-    const n = sorted.length;
-    if (n === 0) return NaN;
-    const pos = (n - 1) * q;
-    const base = Math.floor(pos);
-    const rest = pos - base;
-    const a = sorted[base];
-    const b = sorted[Math.min(base + 1, n - 1)];
-    return a + rest * (b - a);
-  }
-
-  function computeStats(nums) {
-    const arr = nums.filter(x => isFinite(x)).slice().sort((a,b)=>a-b);
-    if (arr.length === 0) return null;
-    const med = quantile(arr, 0.50);
-    const p95 = quantile(arr, 0.95);
-    return { n: arr.length, med, p95 };
-  }
-
-  // ---- Collect all dates + per-job history (JOB.NAME baseline) ----
-  const allDatesSet = new Set();
-  const jobInfo = new Map(); // job -> { dates:Set, elapsedVals:[], thrVals:[], byDate: Map(date->{elapsedSec,thr,recs}), stats }
-
-  for (let i=0; i<DATA.length; i++) {
-    const row = DATA[i];
-    const job = String(getCell(row, C.job)).trim();
-    const d = String(getCell(row, C.bdate)).trim();
-    if (d) allDatesSet.add(d);
-    if (!job) continue;
-
-    if (!jobInfo.has(job)) {
-      jobInfo.set(job, { dates:new Set(), elapsedVals:[], thrVals:[], byDate:new Map(), stats:null });
+  // Levenshtein (for fuzzy)
+  const levenshtein = (a, b) => {
+    a = lower(a);
+    b = lower(b);
+    const n = a.length,
+      m = b.length;
+    if (!n) return m;
+    if (!m) return n;
+    const dp = new Array(m + 1);
+    for (let j = 0; j <= m; j++) dp[j] = j;
+    for (let i = 1; i <= n; i++) {
+      let prev = dp[0];
+      dp[0] = i;
+      for (let j = 1; j <= m; j++) {
+        const tmp = dp[j];
+        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+        dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + cost);
+        prev = tmp;
+      }
     }
-    const ji = jobInfo.get(job);
-    if (d) ji.dates.add(d);
+    return dp[m];
+  };
 
-    const e = parseElapsedToSec(getCell(row, C.elapsed));
-    if (isFinite(e) && e >= 0) ji.elapsedVals.push(e);
+  const fuzzyScore = (query, candidate) => {
+    // Higher is better.
+    query = norm(query);
+    candidate = norm(candidate);
+    if (!query || !candidate) return -Infinity;
 
-    const tStr = String(getCell(row, C.thr)).trim();
-    const t = isNum(tStr) ? parseFloat(tStr) : NaN;
-    if (isFinite(t) && t >= 0) ji.thrVals.push(t);
+    const q = lower(query);
+    const c = lower(candidate);
 
-    if (d) {
-      const recsStr = String(getCell(row, C.recs)).trim();
-      const recs = /^\d+$/.test(recsStr) ? parseInt(recsStr, 10) : NaN;
-      const prev = ji.byDate.get(d) || { elapsedSec: NaN, thr: NaN, recs: 0 };
-      const next = {
-        elapsedSec: isFinite(e) ? Math.max((prev.elapsedSec || 0), e) : prev.elapsedSec,
-        thr: isFinite(t) ? t : prev.thr,
-        recs: isFinite(recs) ? (prev.recs + recs) : prev.recs
+    if (q === c) return 1_000_000;
+
+    // substring boost
+    if (c.includes(q)) return 500_000 + Math.max(0, 10_000 - (c.length - q.length));
+
+    // token partial
+    const qTokens = q.split(/\s+/).filter(Boolean);
+    const cTokens = c.split(/\s+/).filter(Boolean);
+    let tokenHits = 0;
+    for (const qt of qTokens) {
+      if (cTokens.some((ct) => ct.includes(qt))) tokenHits++;
+    }
+    const tokenScore = tokenHits * 50_000;
+
+    // levenshtein
+    const dist = levenshtein(q, c);
+    const maxLen = Math.max(q.length, c.length) || 1;
+    const levScore = Math.round((1 - dist / maxLen) * 100_000);
+
+    return tokenScore + levScore;
+  };
+
+  // =========================
+  // Core: DOM, chat IO, row access, status
+  // =========================
+  const Core = {
+    el: {
+      chatWindow: null,
+      chatLog: null,
+      msg: null,
+      sendBtn: null,
+      statusPill: null,
+    },
+
+    state: {
+      tableSel: "#mainTable",
+      rowsCache: null,
+      sortDeltaAsc: null,
+    },
+
+    init() {
+      this.el.chatWindow = $("#chatWindow");
+      this.el.chatLog = $("#chatLog");
+      this.el.msg = $("#msg");
+      this.el.sendBtn = $("#sendBtn");
+      this.el.statusPill = $("#statusPill");
+
+      if (this.el.sendBtn) {
+        this.el.sendBtn.addEventListener("click", () => this.chatSend());
+      }
+      if (this.el.msg) {
+        this.el.msg.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" && !e.shiftKey) {
+            e.preventDefault();
+            this.chatSend();
+          }
+        });
+        this.el.msg.addEventListener("input", () => Part5.onInputChanged());
+        this.el.msg.addEventListener("focus", () => Part5.openOverlay());
+        this.el.msg.addEventListener("blur", () => {
+          // small delay so click works
+          setTimeout(() => Part5.closeOverlay(), 120);
+        });
+      }
+
+      // Optional delta header click
+      const deltaHeader = $('[data-sort="delta"]');
+      if (deltaHeader) {
+        deltaHeader.style.cursor = "pointer";
+        deltaHeader.addEventListener("click", () => this.toggleSortDelta());
+      }
+
+      Part5.buildIndexFromTable();
+      Part5.mount();
+      this.statusHide();
+    },
+
+    log(text, kind = "bot") {
+      if (!this.el.chatLog) return;
+
+      const line = document.createElement("div");
+      line.className = `chat-line ${kind}`;
+
+      // allow <pre> blocks
+      if (typeof text === "string" && text.startsWith("<pre>")) {
+        line.innerHTML = text;
+      } else {
+        line.textContent = String(text);
+      }
+
+      this.el.chatLog.appendChild(line);
+      this.el.chatLog.scrollTop = this.el.chatLog.scrollHeight;
+    },
+
+    chatSend() {
+      const raw = this.el.msg ? this.el.msg.value : "";
+      const text = norm(raw);
+      if (!text) return;
+
+      // user echo
+      this.log(text, "user");
+      if (this.el.msg) this.el.msg.value = "";
+
+      // pending dialog has priority
+      if (Part3.pending.intent && Part3.pending.job) {
+        Part3.handlePendingBatchResponse(text);
+        return;
+      }
+
+      const intent = Part3.parseIntent(text);
+      this.applyIntent(intent, text);
+    },
+
+    applyIntent(intent, rawText = "") {
+      if (!intent || intent.type === "unknown") {
+        this.log("Не разбирам. Пробвай: reset, покажи job X, покажи batch Y, между 20260101 и 20260115, delta > 300, анализ job X 20260101 20260201, линия, bar, heatmap, сортирай по delta", "bot");
+        return;
+      }
+
+      // Part4 override for analyzeJob
+      if (intent.type === "analyzeJob") {
+        Part4.handleAnalyze(intent);
+        return;
+      }
+
+      Part3.applyIntent(intent, rawText);
+    },
+
+    table() {
+      return $(this.state.tableSel);
+    },
+
+    readRows() {
+      // Cache only DOM refs + parsed fields; refresh if table changed
+      const table = this.table();
+      if (!table) return [];
+
+      const trs = $$("tbody tr", table);
+      const rows = trs.map((tr) => {
+        const cells = $$("td", tr).map((td) => norm(td.textContent));
+
+        // Support data-* overrides
+        const d = tr.dataset || {};
+        const get = (key, idxFallback) => {
+          if (d[key] != null && d[key] !== "") return norm(d[key]);
+          const i = idxFallback;
+          return i != null && cells[i] != null ? cells[i] : "";
+        };
+
+        // Heuristics:
+        // 0 date, 1 job, 2 batch, 3 elapsed, 4 processed, 5 throughput, 6 delta
+        const date = get("date", 0);
+        const job = get("job", 1);
+        const batch = get("batch", 2);
+        const elapsed = get("elapsed", 3);
+        const processed = get("processed", 4);
+        const throughput = get("throughput", 5);
+        const delta = get("delta", 6);
+
+        const ymd = isYMD(date) ? date : (date.match(/\b(\d{8})\b/) || [])[1] || "";
+
+        return {
+          tr,
+          cells,
+          date: ymd || date,
+          job,
+          batch,
+          elapsed,
+          processed,
+          throughput,
+          delta,
+        };
+      });
+
+      return rows;
+    },
+
+    statusUpdate(shown, total) {
+      if (!this.el.statusPill) return;
+      this.el.statusPill.style.display = "inline-flex";
+      this.el.statusPill.textContent = `${shown}/${total}`;
+    },
+
+    statusHide() {
+      if (!this.el.statusPill) return;
+      this.el.statusPill.style.display = "none";
+      this.el.statusPill.textContent = "";
+    },
+
+    toggleSortDelta() {
+      const rows = this.readRows();
+      const table = this.table();
+      if (!table) return;
+      const tbody = $("tbody", table);
+      if (!tbody) return;
+
+      const asc = this.state.sortDeltaAsc == null ? true : !this.state.sortDeltaAsc;
+      this.state.sortDeltaAsc = asc;
+
+      const visible = (r) => r.tr.style.display !== "none";
+
+      const parsed = rows.map((r) => {
+        let v = parseNumber(r.delta);
+        if (!Number.isFinite(v)) v = 0;
+        return { r, v };
+      });
+
+      // stable-ish: split visible and hidden; sort visible only but keep hidden at bottom in original order
+      const vis = parsed.filter((x) => visible(x.r));
+      const hid = parsed.filter((x) => !visible(x.r));
+
+      vis.sort((a, b) => (asc ? a.v - b.v : b.v - a.v));
+
+      const frag = document.createDocumentFragment();
+      for (const x of vis) frag.appendChild(x.r.tr);
+      for (const x of hid) frag.appendChild(x.r.tr);
+      tbody.appendChild(frag);
+    },
+  };
+
+  // =========================
+  // Part 3: NLP + Filters + Dialogs + Reset
+  // =========================
+  const Part3 = {
+    pending: {
+      job: null,
+      intent: null, // { type: 'filterJob'|'analyzeJob'|..., ... }
+      candidates: null, // batch candidates
+    },
+
+    parseIntent(text) {
+      const t = lower(text);
+
+      // reset
+      if (/^(reset|ресет)\b/.test(t)) return { type: "reset" };
+
+      // graphs
+      if (/^(линия|line)\b/.test(t)) return { type: "graphLine" };
+      if (/^(bar|бар)\b/.test(t)) return { type: "graphBar" };
+      if (/^(heatmap|календар)\b/.test(t)) return { type: "heatmap" };
+
+      // sort by delta
+      if (/сортирай\s+по\s+delta|sort\s+by\s+delta|sort\s+delta/.test(t))
+        return { type: "sort", by: "delta" };
+
+      // delta > N
+      {
+        const m = t.match(/\bdelta\s*(>=|=>|>|<=|=<|<|=)\s*([0-9]+(\.[0-9]+)?)\b/);
+        if (m) return { type: "filterDelta", op: m[1].replace("=>", ">=").replace("=<", "<="), value: Number(m[2]) };
+      }
+
+      // date exact: "покажи само дата 20260223"
+      {
+        const m = t.match(/покажи\s+само\s+дата\s+(\d{8})|only\s+date\s+(\d{8})/);
+        const ymd = (m && (m[1] || m[2])) || null;
+        if (ymd) return { type: "filterDateExact", ymd };
+      }
+
+      // date range: "между 20260101 и 20260115"
+      {
+        const m = t.match(/между\s+(\d{8})\s+и\s+(\d{8})|between\s+(\d{8})\s+and\s+(\d{8})/);
+        const a = m && (m[1] || m[3]);
+        const b = m && (m[2] || m[4]);
+        if (a && b) return { type: "filterDateRange", from: a, to: b };
+      }
+
+      // filter job: "покажи job EB.CLEAR.FILES"
+      {
+        const m = text.match(/покажи\s+job\s+(.+)$|show\s+job\s+(.+)$/i);
+        const job = m && (m[1] || m[2]);
+        if (job) return { type: "filterJob", job: norm(job) };
+      }
+
+      // filter batch: "покажи batch FILE.TIDY.UP"
+      {
+        const m = text.match(/покажи\s+batch\s+(.+)$|show\s+batch\s+(.+)$/i);
+        const batch = m && (m[1] || m[2]);
+        if (batch) return { type: "filterBatch", batch: norm(batch) };
+      }
+
+      // analyze: "анализ job X 20260101 20260201" (dates optional)
+      {
+        const m = text.match(/^(анализ|analysis)\s+job\s+(.+?)(\s+(\d{8}))?(\s+(\d{8}))?\s*$/i);
+        if (m) {
+          return {
+            type: "analyzeJob",
+            job: norm(m[2]),
+            from: m[4] || null,
+            to: m[6] || null,
+          };
+        }
+      }
+
+      // quick single tokens:
+      // "jobStats" -> day stats for job X (needs job)
+      {
+        const m = text.match(/^(day\s+stats|jobstats|дай\s+статистика)\s+за\s+job\s+(.+)$/i);
+        if (m) return { type: "jobStats", job: norm(m[2]) };
+      }
+
+      // "най-бавен ден за job X"
+      {
+        const m = text.match(/най-?бавен\s+ден\s+за\s+job\s+(.+)$|slowest\s+day\s+for\s+job\s+(.+)$/i);
+        const job = m && (m[1] || m[2]);
+        if (job) return { type: "jobSlowest", job: norm(job) };
+      }
+
+      return { type: "unknown" };
+    },
+
+    applyIntent(intent) {
+      switch (intent.type) {
+        case "reset":
+          return this.resetAll();
+
+        case "filterDateExact":
+          return this.filterDateExact(intent.ymd);
+
+        case "filterDateRange":
+          return this.filterDateRange(intent.from, intent.to);
+
+        case "filterJob":
+          return this.filterJob(intent.job);
+
+        case "filterBatch":
+          return this.filterBatch(intent.batch);
+
+        case "filterDelta":
+          return this.filterDelta(intent.op, intent.value);
+
+        case "jobSlowest":
+          return this.jobSlowest(intent.job);
+
+        case "jobStats":
+          return this.jobStats(intent.job);
+
+        case "graphLine":
+        case "graphBar":
+        case "heatmap":
+          return this.toggleGraph(intent.type);
+
+        case "sort":
+          if (intent.by === "delta") Core.toggleSortDelta();
+          return;
+
+        default:
+          Core.log("Неподдържан intent.", "bot");
+      }
+    },
+
+    // 3.4 Filters schema:
+    // 1) readRows()  2) match => display=""  3) no match => "none"
+    // 4) update status pill shown/total
+    _applyRowFilter(predicate) {
+      const rows = Core.readRows();
+      let shown = 0;
+      for (const r of rows) {
+        const ok = !!predicate(r);
+        r.tr.style.display = ok ? "" : "none";
+        if (ok) shown++;
+      }
+      Core.statusUpdate(shown, rows.length);
+    },
+
+    filterDateExact(ymd) {
+      const rows = Core.readRows();
+      const avail = this._availableDates(rows);
+
+      if (!isYMD(ymd) || !ymdToDate(ymd)) {
+        const fb = this._dateFallback(ymd, avail);
+        Core.log(
+          fb
+            ? `Невалидна дата. Най-близка: ${fb.nearest}${fb.lower ? ` (lower: ${fb.lower})` : ""}${fb.upper ? ` (upper: ${fb.upper})` : ""}`
+            : "Невалидна дата.",
+          "bot"
+        );
+        if (fb?.nearest) ymd = fb.nearest;
+        else return;
+      }
+
+      this._applyRowFilter((r) => String(r.date) === String(ymd));
+    },
+
+    filterDateRange(from, to) {
+      const rows = Core.readRows();
+      const avail = this._availableDates(rows);
+
+      if (!isYMD(from) || !ymdToDate(from)) {
+        const fb = this._dateFallback(from, avail);
+        if (fb?.nearest) from = fb.nearest;
+      }
+      if (!isYMD(to) || !ymdToDate(to)) {
+        const fb = this._dateFallback(to, avail);
+        if (fb?.nearest) to = fb.nearest;
+      }
+
+      if (!isYMD(from) || !isYMD(to)) {
+        Core.log("Невалиден диапазон дати.", "bot");
+        return;
+      }
+
+      const a = Number(from);
+      const b = Number(to);
+      const lo = Math.min(a, b);
+      const hi = Math.max(a, b);
+
+      this._applyRowFilter((r) => {
+        const d = Number(String(r.date).match(/\d{8}/)?.[0] || NaN);
+        return Number.isFinite(d) && d >= lo && d <= hi;
+      });
+    },
+
+    filterJob(job) {
+      const rows = Core.readRows();
+      const j = norm(job);
+
+      // apply job filter
+      this._applyRowFilter((r) => norm(r.job) === j);
+
+      // multi-batch dialog logic:
+      // if this job has 2+ unique batches -> ask question and set pending
+      const jobRows = rows.filter((r) => norm(r.job) === j);
+      const batches = Array.from(new Set(jobRows.map((r) => norm(r.batch)).filter(Boolean)));
+
+      if (batches.length >= 2) {
+        this.pending.job = j;
+        this.pending.intent = { type: "filterBatchForJob", job: j };
+        this.pending.candidates = batches;
+        Core.log(`Job "${j}" има ${batches.length} batch-а. Кой batch? (напиши име/част от име)`, "bot");
+      } else {
+        // clear pending if any
+        this.pending.job = null;
+        this.pending.intent = null;
+        this.pending.candidates = null;
+      }
+    },
+
+    filterBatch(batch) {
+      // batch is string, not number (3.3)
+      const b = norm(batch);
+      if (!b) return;
+
+      this._applyRowFilter((r) => lower(r.batch).includes(lower(b)) || norm(r.batch) === b);
+    },
+
+    filterDelta(op, value) {
+      const v = Number(value);
+      if (!Number.isFinite(v)) return;
+
+      const cmp = (x) => {
+        if (!Number.isFinite(x)) x = 0;
+        switch (op) {
+          case ">":
+            return x > v;
+          case ">=":
+            return x >= v;
+          case "<":
+            return x < v;
+          case "<=":
+            return x <= v;
+          case "=":
+            return x === v;
+          default:
+            return x > v;
+        }
       };
-      ji.byDate.set(d, next);
-    }
-  }
 
-  const allDates = Array.from(allDatesSet).sort();
+      this._applyRowFilter((r) => cmp(Number(parseNumber(r.delta)) || 0));
+    },
 
-  // Compute baseline stats per job (median + p95) for elapsed
-  for (const [job, ji] of jobInfo.entries()) {
-    ji.stats = computeStats(ji.elapsedVals);
-    ji.nDates = ji.dates.size;
-  }
+    toggleGraph(kind) {
+      // Dispatch events so page can hook actual rendering.
+      // kind: graphLine | graphBar | heatmap
+      window.dispatchEvent(new CustomEvent("cob:graph", { detail: { kind } }));
+      Core.log(
+        kind === "graphLine"
+          ? "Line графика активирана."
+          : kind === "graphBar"
+          ? "Bar графика активирана."
+          : "Heatmap активиран.",
+        "bot"
+      );
+    },
 
-  // ---- Determine anomalies list ----
-  // Rules:
-  // - Performance anomaly: elapsed > p95 (only if job has enough history)
-  // - Data-quality anomaly always included
-  const REGULAR_MIN = 10;
-
-  function dataQualityReasons(row) {
-    let sev = "none";
-    const reasons = [];
-
-    const d = String(getCell(row, C.bdate)).trim();
-    const st = parseTimeToSec(getCell(row, C.start));
-    const en = parseTimeToSec(getCell(row, C.end));
-    const el = parseElapsedToSec(getCell(row, C.elapsed));
-    const recsStr = String(getCell(row, C.recs)).trim();
-    const thrStr = String(getCell(row, C.thr)).trim();
-    const recs = /^\d+$/.test(recsStr) ? parseInt(recsStr,10) : NaN;
-    const thr = isNum(thrStr) ? parseFloat(thrStr) : NaN;
-
-    function bump(s) {
-      const rank = { none:0, info:1, warning:2, critical:3 };
-      if (rank[s] > rank[sev]) sev = s;
-    }
-
-    if (!d || !/^\d{8}$/.test(d)) { bump("warning"); reasons.push("Invalid/missing BATCH.DATE"); }
-    if (C.start >= 0 && !isFinite(st)) { bump("warning"); reasons.push("Missing/invalid START.TIME"); }
-    if (C.end >= 0 && !isFinite(en)) { bump("warning"); reasons.push("Missing/invalid END.TIME"); }
-    if (isFinite(st) && isFinite(en) && en < st) { bump("warning"); reasons.push("END.TIME < START.TIME"); }
-    if (isFinite(el) && el < 0) { bump("warning"); reasons.push("Negative ELAPSED"); }
-    if (isFinite(recs) && recs > 0 && (thrStr === "0" || thrStr === "" || (!isFinite(thr) || thr === 0))) {
-      bump("warning"); reasons.push("PROCESSED RECS > 0 but THROUGHPUT missing/0");
-    }
-    if (isFinite(recs) && recs > 0 && isFinite(el) && el === 0) {
-      bump("warning"); reasons.push("PROCESSED RECS > 0 but ELAPSED = 0");
-    }
-
-    return { sev, reasons };
-  }
-
-  // Build anomaly rows for display
-  // Each item: {date, stage, batch, job, elapsedSec, elapsedStr, medSec, p95Sec, medStr, p95Str, deltaPct, sev, reason, srcIndex}
-  const anomalies = [];
-
-  for (let i=0; i<DATA.length; i++) {
-    const row = DATA[i];
-    const job = String(getCell(row, C.job)).trim();
-    if (!job) continue;
-
-    const dq = dataQualityReasons(row);
-
-    const e = parseElapsedToSec(getCell(row, C.elapsed));
-    const ji = jobInfo.get(job);
-    const st = ji ? ji.stats : null;
-
-    const med = st ? st.med : NaN;
-    const p95 = st ? st.p95 : NaN;
-
-    const enoughHist = ji && ji.nDates >= REGULAR_MIN && isFinite(p95) && isFinite(e);
-
-    let isPerfAnom = false;
-    if (enoughHist) {
-      isPerfAnom = (e > p95);
-    }
-
-    const isDqAnom = (dq.sev !== "none");
-
-    if (!isPerfAnom && !isDqAnom) continue;
-
-    // severity for row coloring
-    let sev = "info";
-    if (isDqAnom) sev = "warning";
-    if (isPerfAnom) sev = "critical";
-
-    const date = String(getCell(row, C.bdate)).trim();
-    const stage = String(getCell(row, C.stage)).trim();
-    const batch = String(getCell(row, C.batch)).trim();
-
-    const elapsedStr = isFinite(e) ? fmtHMS(e) : String(getCell(row, C.elapsed)).trim();
-    const medStr = (isFinite(med) && med > 0) ? fmtHMS(med) : "";
-    const p95Str = (isFinite(p95) && p95 > 0) ? fmtHMS(p95) : "";
-
-    let deltaPct = "";
-    if (isFinite(e) && isFinite(med) && med > 0) {
-      deltaPct = ((e / med - 1) * 100);
-    }
-
-    const reasonParts = [];
-    if (isPerfAnom && isFinite(e) && isFinite(med) && isFinite(p95)) {
-      reasonParts.push(`ELAPSED>${p95Str} (median ${medStr})`);
-    } else if (isPerfAnom) {
-      reasonParts.push("ELAPSED above P95");
-    }
-    if (isDqAnom) reasonParts.push(dq.reasons.join(" | "));
-    const reason = reasonParts.join(" | ");
-
-    anomalies.push({
-      date, stage, batch, job,
-      elapsedSec: e,
-      elapsedStr,
-      medSec: med,
-      p95Sec: p95,
-      medStr,
-      p95Str,
-      deltaPct,
-      sev,
-      reason,
-      srcIndex: i
-    });
-  }
-
-  // Default sort: Δ% desc, then elapsed desc
-  anomalies.sort((a,b) => {
-    const ad = (typeof a.deltaPct === "number" && isFinite(a.deltaPct)) ? a.deltaPct : -Infinity;
-    const bd = (typeof b.deltaPct === "number" && isFinite(b.deltaPct)) ? b.deltaPct : -Infinity;
-    if (bd !== ad) return bd - ad;
-    const ae = isFinite(a.elapsedSec) ? a.elapsedSec : -Infinity;
-    const be = isFinite(b.elapsedSec) ? b.elapsedSec : -Infinity;
-    return be - ae;
-  });
-
-  // ---- Render anomaly table ----
-  function fmtDelta(v) {
-    if (typeof v !== "number" || !isFinite(v)) return "";
-    return Math.round(v).toString() + "%";
-  }
-
-  function rowClass(sev) {
-    if (sev === "critical") return "sev-critical";
-    if (sev === "warning") return "sev-warning";
-    return "sev-info";
-  }
-
-  function renderTable(items) {
-    tb.innerHTML = "";
-    const frag = document.createDocumentFragment();
-
-    for (const it of items) {
-      const tr = document.createElement('tr');
-      tr.className = rowClass(it.sev);
-      tr.setAttribute("data-job", it.job);
-      tr.setAttribute("data-reason", it.reason || "");
-      tr.innerHTML = `
-        <td class="mono" title="${escapeHtml(it.reason)}">${escapeHtml(it.date)}</td>
-        <td class="mono" title="${escapeHtml(it.stage)}">${escapeHtml(it.stage)}</td>
-        <td title="${escapeHtml(it.batch)}">${escapeHtml(it.batch)}</td>
-        <td title="${escapeHtml(it.job)}">${escapeHtml(it.job)}</td>
-        <td class="mono right" title="${escapeHtml(it.elapsedStr)}">${escapeHtml(it.elapsedStr)}</td>
-        <td class="mono right" title="${escapeHtml(it.medStr)}">${escapeHtml(it.medStr)}</td>
-        <td class="mono right" title="${escapeHtml(it.p95Str)}">${escapeHtml(it.p95Str)}</td>
-        <td class="mono right" title="${escapeHtml(fmtDelta(it.deltaPct))}">${escapeHtml(fmtDelta(it.deltaPct))}</td>
-      `;
-      frag.appendChild(tr);
-    }
-
-    tb.appendChild(frag);
-    rowCount.textContent = String(items.length);
-    wireRowHandlers();
-  }
-
-  // ---- Search / filter ----
-  let current = anomalies.slice();
-
-  function applySearch(text) {
-    const needle = normalize(text).trim();
-    if (!needle) {
-      current = anomalies.slice();
-      renderTable(current);
-      return;
-    }
-    current = anomalies.filter(r => {
-      const hay = normalize([r.date, r.stage, r.batch, r.job, r.elapsedStr, r.medStr, r.p95Str, fmtDelta(r.deltaPct)].join(" "));
-      return hay.includes(needle);
-    });
-    renderTable(current);
-
-    // auto-select if unique job
-    const jobs = new Set(current.map(x => x.job));
-    if (jobs.size === 1) {
-      setSelectedJob(jobs.values().next().value);
-    }
-  }
-
-  q.addEventListener('input', () => applySearch(q.value));
-  resetBtn.addEventListener('click', () => {
-    q.value = "";
-    applySearch("");
-    setSelectedJob(null);
-  });
-
-  // ---- Row hover tooltip + click selection ----
-  function showTooltip(px, py, html) {
-    tt.innerHTML = html;
-    tt.style.display = "block";
-    tt.style.left = (px + 12) + "px";
-    tt.style.top = (py + 12) + "px";
-  }
-
-  function hideTooltip() { tt.style.display = "none"; }
-
-  function wireRowHandlers() {
-    const rows = tb.querySelectorAll("tr");
-    rows.forEach(tr => {
-      if (tr.__wired) return;
-      tr.__wired = true;
-
-      tr.addEventListener("mousemove", (e) => {
-        const reason = tr.getAttribute("data-reason") || "";
-        if (!reason) { hideTooltip(); return; }
-        showTooltip(e.clientX, e.clientY, `<div style="font-weight:700;margin-bottom:4px;">Anomaly</div><div>${escapeHtml(reason)}</div>`);
-      });
-      tr.addEventListener("mouseleave", hideTooltip);
-
-      tr.addEventListener("click", () => {
-        const job = tr.getAttribute("data-job");
-        if (job) setSelectedJob(job);
-      });
-    });
-  }
-
-  // ---- Chart (selected JOB): ELAPSED + THROUGHPUT ----
-  let selectedJob = null;
-  let chartPoints = null;
-
-  function setSelectedJob(job) {
-    if (!job) {
-      selectedJob = null;
-      selJobEl.textContent = "(none)";
-      chartPanel.style.display = "none";
-      return;
-    }
-    selectedJob = job;
-    selJobEl.textContent = job;
-    drawChartFor(job);
-  }
-
-  function drawChartFor(job) {
-    const ji = jobInfo.get(job);
-    if (!ji) {
-      chartPanel.style.display = "none";
-      return;
-    }
-
-    chartPanel.style.display = "block";
-
-    const cls = (ji.nDates >= 10) ? "REGULAR" : (ji.nDates >= 2) ? "OCCASIONAL" : "RARE";
-    chartSub.textContent = `${job} | class=${cls} | history N=${ji.nDates} | banking dates=${allDates.length}`;
-
-    chartInfo.textContent =
-      (cls === "RARE") ? "RARE (EOM/EOY вероятно) – малко точки е нормално."
-      : (cls === "OCCASIONAL") ? "OCCASIONAL – baseline е ограничен."
-      : "REGULAR – baseline е стабилен.";
-
-    const xs = allDates.slice();
-    const elapsed = xs.map(d => {
-      const v = ji.byDate.get(d);
-      return v ? v.elapsedSec : null;
-    });
-    const thr = xs.map(d => {
-      const v = ji.byDate.get(d);
-      return v ? v.thr : null;
-    });
-    const recs = xs.map(d => {
-      const v = ji.byDate.get(d);
-      return v ? v.recs : null;
-    });
-
-    const eVals = elapsed.filter(x=>isFinite(x));
-    const tVals = thr.filter(x=>isFinite(x));
-    const eMax = eVals.length ? Math.max(...eVals) : 1;
-    const tMax = tVals.length ? Math.max(...tVals) : 1;
-
-    const padMax = (m)=> (m<=0 ? 1 : m*1.1);
-    const eTop = padMax(eMax);
-    const tTop = padMax(tMax);
-
-    const W = chart.width, H = chart.height;
-    ctx.clearRect(0,0,W,H);
-
-    const L = 56, R = 56, T = 14, B = 34;
-    const PW = W - L - R;
-    const PH = H - T - B;
-
-    ctx.fillStyle = "#fafafa";
-    ctx.fillRect(0,0,W,H);
-
-    ctx.strokeStyle = "#e8e8e8";
-    ctx.lineWidth = 1;
-    for (let i=0;i<=5;i++) {
-      const y = T + (PH*i/5);
-      ctx.beginPath();
-      ctx.moveTo(L, y);
-      ctx.lineTo(W-R, y);
-      ctx.stroke();
-    }
-
-    ctx.strokeStyle = "#cfcfcf";
-    ctx.beginPath();
-    ctx.moveTo(L, T);
-    ctx.lineTo(L, H-B);
-    ctx.lineTo(W-R, H-B);
-    ctx.stroke();
-
-    ctx.fillStyle = "#333";
-    ctx.font = "12px Arial";
-
-    function yElapsed(v) { return T + (PH * (1 - (v / eTop))); }
-    function yThr(v) { return T + (PH * (1 - (v / tTop))); }
-
-    for (let i=0;i<=5;i++) {
-      const v = eTop * (1 - i/5);
-      const y = T + (PH*i/5);
-      ctx.fillText(fmtHMS(v), 6, y+4);
-    }
-    for (let i=0;i<=5;i++) {
-      const v = tTop * (1 - i/5);
-      const y = T + (PH*i/5);
-      const label = (Math.round(v*100)/100).toString();
-      const textW = ctx.measureText(label).width;
-      ctx.fillText(label, W - textW - 6, y+4);
-    }
-
-    const n = xs.length;
-    const step = Math.max(1, Math.floor(n/6));
-    for (let i=0; i<n; i+=step) {
-      const x = L + (PW * (i/(n-1 || 1)));
-      const d = xs[i];
-      const lbl = d.slice(4,6) + "-" + d.slice(6,8);
-      ctx.fillText(lbl, x-14, H-12);
-    }
-
-    ctx.fillStyle = "#111";
-    ctx.font = "12px Arial";
-    ctx.fillText("ELAPSED (left) + THROUGHPUT (right)", L+8, T+12);
-
-    function drawLine(series, yMap, stroke) {
-      ctx.strokeStyle = stroke;
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      let started = false;
-      for (let i=0; i<n; i++) {
-        const v = series[i];
-        if (!isFinite(v)) { started = false; continue; }
-        const x = L + (PW * (i/(n-1 || 1)));
-        const y = yMap(v);
-        if (!started) { ctx.moveTo(x,y); started = true; }
-        else ctx.lineTo(x,y);
+    jobSlowest(job) {
+      const rows = Core.readRows();
+      const j = norm(job);
+      const jobRows = rows.filter((r) => norm(r.job) === j);
+      if (!jobRows.length) {
+        Core.log(`Няма редове за job "${j}".`, "bot");
+        return;
       }
-      ctx.stroke();
-
-      ctx.fillStyle = stroke;
-      for (let i=0; i<n; i++) {
-        const v = series[i];
-        if (!isFinite(v)) continue;
-        const x = L + (PW * (i/(n-1 || 1)));
-        const y = yMap(v);
-        ctx.beginPath();
-        ctx.arc(x,y,3,0,Math.PI*2);
-        ctx.fill();
+      // find day with max elapsed (sum or max). Blueprint: "намира деня с max elapsed"
+      const byDayMax = new Map();
+      for (const r of jobRows) {
+        const d = String(r.date).match(/\d{8}/)?.[0] || "";
+        if (!d) continue;
+        const sec = parseElapsedToSeconds(r.elapsed);
+        const prev = byDayMax.get(d) ?? -Infinity;
+        if (sec > prev) byDayMax.set(d, sec);
       }
-    }
+      let bestDay = null,
+        best = -Infinity;
+      for (const [d, s] of byDayMax.entries()) {
+        if (s > best) {
+          best = s;
+          bestDay = d;
+        }
+      }
+      if (!bestDay) {
+        Core.log(`Не успях да определя ден (липсват дати).`, "bot");
+        return;
+      }
+      Core.log(`Най-бавен ден за job "${j}": ${bestDay} (max elapsed: ${best}s)`, "bot");
+    },
 
-    drawLine(elapsed, yElapsed, "#d21b1b");
-    drawLine(thr, yThr, "#0b62c4");
+    jobStats(job) {
+      const rows = Core.readRows();
+      const j = norm(job);
+      const jobRows = rows.filter((r) => norm(r.job) === j);
+      if (!jobRows.length) {
+        Core.log(`Няма редове за job "${j}".`, "bot");
+        return;
+      }
+      const byDay = new Map(); // day -> [secs]
+      for (const r of jobRows) {
+        const d = String(r.date).match(/\d{8}/)?.[0] || "";
+        if (!d) continue;
+        const sec = parseElapsedToSeconds(r.elapsed);
+        if (!byDay.has(d)) byDay.set(d, []);
+        byDay.get(d).push(sec);
+      }
+      const lines = [];
+      for (const [d, secs] of Array.from(byDay.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
+        const min = Math.min(...secs);
+        const max = Math.max(...secs);
+        const avg = secs.reduce((s, x) => s + x, 0) / (secs.length || 1);
+        lines.push(`${d}  avg=${avg.toFixed(1)}s  min=${min}s  max=${max}s  n=${secs.length}`);
+      }
+      Core.log(`<pre>Day stats за job "${j}"\n${lines.join("\n")}</pre>`, "bot");
+    },
 
-    ctx.font = "12px Arial";
-    ctx.fillStyle = "#111";
-    ctx.fillText("● ELAPSED", L+8, H-B+18);
-    ctx.fillText("● THROUGHPUT", L+110, H-B+18);
-    ctx.fillStyle = "#d21b1b"; ctx.beginPath(); ctx.arc(L+2, H-B+14, 4, 0, Math.PI*2); ctx.fill();
-    ctx.fillStyle = "#0b62c4"; ctx.beginPath(); ctx.arc(L+104, H-B+14, 4, 0, Math.PI*2); ctx.fill();
+    // 3.5 Date Fallback
+    _availableDates(rows) {
+      const ds = new Set();
+      for (const r of rows) {
+        const d = String(r.date).match(/\d{8}/)?.[0];
+        if (d) ds.add(d);
+      }
+      return Array.from(ds).sort();
+    },
 
-    chartPoints = xs.map((d, i) => {
-      const x = L + (PW * (i/(n-1 || 1)));
-      return { d, x, e: elapsed[i], t: thr[i], r: recs[i] };
-    });
+    _dateFallback(input, availableDates) {
+      // parse, gather available, nearest lower/upper
+      const raw = String(input ?? "").match(/\d{8}/)?.[0] || null;
+      if (!raw || !availableDates?.length) return null;
+      const target = Number(raw);
+      if (!Number.isFinite(target)) return null;
+
+      let lowerD = null;
+      let upperD = null;
+      for (const d of availableDates) {
+        const n = Number(d);
+        if (!Number.isFinite(n)) continue;
+        if (n <= target) lowerD = d;
+        if (n >= target) {
+          upperD = d;
+          break;
+        }
+      }
+
+      let nearest = null;
+      if (lowerD && upperD) {
+        nearest = Math.abs(Number(lowerD) - target) <= Math.abs(Number(upperD) - target) ? lowerD : upperD;
+      } else {
+        nearest = lowerD || upperD || null;
+      }
+
+      return { lower: lowerD, upper: upperD, nearest };
+    },
+
+    // 3.6 Multi-batch dialog
+    handlePendingBatchResponse(userText) {
+      const job = this.pending.job;
+      const candidates = this.pending.candidates || [];
+      if (!job || !candidates.length) {
+        this.pending.job = null;
+        this.pending.intent = null;
+        this.pending.candidates = null;
+        Core.log("Няма активен pending диалог.", "bot");
+        return;
+      }
+
+      const q = norm(userText);
+      const scored = candidates
+        .map((b) => ({ b, s: fuzzyScore(q, b) }))
+        .sort((a, b) => b.s - a.s);
+
+      const best = scored[0];
+      const second = scored[1];
+
+      const isExact = candidates.some((b) => norm(b) === norm(q));
+      if (isExact) {
+        const exact = candidates.find((b) => norm(b) === norm(q));
+        this._finalizePending(job, exact);
+        return;
+      }
+
+      // ambiguous if best close to second
+      if (second && Math.abs(best.s - second.s) < 10_000) {
+        Core.log(
+          `Нееднозначно. Искаш "${best.b}" или "${second.b}"? (напиши по-точно)`,
+          "bot"
+        );
+        return;
+      }
+
+      // none
+      if (!best || best.s === -Infinity) {
+        Core.log("Не намерих batch. Пробвай пак.", "bot");
+        return;
+      }
+
+      // success
+      this._finalizePending(job, best.b);
+    },
+
+    _finalizePending(job, batch) {
+      // apply batch filter but constrained to job
+      const j = norm(job);
+      const b = norm(batch);
+
+      this._applyRowFilter((r) => norm(r.job) === j && (norm(r.batch) === b || lower(r.batch).includes(lower(b))));
+
+      // clear pending
+      this.pending.job = null;
+      this.pending.intent = null;
+      this.pending.candidates = null;
+
+      Core.log(`OK: job "${j}" + batch "${b}"`, "bot");
+    },
+
+    // 3.7 Reset
+    resetAll() {
+      const rows = Core.readRows();
+      for (const r of rows) r.tr.style.display = "";
+      Core.state.sortDeltaAsc = null;
+
+      this.pending.job = null;
+      this.pending.intent = null;
+      this.pending.candidates = null;
+
+      Part5.closeOverlay();
+      Core.statusHide();
+
+      window.dispatchEvent(new CustomEvent("cob:reset"));
+      Core.log("Reset OK.", "bot");
+    },
+  };
+
+  // =========================
+  // Part 4: Analytics Engine
+  // =========================
+  const Part4 = {
+    // 4.2 collectJobRows: val job, find all rows, if multi-batch -> batch dialog (reuse Part3)
+    collectJobRows(job, fromYMD, toYMD) {
+      const rows = Core.readRows();
+      const j = norm(job);
+      let jobRows = rows.filter((r) => norm(r.job) === j);
+
+      if (!jobRows.length) return { jobRows: [], window: null, note: `Няма редове за job "${j}".` };
+
+      const avail = Part3._availableDates(jobRows);
+      let from = fromYMD;
+      let to = toYMD;
+
+      if (from && (!isYMD(from) || !ymdToDate(from))) {
+        const fb = Part3._dateFallback(from, avail);
+        from = fb?.nearest || null;
+      }
+      if (to && (!isYMD(to) || !ymdToDate(to))) {
+        const fb = Part3._dateFallback(to, avail);
+        to = fb?.nearest || null;
+      }
+
+      if (!from) from = avail[0] || null;
+      if (!to) to = avail[avail.length - 1] || null;
+
+      const lo = from ? Number(from) : -Infinity;
+      const hi = to ? Number(to) : Infinity;
+      jobRows = jobRows.filter((r) => {
+        const d = Number(String(r.date).match(/\d{8}/)?.[0] || NaN);
+        return Number.isFinite(d) && d >= lo && d <= hi;
+      });
+
+      return {
+        jobRows,
+        window: { from, to },
+        note: null,
+      };
+    },
+
+    handleAnalyze(intent) {
+      const job = intent.job;
+      const from = intent.from;
+      const to = intent.to;
+
+      // If job has multi-batch and user didn't specify batch, we can still analyze all batches together
+      const { jobRows, window, note } = this.collectJobRows(job, from, to);
+      if (note) {
+        Core.log(note, "bot");
+        return;
+      }
+      if (!jobRows.length) {
+        Core.log("Няма данни в избрания диапазон.", "bot");
+        return;
+      }
+
+      // 4.3 process rows
+      const processedRows = jobRows.map((r) => {
+        const sec = parseElapsedToSeconds(r.elapsed);
+        const proc = parseNumber(r.processed);
+        const thrCol = norm(r.throughput); // string
+        const thrColNum = parseNumber(thrCol);
+        const thrCalc = Number.isFinite(proc) && sec > 0 ? proc / (sec / 60) : NaN; // per minute
+        let delta = parseNumber(r.delta);
+        if (!Number.isFinite(delta)) delta = 0;
+        const date = String(r.date).match(/\d{8}/)?.[0] || "";
+        return {
+          r,
+          date,
+          sec,
+          proc: Number.isFinite(proc) ? proc : NaN,
+          thr_col: thrCol,
+          thr_col_num: Number.isFinite(thrColNum) ? thrColNum : NaN,
+          thr_calc: Number.isFinite(thrCalc) ? thrCalc : NaN,
+          delta,
+        };
+      });
+
+      // Build feature vectors for K-means (sec, thr_calc, delta) normalized
+      const feats = processedRows.map((x) => [x.sec, x.thr_calc, x.delta]);
+
+      const km = this.kmeans3(feats, 3, 30);
+      const labels = km.labels;
+      const centroids = km.centroids;
+
+      // 4.5 phases: slowest=pre-opt, middle=ramp-up, fastest=steady (by centroid sec)
+      const idxBySec = centroids
+        .map((c, i) => ({ i, sec: c[0] }))
+        .sort((a, b) => b.sec - a.sec)
+        .map((x) => x.i);
+
+      const phaseOfCluster = new Map();
+      if (idxBySec[0] != null) phaseOfCluster.set(idxBySec[0], "pre-opt");
+      if (idxBySec[1] != null) phaseOfCluster.set(idxBySec[1], "ramp-up");
+      if (idxBySec[2] != null) phaseOfCluster.set(idxBySec[2], "steady");
+
+      const rowsWithPhase = processedRows.map((x, i) => ({
+        ...x,
+        cluster: labels[i],
+        phase: phaseOfCluster.get(labels[i]) || `c${labels[i]}`,
+      }));
+
+      // 4.6 outliers: p95 on Phase 3 (steady) for sec; above => notable spikes
+      const steadySecs = rowsWithPhase.filter((x) => x.phase === "steady").map((x) => x.sec);
+      const p95 = percentile(steadySecs, 0.95);
+      const spikes = rowsWithPhase
+        .filter((x) => Number.isFinite(p95) && x.sec > p95)
+        .sort((a, b) => b.sec - a.sec)
+        .slice(0, 20);
+
+      // 4.7 correlations:
+      // r(elapsed, throughput) -> use thr_calc primarily; if throughput column numeric available, also compute validation
+      const xsElapsed = rowsWithPhase.map((x) => x.sec);
+      const ysThrCalc = rowsWithPhase.map((x) => (Number.isFinite(x.thr_calc) ? x.thr_calc : 0));
+      const corrElapsedThr = pearson(xsElapsed, ysThrCalc);
+
+      // selection correlation (fallback): use delta vs elapsed
+      const corrDeltaElapsed = pearson(
+        rowsWithPhase.map((x) => x.delta),
+        xsElapsed
+      );
+
+      // throughput column validation: compare thr_col_num with thr_calc where numeric exists
+      const paired = rowsWithPhase.filter((x) => Number.isFinite(x.thr_col_num) && Number.isFinite(x.thr_calc));
+      const corrThrColVsCalc = pearson(
+        paired.map((x) => x.thr_col_num),
+        paired.map((x) => x.thr_calc)
+      );
+
+      // Phase summary
+      const phaseStats = this.phaseSummary(rowsWithPhase);
+
+      // 4.8 Executive Summary Output
+      const lines = [];
+      lines.push(`Time window: ${window?.from || "?"} to ${window?.to || "?"}`);
+      lines.push("");
+      lines.push("1. Executive Summary");
+      lines.push(`- job: ${norm(job)}`);
+      lines.push(`- rows: ${rowsWithPhase.length}`);
+      lines.push(`- phases: ${Array.from(new Set(rowsWithPhase.map((x) => x.phase))).join(", ")}`);
+      lines.push("");
+      lines.push("2. Key Charts");
+      lines.push("2.1 Elapsed vs Throughput");
+      lines.push("2.2 Delta over Time");
+      lines.push("");
+      lines.push("3. Analysis");
+      lines.push("3.1 Phase Summary");
+      for (const p of phaseStats) {
+        lines.push(
+          `- ${p.phase}: days=${p.days}  avg_elapsed_min=${p.avg_elapsed_min.toFixed(2)}  min=${p.min_elapsed_min.toFixed(
+            2
+          )}  max=${p.max_elapsed_min.toFixed(2)}`
+        );
+      }
+      lines.push("");
+      lines.push("3.2 Notable Dates & Outliers");
+      if (!Number.isFinite(p95)) {
+        lines.push("- p95(steady) = N/A");
+      } else {
+        lines.push(`- p95(steady elapsed) = ${p95.toFixed(2)}s`);
+        if (spikes.length) {
+          for (const s of spikes.slice(0, 10)) {
+            lines.push(`  - ${s.date}  batch="${norm(s.r.batch)}"  elapsed=${s.sec}s  delta=${s.delta}`);
+          }
+        } else {
+          lines.push("- no spikes above p95");
+        }
+      }
+      lines.push("");
+      lines.push("3.3 Correlations & Data Quality Checks");
+      lines.push(`- r(elapsed, throughput_calc) = ${Number.isFinite(corrElapsedThr) ? corrElapsedThr.toFixed(4) : "N/A"}`);
+      lines.push(`- r(delta, elapsed) = ${Number.isFinite(corrDeltaElapsed) ? corrDeltaElapsed.toFixed(4) : "N/A"}`);
+      lines.push(
+        `- throughput column validation (r(thr_col_num, thr_calc)) = ${
+          Number.isFinite(corrThrColVsCalc) ? corrThrColVsCalc.toFixed(4) : "N/A"
+        }  (n=${paired.length})`
+      );
+      lines.push("");
+      lines.push("4. Conclusions");
+      lines.push("- Output printed as <pre> in chatLog.");
+
+      Core.log(`<pre>${lines.join("\n")}</pre>`, "bot");
+
+      // emit analytics event for charts
+      window.dispatchEvent(
+        new CustomEvent("cob:analyze", {
+          detail: {
+            job: norm(job),
+            window,
+            rows: rowsWithPhase,
+            phases: phaseStats,
+            p95,
+            spikes,
+            correlations: {
+              elapsed_thr_calc: corrElapsedThr,
+              delta_elapsed: corrDeltaElapsed,
+              thr_col_vs_calc: corrThrColVsCalc,
+              thr_col_vs_calc_n: paired.length,
+            },
+          },
+        })
+      );
+    },
+
+    normalizeFeatures(xs) {
+      // xs: array of [a,b,c] with possible NaN
+      const cols = xs[0]?.length || 0;
+      const means = new Array(cols).fill(0);
+      const stds = new Array(cols).fill(0);
+
+      for (let j = 0; j < cols; j++) {
+        let sum = 0,
+          cnt = 0;
+        for (const row of xs) {
+          const v = row[j];
+          if (Number.isFinite(v)) {
+            sum += v;
+            cnt++;
+          }
+        }
+        means[j] = cnt ? sum / cnt : 0;
+      }
+
+      for (let j = 0; j < cols; j++) {
+        let sum = 0,
+          cnt = 0;
+        for (const row of xs) {
+          const v = row[j];
+          if (Number.isFinite(v)) {
+            const d = v - means[j];
+            sum += d * d;
+            cnt++;
+          }
+        }
+        stds[j] = cnt ? Math.sqrt(sum / cnt) : 1;
+        if (stds[j] === 0) stds[j] = 1;
+      }
+
+      const normed = xs.map((row) =>
+        row.map((v, j) => {
+          const x = Number.isFinite(v) ? v : means[j];
+          return (x - means[j]) / stds[j];
+        })
+      );
+
+      return { normed, means, stds };
+    },
+
+    kmeans3(xs, k = 3, iters = 25) {
+      if (!xs.length) return { labels: [], centroids: [] };
+      const { normed } = this.normalizeFeatures(xs);
+
+      // init: pick k spread points
+      const centroids = [];
+      centroids.push(normed[0].slice());
+      while (centroids.length < k) {
+        let bestIdx = 0;
+        let bestDist = -Infinity;
+        for (let i = 0; i < normed.length; i++) {
+          const p = normed[i];
+          let minD = Infinity;
+          for (const c of centroids) {
+            const d = this.dist2(p, c);
+            if (d < minD) minD = d;
+          }
+          if (minD > bestDist) {
+            bestDist = minD;
+            bestIdx = i;
+          }
+        }
+        centroids.push(normed[bestIdx].slice());
+      }
+
+      const labels = new Array(normed.length).fill(0);
+
+      for (let it = 0; it < iters; it++) {
+        // assign
+        let changed = false;
+        for (let i = 0; i < normed.length; i++) {
+          const p = normed[i];
+          let best = 0;
+          let bestD = Infinity;
+          for (let c = 0; c < centroids.length; c++) {
+            const d = this.dist2(p, centroids[c]);
+            if (d < bestD) {
+              bestD = d;
+              best = c;
+            }
+          }
+          if (labels[i] !== best) {
+            labels[i] = best;
+            changed = true;
+          }
+        }
+
+        // recompute
+        const sums = Array.from({ length: k }, () => new Array(normed[0].length).fill(0));
+        const cnts = new Array(k).fill(0);
+        for (let i = 0; i < normed.length; i++) {
+          const lab = labels[i];
+          cnts[lab]++;
+          const p = normed[i];
+          for (let j = 0; j < p.length; j++) sums[lab][j] += p[j];
+        }
+        for (let c = 0; c < k; c++) {
+          if (!cnts[c]) continue;
+          for (let j = 0; j < sums[c].length; j++) sums[c][j] /= cnts[c];
+          centroids[c] = sums[c];
+        }
+
+        if (!changed) break;
+      }
+
+      // Convert centroids back to original feature scale (approx) by using raw means/stds
+      // For phase ordering we only care relative; still, return "original-ish" using raw xs stats:
+      // We'll compute centroids in original scale by averaging original vectors per label:
+      const rawCentroids = Array.from({ length: k }, () => new Array(xs[0].length).fill(0));
+      const rawCnts = new Array(k).fill(0);
+      for (let i = 0; i < xs.length; i++) {
+        const lab = labels[i];
+        rawCnts[lab]++;
+        const p = xs[i].map((v) => (Number.isFinite(v) ? v : 0));
+        for (let j = 0; j < p.length; j++) rawCentroids[lab][j] += p[j];
+      }
+      for (let c = 0; c < k; c++) {
+        if (!rawCnts[c]) continue;
+        for (let j = 0; j < rawCentroids[c].length; j++) rawCentroids[c][j] /= rawCnts[c];
+      }
+
+      return { labels, centroids: rawCentroids };
+    },
+
+    dist2(a, b) {
+      let s = 0;
+      for (let i = 0; i < a.length; i++) {
+        const d = a[i] - b[i];
+        s += d * d;
+      }
+      return s;
+    },
+
+    phaseSummary(rows) {
+      // days count + avg/max/min elapsed (minutes)
+      const byPhaseDay = new Map(); // phase -> Map(day -> [secs])
+      for (const x of rows) {
+        const ph = x.phase;
+        const day = x.date || "";
+        if (!day) continue;
+        if (!byPhaseDay.has(ph)) byPhaseDay.set(ph, new Map());
+        const m = byPhaseDay.get(ph);
+        if (!m.has(day)) m.set(day, []);
+        m.get(day).push(x.sec);
+      }
+
+      const out = [];
+      for (const [phase, dayMap] of byPhaseDay.entries()) {
+        const dayMeans = [];
+        for (const secs of dayMap.values()) {
+          const avg = secs.reduce((s, v) => s + v, 0) / (secs.length || 1);
+          dayMeans.push(avg);
+        }
+        const mins = dayMeans.map((s) => s / 60);
+        out.push({
+          phase,
+          days: dayMap.size,
+          avg_elapsed_min: mins.reduce((s, v) => s + v, 0) / (mins.length || 1),
+          min_elapsed_min: Math.min(...mins),
+          max_elapsed_min: Math.max(...mins),
+        });
+      }
+
+      // stable output order
+      const order = { "pre-opt": 0, "ramp-up": 1, steady: 2 };
+      out.sort((a, b) => (order[a.phase] ?? 99) - (order[b.phase] ?? 99));
+      return out;
+    },
+  };
+
+  // =========================
+  // Part 5: UI & Autocomplete Overlay
+  // =========================
+  const Part5 = {
+    index: [], // [{job,batch}]
+    overlay: null,
+    overlayHeader: null,
+    overlayFilter: null,
+    overlayList: null,
+    activeIdx: 0,
+    isOpen: false,
+
+    buildIndexFromTable() {
+      const rows = Core.readRows();
+      const set = new Map(); // key -> {job,batch}
+      for (const r of rows) {
+        const job = norm(r.job);
+        const batch = norm(r.batch);
+        if (!job) continue;
+        const key = `${job}|||${batch}`;
+        if (!set.has(key)) set.set(key, { job, batch });
+      }
+      this.index = Array.from(set.values()).sort((a, b) => {
+        const c = a.job.localeCompare(b.job);
+        if (c) return c;
+        return a.batch.localeCompare(b.batch);
+      });
+      window.dispatchEvent(new CustomEvent("cob:ac_index", { detail: { size: this.index.length } }));
+    },
+
+    mount() {
+      if (this.overlay) return;
+
+      const wrap = document.createElement("div");
+      wrap.id = "cob-ac-overlay";
+      wrap.style.position = "absolute";
+      wrap.style.zIndex = "9999";
+      wrap.style.display = "none";
+      wrap.style.minWidth = "320px";
+      wrap.style.maxWidth = "720px";
+      wrap.style.background = "var(--cob-overlay-bg, #111)";
+      wrap.style.color = "var(--cob-overlay-fg, #eee)";
+      wrap.style.border = "1px solid rgba(255,255,255,0.18)";
+      wrap.style.borderRadius = "10px";
+      wrap.style.boxShadow = "0 10px 30px rgba(0,0,0,0.35)";
+      wrap.style.overflow = "hidden";
+
+      const header = document.createElement("div");
+      header.style.display = "flex";
+      header.style.gap = "8px";
+      header.style.alignItems = "center";
+      header.style.padding = "10px";
+      header.style.borderBottom = "1px solid rgba(255,255,255,0.12)";
+
+      const title = document.createElement("div");
+      title.textContent = "Autocomplete";
+      title.style.fontWeight = "600";
+      title.style.opacity = "0.9";
+
+      const filter = document.createElement("input");
+      filter.type = "text";
+      filter.placeholder = "filter job/batch…";
+      filter.style.flex = "1";
+      filter.style.padding = "8px 10px";
+      filter.style.borderRadius = "8px";
+      filter.style.border = "1px solid rgba(255,255,255,0.18)";
+      filter.style.background = "rgba(255,255,255,0.06)";
+      filter.style.color = "inherit";
+      filter.addEventListener("input", () => this.renderList());
+      filter.addEventListener("keydown", (e) => this.onKeyDown(e, true));
+
+      header.appendChild(title);
+      header.appendChild(filter);
+
+      const list = document.createElement("div");
+      list.style.maxHeight = "260px";
+      list.style.overflow = "auto";
+      list.style.padding = "6px";
+
+      wrap.appendChild(header);
+      wrap.appendChild(list);
+
+      document.body.appendChild(wrap);
+
+      this.overlay = wrap;
+      this.overlayHeader = header;
+      this.overlayFilter = filter;
+      this.overlayList = list;
+
+      // keyboard nav on main input
+      if (Core.el.msg) {
+        Core.el.msg.addEventListener("keydown", (e) => this.onKeyDown(e, false));
+      }
+
+      this.renderList();
+    },
+
+    onInputChanged() {
+      if (!this.overlay) return;
+      this.openOverlay();
+      this.renderList();
+      this.position();
+    },
+
+    openOverlay() {
+      if (!this.overlay || this.isOpen) return;
+      this.isOpen = true;
+      this.overlay.style.display = "block";
+      this.position();
+      this.renderList();
+    },
+
+    closeOverlay() {
+      if (!this.overlay) return;
+      this.isOpen = false;
+      this.overlay.style.display = "none";
+      this.activeIdx = 0;
+    },
+
+    position() {
+      if (!this.overlay || !Core.el.msg) return;
+      const r = Core.el.msg.getBoundingClientRect();
+      const top = r.bottom + window.scrollY + 8;
+      const left = r.left + window.scrollX;
+
+      this.overlay.style.top = `${top}px`;
+      this.overlay.style.left = `${left}px`;
+      this.overlay.style.minWidth = `${Math.max(320, r.width)}px`;
+    },
+
+    currentQuery() {
+      const a = norm(Core.el.msg?.value || "");
+      const b = norm(this.overlayFilter?.value || "");
+      // combine both (user can type in either)
+      return norm(`${a} ${b}`.trim());
+    },
+
+    filteredIndex() {
+      const q = this.currentQuery();
+      if (!q) return this.index.slice(0, 200);
+
+      const scored = this.index
+        .map((x) => ({
+          x,
+          s: Math.max(fuzzyScore(q, x.job), fuzzyScore(q, x.batch), fuzzyScore(q, `${x.job} ${x.batch}`)),
+        }))
+        .sort((a, b) => b.s - a.s)
+        .slice(0, 200);
+
+      return scored.map((o) => o.x);
+    },
+
+    renderList() {
+      if (!this.overlayList) return;
+      const items = this.filteredIndex();
+      this.overlayList.innerHTML = "";
+
+      if (!items.length) {
+        const empty = document.createElement("div");
+        empty.textContent = "No matches";
+        empty.style.padding = "10px";
+        empty.style.opacity = "0.7";
+        this.overlayList.appendChild(empty);
+        return;
+      }
+
+      const grid = document.createElement("div");
+      grid.style.display = "grid";
+      grid.style.gridTemplateColumns = "1fr 1fr";
+      grid.style.gap = "6px";
+
+      items.forEach((item, idx) => {
+        const row = document.createElement("div");
+        row.dataset.idx = String(idx);
+        row.style.display = "grid";
+        row.style.gridTemplateColumns = "1fr 1fr";
+        row.style.gap = "8px";
+        row.style.padding = "9px 10px";
+        row.style.borderRadius = "8px";
+        row.style.cursor = "pointer";
+        row.style.border = "1px solid rgba(255,255,255,0.10)";
+        row.style.background = idx === this.activeIdx ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)";
+
+        const c1 = document.createElement("div");
+        c1.textContent = item.job;
+        c1.style.whiteSpace = "nowrap";
+        c1.style.overflow = "hidden";
+        c1.style.textOverflow = "ellipsis";
+
+        const c2 = document.createElement("div");
+        c2.textContent = item.batch || "";
+        c2.style.whiteSpace = "nowrap";
+        c2.style.overflow = "hidden";
+        c2.style.textOverflow = "ellipsis";
+        c2.style.opacity = "0.9";
+
+        row.appendChild(c1);
+        row.appendChild(c2);
+
+        row.addEventListener("mouseenter", () => {
+          this.activeIdx = idx;
+          this.renderList();
+        });
+
+        row.addEventListener("mousedown", (e) => {
+          e.preventDefault();
+          this.selectItem(item);
+        });
+
+        grid.appendChild(row);
+      });
+
+      // NOTE: we used grid-of-rows; keep it in a single column flow visually
+      // but blueprint says grid 2 columns job|batch; row already does that.
+      this.overlayList.appendChild(grid);
+
+      // ensure active visible
+      const active = this.overlayList.querySelector(`[data-idx="${this.activeIdx}"]`);
+      if (active) {
+        const rect = active.getBoundingClientRect();
+        const parent = this.overlayList.getBoundingClientRect();
+        if (rect.top < parent.top) active.scrollIntoView({ block: "nearest" });
+        if (rect.bottom > parent.bottom) active.scrollIntoView({ block: "nearest" });
+      }
+    },
+
+    onKeyDown(e, fromFilterBox) {
+      if (!this.isOpen && (e.key === "ArrowDown" || e.key === "ArrowUp")) this.openOverlay();
+      if (!this.isOpen) return;
+
+      const items = this.filteredIndex();
+      if (!items.length) return;
+
+      if (e.key === "Escape") {
+        e.preventDefault();
+        this.closeOverlay();
+        return;
+      }
+
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        this.activeIdx = clamp(this.activeIdx + 1, 0, items.length - 1);
+        this.renderList();
+        return;
+      }
+
+      if (e.key === "ArrowUp") {
+        e.preventDefault();
+        this.activeIdx = clamp(this.activeIdx - 1, 0, items.length - 1);
+        this.renderList();
+        return;
+      }
+
+      if (e.key === "Enter") {
+        // If user is in filter input, enter picks item; if in main input, enter is handled by Core.chatSend
+        if (fromFilterBox) {
+          e.preventDefault();
+          const item = items[this.activeIdx];
+          if (item) this.selectItem(item);
+        }
+        return;
+      }
+    },
+
+    // 5.5 click selection behavior
+    selectItem(item) {
+      const job = norm(item.job);
+      const batch = norm(item.batch);
+
+      // Step 1: apply job filter
+      Core.applyIntent({ type: "filterJob", job });
+
+      // Step 2: if batch exists -> set pending + autofill batch + chatSend
+      if (batch) {
+        Part3.pending.job = job;
+        Part3.pending.intent = { type: "filterBatchForJob", job };
+        // candidates from index for this job
+        Part3.pending.candidates = this.index
+          .filter((x) => norm(x.job) === job)
+          .map((x) => norm(x.batch))
+          .filter(Boolean);
+
+        if (Core.el.msg) Core.el.msg.value = batch;
+
+        // auto-submit (5.5)
+        Core.chatSend();
+      }
+
+      this.closeOverlay();
+    },
+  };
+
+  // =========================
+  // Boot
+  // =========================
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => Core.init());
+  } else {
+    Core.init();
   }
 
-  function showChartTooltip(px, py, html) {
-    tt.innerHTML = html;
-    tt.style.display = "block";
-    tt.style.left = (px + 12) + "px";
-    tt.style.top = (py + 12) + "px";
-  }
-
-  chart.addEventListener('mousemove', (e) => {
-    if (!chartPoints || !selectedJob) return;
-    const rect = chart.getBoundingClientRect();
-    const mx = e.clientX - rect.left;
-
-    let best = null;
-    let bestDist = 1e9;
-    for (const p of chartPoints) {
-      const d = Math.abs(p.x - mx);
-      if (d < bestDist) { bestDist = d; best = p; }
-    }
-    if (!best || bestDist > 18) { tt.style.display = "none"; return; }
-
-    const eVal = isFinite(best.e) ? `${fmtHMS(best.e)} (${Math.round(best.e)}s)` : "(no run)";
-    const tVal = isFinite(best.t) ? String(best.t) : "(no run)";
-    const rVal = (best.r != null && isFinite(best.r)) ? String(best.r) : "-";
-
-    const html = `
-      <div style="font-weight:700;margin-bottom:4px;">${escapeHtml(selectedJob)}</div>
-      <div><b>Date:</b> ${escapeHtml(best.d)}</div>
-      <div><b>ELAPSED:</b> ${escapeHtml(eVal)}</div>
-      <div><b>THROUGHPUT:</b> ${escapeHtml(tVal)}</div>
-      <div><b>PROCESSED RECS:</b> ${escapeHtml(rVal)}</div>
-    `;
-    showChartTooltip(e.clientX, e.clientY, html);
-  });
-  chart.addEventListener('mouseleave', () => { tt.style.display = "none"; });
-
-  // ---- Sorting in anomalies table ----
-  let sortCol = "Delta";
-  let sortDir = -1; // desc
-
-  function sortKey(row, colName) {
-    if (colName === "Delta") return (typeof row.deltaPct === "number" && isFinite(row.deltaPct)) ? row.deltaPct : -Infinity;
-    if (colName === "Elapsed") return isFinite(row.elapsedSec) ? row.elapsedSec : -Infinity;
-    if (colName === "Median") return isFinite(row.medSec) ? row.medSec : -Infinity;
-    if (colName === "P95") return isFinite(row.p95Sec) ? row.p95Sec : -Infinity;
-    if (colName === "Date") return row.date || "";
-    if (colName === "Stage") return row.stage || "";
-    if (colName === "Batch") return row.batch || "";
-    if (colName === "Job") return row.job || "";
-    return "";
-  }
-
-  function applySort() {
-    current.sort((a,b) => {
-      const ka = sortKey(a, sortCol);
-      const kb = sortKey(b, sortCol);
-      if (ka === kb) return 0;
-      return (ka > kb ? 1 : -1) * sortDir;
-    });
-    renderTable(current);
-  }
-
-  document.querySelectorAll('thead th[data-col]').forEach(th => {
-    th.addEventListener('click', () => {
-      const c = th.getAttribute('data-col');
-      if (c === sortCol) sortDir *= -1;
-      else { sortCol = c; sortDir = -1; }
-      applySort();
-    });
-  });
-
-  // Initial render
-  current = anomalies.slice();
-  applySort();
-
+  // Expose for debugging / integration
+  window.COB = { Core, Part3, Part4, Part5 };
 })();
-</script>
-</body>
-</html>
-"""
-
-    out = base_html
-    out = out.replace("%%SOURCE%%", esc(source_name))
-    out = out.replace("%%NOW%%", esc(now))
-    out = out.replace("%%HEADER_JS%%", header_js)
-    out = out.replace("%%DATA_JS%%", data_js)
-    out = out.replace("%%IDX_MAP_JS%%", idx_map_js)
-    return out
-
-
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: python3 cob_anomalies_report.py /path/to/file.csv [output.html]", file=sys.stderr)
-        sys.exit(2)
-
-    csv_path = sys.argv[1]
-    out_path = sys.argv[2] if len(sys.argv) >= 3 else os.path.splitext(csv_path)[0] + "_anomalies.html"
-
-    header, rows = read_csv(csv_path)
-    source_name = os.path.basename(csv_path)
-
-    doc = build_html(source_name, header, rows)
-
-    with open(out_path, "w", encoding="utf-8") as f:
-        f.write(doc)
-
-    print(out_path)
-
-
-if __name__ == "__main__":
-    main()
