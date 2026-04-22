@@ -4,6 +4,687 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SQL Session Report</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2128;
+    --border: #30363d;
+    --accent: #00d4aa;
+    --accent2: #ff6b35;
+    --blue: #79c0ff;
+    --purple: #d2a8ff;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --text-dim: #484f58;
+    --row-even: #161b22;
+    --row-odd: #13181f;
+    --row-hover: #1f2937;
+    --match-bg: rgba(0,212,170,0.08);
+    --match-border: #00d4aa;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+/* ── HEADER ── */
+header {
+background: var(–surface);
+border-bottom: 1px solid var(–border);
+padding: 14px 28px;
+display: flex;
+align-items: center;
+gap: 16px;
+position: sticky;
+top: 0;
+z-index: 200;
+}
+.logo {
+font-family: ‘IBM Plex Mono’, monospace;
+font-size: 16px;
+font-weight: 600;
+color: var(–accent);
+letter-spacing: -0.5px;
+}
+.logo span { color: var(–text-muted); }
+.subtitle { color: var(–text-muted); font-size: 11px; margin-top: 2px; }
+.header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.badge {
+background: rgba(0,212,170,0.12);
+color: var(–accent);
+font-family: ‘IBM Plex Mono’, monospace;
+font-size: 11px;
+padding: 3px 10px;
+border-radius: 20px;
+border: 1px solid rgba(0,212,170,0.25);
+}
+
+/* ── DATA INPUT ── */
+.data-section {
+background: var(–surface2);
+border-bottom: 1px solid var(–border);
+padding: 14px 28px;
+}
+.data-section label {
+display: block;
+font-size: 11px;
+font-weight: 500;
+color: var(–text-muted);
+text-transform: uppercase;
+letter-spacing: 0.8px;
+font-family: ‘IBM Plex Mono’, monospace;
+margin-bottom: 7px;
+}
+.data-row { display: flex; gap: 10px; align-items: flex-start; }
+textarea {
+flex: 1;
+background: var(–surface);
+border: 1px solid var(–border);
+color: var(–text);
+padding: 9px 13px;
+border-radius: 6px;
+font-family: ‘IBM Plex Mono’, monospace;
+font-size: 12px;
+height: 90px;
+resize: vertical;
+outline: none;
+transition: border-color 0.15s;
+line-height: 1.6;
+}
+textarea:focus { border-color: var(–accent); }
+.hint {
+font-size: 10px;
+color: var(–text-dim);
+margin-top: 5px;
+font-family: ‘IBM Plex Mono’, monospace;
+}
+.btn-col { display: flex; flex-direction: column; gap: 7px; }
+
+/* ── FILTER PANEL ── */
+.filter-panel {
+background: var(–surface2);
+border-bottom: 1px solid var(–border);
+padding: 13px 28px;
+display: flex;
+flex-wrap: wrap;
+gap: 14px;
+align-items: flex-end;
+}
+.fg { display: flex; flex-direction: column; gap: 4px; }
+.fg label {
+font-size: 10px;
+font-weight: 600;
+color: var(–text-muted);
+text-transform: uppercase;
+letter-spacing: 0.8px;
+font-family: ‘IBM Plex Mono’, monospace;
+}
+.fg input, .fg select {
+background: var(–surface);
+border: 1px solid var(–border);
+color: var(–text);
+padding: 7px 11px;
+border-radius: 6px;
+font-family: ‘IBM Plex Mono’, monospace;
+font-size: 12px;
+outline: none;
+transition: border-color 0.15s, box-shadow 0.15s;
+}
+.fg input:focus, .fg select:focus {
+border-color: var(–accent);
+box-shadow: 0 0 0 3px rgba(0,212,170,0.1);
+}
+input[type=“datetime-local”] { min-width: 195px; }
+input[type=“date”] { min-width: 155px; }
+input[type=“text”] { min-width: 170px; font-family: ‘IBM Plex Sans’, sans-serif; }
+
+.mode-tabs {
+display: flex;
+background: var(–surface);
+border: 1px solid var(–border);
+border-radius: 6px;
+overflow: hidden;
+}
+.mode-tab {
+padding: 7px 16px;
+cursor: pointer;
+font-size: 12px;
+font-weight: 500;
+color: var(–text-muted);
+transition: all 0.15s;
+border: none;
+background: none;
+font-family: ‘IBM Plex Sans’, sans-serif;
+white-space: nowrap;
+}
+.mode-tab.active { background: var(–accent); color: #000; font-weight: 600; }
+
+.btn {
+padding: 7px 16px;
+border-radius: 6px;
+border: none;
+cursor: pointer;
+font-size: 12px;
+font-weight: 500;
+font-family: ‘IBM Plex Sans’, sans-serif;
+transition: all 0.15s;
+white-space: nowrap;
+}
+.btn-primary { background: var(–accent); color: #000; }
+.btn-primary:hover { background: #00f0c0; }
+.btn-ghost {
+background: transparent;
+color: var(–text-muted);
+border: 1px solid var(–border);
+}
+.btn-ghost:hover { border-color: var(–text-muted); color: var(–text); }
+
+.fi { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
+.fi.hidden { display: none; }
+
+/* ── STATS BAR ── */
+.stats-bar {
+padding: 9px 28px;
+display: flex;
+gap: 20px;
+align-items: center;
+border-bottom: 1px solid var(–border);
+flex-wrap: wrap;
+}
+.stat { display: flex; align-items: baseline; gap: 5px; }
+.stat-val {
+font-family: ‘IBM Plex Mono’, monospace;
+font-size: 18px;
+font-weight: 600;
+color: var(–accent);
+}
+.stat-label { font-size: 10px; color: var(–text-muted); text-transform: uppercase; letter-spacing: 0.4px; }
+.stat-sep { color: var(–border); }
+
+/* ── TABLE ── */
+.table-wrap {
+overflow: auto;
+height: calc(100vh - 48px - 120px - 62px - 44px - 20px);
+padding: 0 28px 28px;
+}
+table {
+width: 100%;
+border-collapse: collapse;
+font-family: ‘IBM Plex Mono’, monospace;
+font-size: 12.5px;
+margin-top: 14px;
+}
+thead { position: sticky; top: 0; z-index: 10; }
+th {
+background: var(–surface2);
+color: var(–text-muted);
+font-size: 10px;
+font-weight: 600;
+text-transform: uppercase;
+letter-spacing: 0.9px;
+padding: 9px 13px;
+text-align: left;
+border-bottom: 2px solid var(–border);
+white-space: nowrap;
+cursor: pointer;
+user-select: none;
+transition: color 0.15s;
+}
+th:hover { color: var(–text); }
+th.sorted { color: var(–accent); }
+.si { margin-left: 4px; opacity: 0.4; font-size: 10px; }
+th.sorted .si { opacity: 1; }
+
+tbody tr {
+border-bottom: 1px solid rgba(48,54,61,0.45);
+transition: background 0.08s;
+}
+tbody tr:nth-child(even) { background: var(–row-even); }
+tbody tr:nth-child(odd)  { background: var(–row-odd); }
+tbody tr:hover { background: var(–row-hover); }
+tbody tr.hl {
+background: var(–match-bg) !important;
+border-left: 3px solid var(–match-border);
+}
+
+td { padding: 8px 13px; white-space: nowrap; }
+td.c-recid { color: var(–text); font-weight: 500; max-width: 260px; overflow: hidden; text-overflow: ellipsis; }
+td.c-date  { color: var(–blue); }
+td.c-start { color: #79c0ff; }
+td.c-stop  { color: var(–purple); }
+td.c-elapsed { color: var(–accent2); }
+td.c-trx   { color: var(–text-muted); text-align: right; }
+.dur-badge {
+display: inline-block;
+padding: 1px 7px;
+border-radius: 4px;
+background: rgba(255,107,53,0.12);
+color: var(–accent2);
+border: 1px solid rgba(255,107,53,0.28);
+}
+td.empty { color: var(–text-dim); }
+
+.no-results {
+text-align: center;
+padding: 60px 20px;
+color: var(–text-muted);
+}
+.no-results .icon { font-size: 34px; margin-bottom: 10px; }
+.no-results h3 { font-size: 15px; margin-bottom: 5px; color: var(–text); }
+
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: var(–bg); }
+::-webkit-scrollbar-thumb { background: var(–border); border-radius: 3px; }
+</style>
+
+</head>
+<body>
+
+<!-- HEADER -->
+
+<header>
+  <div>
+    <div class="logo">Session<span>/</span>Report</div>
+    <div class="subtitle">RECID · DATE · STARTED · STOPPED · ELAPSED · TRANSACTIONS</div>
+  </div>
+  <div class="header-right">
+    <span class="badge" id="totalBadge">0 реда</span>
+  </div>
+</header>
+
+<!-- DATA INPUT -->
+
+<div class="data-section">
+  <label>📋 Поставете данните (pipe-separated, хедърът се прескача автоматично)</label>
+  <div class="data-row">
+    <textarea id="rawData" placeholder="RECID|DATE|STARTED|STOPPED|ELAPSED|TRANSACTIONS
+AA.ARCHIVE.SERVICE|2026-04-20|2026-04-18 01:00:43.0|2026-04-20 20:00:24.0|18:59:41|
+AA.ARR.PRODUCT.TRACKER|2026-03-02|2026-03-01 06:57:52.0|2026-03-01 08:58:54.0|02:01:02|1810933
+..."></textarea>
+    <div class="btn-col">
+      <button class="btn btn-primary" onclick="loadData()">▶ Зареди</button>
+      <button class="btn btn-ghost" onclick="loadSample()">Примерни</button>
+    </div>
+  </div>
+  <div class="hint">Формат: RECID | DATE | STARTED (YYYY-MM-DD HH:MM:SS.s) | STOPPED (YYYY-MM-DD HH:MM:SS.s) | ELAPSED | TRANSACTIONS — празните полета се оставят празни</div>
+</div>
+
+<!-- FILTERS -->
+
+<div class="filter-panel">
+  <div class="fg">
+    <label>Режим на филтриране</label>
+    <div class="mode-tabs">
+      <button class="mode-tab active" onclick="setMode('datetime')" id="tab-datetime">Момент</button>
+      <button class="mode-tab" onclick="setMode('range')" id="tab-range">Диапазон</button>
+      <button class="mode-tab" onclick="setMode('date')" id="tab-date">Само дата</button>
+    </div>
+  </div>
+
+  <!-- MOMENT: показва редове, чийто started <= точката <= stopped -->
+
+  <div class="fi" id="fi-datetime">
+    <div class="fg">
+      <label>Дата и час</label>
+      <input type="datetime-local" id="dt-point" step="1">
+    </div>
+    <div style="font-size:10px;color:var(--text-dim);align-self:center;max-width:160px;line-height:1.4;">
+      Показва записи активни в избрания момент
+    </div>
+  </div>
+
+  <!-- RANGE -->
+
+  <div class="fi hidden" id="fi-range">
+    <div class="fg">
+      <label>От</label>
+      <input type="datetime-local" id="r-from" step="1">
+    </div>
+    <div class="fg">
+      <label>До</label>
+      <input type="datetime-local" id="r-to" step="1">
+    </div>
+  </div>
+
+  <!-- DATE-only -->
+
+  <div class="fi hidden" id="fi-date">
+    <div class="fg">
+      <label>Дата</label>
+      <input type="date" id="d-only">
+    </div>
+  </div>
+
+  <div class="fg">
+    <label>&nbsp;</label>
+    <div style="display:flex;gap:7px">
+      <button class="btn btn-primary" onclick="applyFilter()">🔍 Филтрирай</button>
+      <button class="btn btn-ghost" onclick="clearFilter()">✕ Изчисти</button>
+    </div>
+  </div>
+
+  <div class="fg" style="margin-left:auto">
+    <label>Търсене по RECID</label>
+    <input type="text" id="searchName" placeholder="напр. ARCHIVE..." oninput="applyFilter()">
+  </div>
+</div>
+
+<!-- STATS -->
+
+<div class="stats-bar">
+  <div class="stat">
+    <span class="stat-val" id="sAll">0</span>
+    <span class="stat-label">Общо</span>
+  </div>
+  <span class="stat-sep">│</span>
+  <div class="stat">
+    <span class="stat-val" id="sFiltered">0</span>
+    <span class="stat-label">Показани</span>
+  </div>
+  <span class="stat-sep">│</span>
+  <div class="stat">
+    <span class="stat-val" id="sEmpty">0</span>
+    <span class="stat-label">Без timestamps</span>
+  </div>
+  <span class="stat-sep" id="durSep" style="display:none">│</span>
+  <div class="stat" id="sDurGroup" style="display:none">
+    <span class="stat-val" id="sDur">—</span>
+    <span class="stat-label">Общо elapsed</span>
+  </div>
+</div>
+
+<!-- TABLE -->
+
+<div class="table-wrap">
+  <div id="tCont">
+    <div class="no-results">
+      <div class="icon">📂</div>
+      <h3>Няма заредени данни</h3>
+      <p>Поставете данни по-горе и натиснете "Зареди"</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ──────────────────────────────────────────────
+let allRows = [];
+let mode = 'datetime';
+let sortCol = null, sortDir = 1;
+
+// ── Mode switch ────────────────────────────────────────
+function setMode(m) {
+  mode = m;
+  ['datetime','range','date'].forEach(x => {
+    document.getElementById('fi-' + x).classList.toggle('hidden', x !== m);
+    document.getElementById('tab-' + x).classList.toggle('active', x === m);
+  });
+}
+
+// ── Parse timestamp ─────────────────────────────────────
+// Handles "2026-04-18 01:00:43.0" — removes fractional seconds
+function parseTS(s) {
+  if (!s || !s.trim()) return null;
+  const clean = s.trim().replace(/\.\d+$/, '').replace(' ', 'T');
+  const d = new Date(clean);
+  return isNaN(d.getTime()) ? null : d;
+}
+
+function parseDurSecs(s) {
+  if (!s || !s.trim()) return null;
+  const p = s.trim().split(':');
+  if (p.length < 2) return null;
+  return (+p[0]) * 3600 + (+p[1]) * 60 + (+(p[2] || 0));
+}
+
+function fmtSecs(s) {
+  if (s === null || isNaN(s)) return '—';
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return [h, m, sec].map(x => String(x).padStart(2, '0')).join(':');
+}
+
+// ── Parse one line ──────────────────────────────────────
+// Format: RECID|DATE|STARTED|STOPPED|ELAPSED|TRANSACTIONS
+function parseLine(line) {
+  if (!line.trim()) return null;
+  const p = line.split('|');
+  const recid        = (p[0] || '').trim();
+  const date         = (p[1] || '').trim();
+  const startedRaw   = (p[2] || '').trim();
+  const stoppedRaw   = (p[3] || '').trim();
+  const elapsed      = (p[4] || '').trim();
+  const transactions = (p[5] || '').trim();
+
+  return {
+    recid, date, startedRaw, stoppedRaw, elapsed, transactions,
+    startObj:     parseTS(startedRaw),
+    stopObj:      parseTS(stoppedRaw),
+    elapsedSecs:  parseDurSecs(elapsed)
+  };
+}
+
+// ── Load data ──────────────────────────────────────────
+function loadData() {
+  const raw = document.getElementById('rawData').value.trim();
+  if (!raw) return;
+  const lines = raw.split('\n').filter(l => {
+    const t = l.trim().toUpperCase();
+    // Skip empty lines and the header row
+    return t && !t.startsWith('RECID|');
+  });
+  allRows = lines.map(parseLine).filter(Boolean);
+  document.getElementById('totalBadge').textContent = allRows.length + ' реда';
+  applyFilter();
+}
+
+function loadSample() {
+  document.getElementById('rawData').value =
+`RECID|DATE|STARTED|STOPPED|ELAPSED|TRANSACTIONS
+AA.ARCHIVE.SERVICE|2026-04-20|2026-04-18 01:00:43.0|2026-04-20 20:00:24.0|18:59:41|
+AA.ARCHIVE.SERVICE|2026-04-21|2026-04-21 01:00:56.0|2026-04-21 20:00:18.0|18:59:22|
+AA.ARCHIVE.SERVICE|2026-04-22|2026-04-22 01:00:12.0|||
+AA.ARR.PRODUCT.TRACKER|2026-03-02|2026-03-01 06:57:52.0|2026-03-01 08:58:54.0|02:01:02|1810933
+AA.ARR.PRODUCT.TRACKER|2026-03-02|2026-03-01 06:05:57.0|2026-03-01 06:40:38.0|00:34:41|2008308
+AA.ARR.PRODUCT.TRACKER|2026-03-19|2026-03-19 19:17:07.0|2026-03-19 19:32:41.0|00:15:34|1980725
+AA.ARR.PRODUCT.TRACKER|2026-03-19|2026-03-19 18:37:00.0|2026-03-19 19:08:07.0|00:31:07|1237649
+AA.ARR.PRODUCT.TRACKER|2026-03-27|2026-03-27 03:57:41.0|2026-03-27 06:31:31.0|02:33:50|1953389
+AA.ARR.PRODUCT.TRACKER|2026-03-27|2026-03-27 03:14:34.0|2026-03-27 03:27:49.0|00:13:15|1519850`;
+  loadData();
+}
+
+// ── Filter ─────────────────────────────────────────────
+function applyFilter() {
+  const nameQ = document.getElementById('searchName').value.toLowerCase();
+
+  let fromDT = null, toDT = null, pointDT = null;
+
+  if (mode === 'datetime') {
+    const v = document.getElementById('dt-point').value;
+    if (v) pointDT = new Date(v);
+  } else if (mode === 'range') {
+    const vf = document.getElementById('r-from').value;
+    const vt = document.getElementById('r-to').value;
+    if (vf) fromDT = new Date(vf);
+    if (vt) toDT   = new Date(vt);
+  } else if (mode === 'date') {
+    const v = document.getElementById('d-only').value;
+    if (v) {
+      fromDT = new Date(v + 'T00:00:00');
+      toDT   = new Date(v + 'T23:59:59');
+    }
+  }
+
+  const noFilter = !pointDT && !fromDT && !toDT;
+
+  const filtered = allRows.filter(row => {
+    // RECID text search
+    if (nameQ && !row.recid.toLowerCase().includes(nameQ)) return false;
+    // No time filter → show all
+    if (noFilter) return true;
+
+    const s = row.startObj;
+    const e = row.stopObj;
+
+    if (mode === 'datetime') {
+      // Row is "active" at pointDT if: started <= point AND (stopped >= point OR no stopped)
+      if (!s) return false;
+      if (e) return s <= pointDT && pointDT <= e;
+      return s <= pointDT; // still running / no stop recorded
+    } else {
+      // Range overlap: row_start <= range_end  AND  row_end >= range_start
+      const f  = fromDT || new Date(0);
+      const t  = toDT   || new Date(8640000000000000);
+      const rs = s || f;
+      const re = e || (s ? new Date(s.getTime() + 86400000) : t);
+      return rs <= t && re >= f;
+    }
+  });
+
+  // Sort
+  let sorted = [...filtered];
+  if (sortCol !== null) {
+    sorted.sort((a, b) => {
+      const va = sv(a, sortCol), vb = sv(b, sortCol);
+      if (va === vb) return 0;
+      if (va === null || va === '') return 1;
+      if (vb === null || vb === '') return -1;
+      return va < vb ? -sortDir : sortDir;
+    });
+  }
+
+  renderTable(sorted);
+  updateStats(filtered);
+}
+
+function sv(row, col) {
+  switch(col) {
+    case 0: return row.recid;
+    case 1: return row.date;
+    case 2: return row.startObj ? row.startObj.getTime() : null;
+    case 3: return row.stopObj  ? row.stopObj.getTime()  : null;
+    case 4: return row.elapsedSecs;
+    case 5: return parseInt(row.transactions) || 0;
+    default: return null;
+  }
+}
+
+function clearFilter() {
+  document.getElementById('dt-point').value = '';
+  document.getElementById('r-from').value   = '';
+  document.getElementById('r-to').value     = '';
+  document.getElementById('d-only').value   = '';
+  document.getElementById('searchName').value = '';
+  applyFilter();
+}
+
+// ── Render table ───────────────────────────────────────
+const COLS = [
+  { label: 'RECID',        cls: 'c-recid'   },
+  { label: 'DATE',         cls: 'c-date'    },
+  { label: 'STARTED',      cls: 'c-start'   },
+  { label: 'STOPPED',      cls: 'c-stop'    },
+  { label: 'ELAPSED',      cls: 'c-elapsed' },
+  { label: 'TRANSACTIONS', cls: 'c-trx'     },
+];
+
+function renderTable(rows) {
+  const cont = document.getElementById('tCont');
+  if (!rows.length) {
+    cont.innerHTML = `<div class="no-results">
+      <div class="icon">🔍</div>
+      <h3>Няма намерени редове</h3>
+      <p>Опитайте с различни параметри или изчистете филтъра</p>
+    </div>`;
+    return;
+  }
+
+  let h = '<table><thead><tr>';
+  COLS.forEach((c, i) => {
+    const s = sortCol === i;
+    const icon = s ? (sortDir === 1 ? '↑' : '↓') : '⇅';
+    h += `<th class="${s ? 'sorted' : ''}" onclick="toggleSort(${i})">${c.label}<span class="si">${icon}</span></th>`;
+  });
+  h += '</tr></thead><tbody>';
+
+  for (const r of rows) {
+    h += '<tr>';
+    // RECID
+    h += `<td class="c-recid" title="${esc(r.recid)}">${esc(r.recid) || '<span style="color:var(--text-dim)">—</span>'}</td>`;
+    // DATE
+    h += r.date ? `<td class="c-date">${esc(r.date)}</td>` : `<td class="empty">—</td>`;
+    // STARTED
+    h += r.startedRaw ? `<td class="c-start">${esc(r.startedRaw)}</td>` : `<td class="empty">—</td>`;
+    // STOPPED
+    h += r.stoppedRaw ? `<td class="c-stop">${esc(r.stoppedRaw)}</td>` : `<td class="empty">—</td>`;
+    // ELAPSED
+    h += r.elapsed
+      ? `<td class="c-elapsed"><span class="dur-badge">${esc(r.elapsed)}</span></td>`
+      : `<td class="empty">—</td>`;
+    // TRANSACTIONS
+    h += r.transactions ? `<td class="c-trx">${esc(r.transactions)}</td>` : `<td class="empty">—</td>`;
+    h += '</tr>';
+  }
+  h += '</tbody></table>';
+  cont.innerHTML = h;
+}
+
+function esc(s) {
+  return String(s)
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+// ── Sort ───────────────────────────────────────────────
+function toggleSort(i) {
+  if (sortCol === i) sortDir *= -1;
+  else { sortCol = i; sortDir = 1; }
+  applyFilter();
+}
+
+// ── Stats ──────────────────────────────────────────────
+function updateStats(filtered) {
+  const noTS = filtered.filter(r => !r.startObj && !r.stopObj).length;
+  document.getElementById('sAll').textContent      = allRows.length;
+  document.getElementById('sFiltered').textContent = filtered.length;
+  document.getElementById('sEmpty').textContent    = noTS;
+
+  const total = filtered.reduce((s, r) => s + (r.elapsedSecs || 0), 0);
+  if (total > 0) {
+    document.getElementById('sDur').textContent = fmtSecs(total);
+    document.getElementById('sDurGroup').style.display = '';
+    document.getElementById('durSep').style.display = '';
+  } else {
+    document.getElementById('sDurGroup').style.display = 'none';
+    document.getElementById('durSep').style.display = 'none';
+  }
+}
+</script>
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
+
+<html lang="bg">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>SQL Report</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
 <style>
