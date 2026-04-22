@@ -1,1496 +1,792 @@
-/* COB Analyser Chat Engine (Parts 3–5) — Blueprint Implementation
-   Drop-in JS (vanilla). Expects DOM:
-   - #chatWindow, #chatLog, #msg (input), #sendBtn, #statusPill
-   - A data table (default: #mainTable). Rows: tbody tr. Cells may include:
-     date, job, batch, elapsed, processed, throughput, delta
-   - Optional: a header element with [data-sort="delta"] for sorting by delta.
-*/
-
-(() => {
-  "use strict";
-
-  // =========================
-  // Utils
-  // =========================
-  const $ = (sel, root = document) => root.querySelector(sel);
-  const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
-  const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
-
-  const norm = (s) =>
-    String(s ?? "")
-      .trim()
-      .replace(/\s+/g, " ");
-
-  const lower = (s) => norm(s).toLowerCase();
-
-  const isYMD = (s) => /^\d{8}$/.test(s);
-  const ymdToDate = (ymd) => {
-    if (!isYMD(ymd)) return null;
-    const y = Number(ymd.slice(0, 4));
-    const m = Number(ymd.slice(4, 6));
-    const d = Number(ymd.slice(6, 8));
-    if (!y || m < 1 || m > 12 || d < 1 || d > 31) return null;
-    const dt = new Date(Date.UTC(y, m - 1, d));
-    // validate
-    if (
-      dt.getUTCFullYear() !== y ||
-      dt.getUTCMonth() !== m - 1 ||
-      dt.getUTCDate() !== d
-    )
-      return null;
-    return dt;
-  };
-  const dateToYMD = (dt) => {
-    const y = String(dt.getUTCFullYear()).padStart(4, "0");
-    const m = String(dt.getUTCMonth() + 1).padStart(2, "0");
-    const d = String(dt.getUTCDate()).padStart(2, "0");
-    return `${y}${m}${d}`;
-  };
-
-  const parseElapsedToSeconds = (s) => {
-    // accepts: HH:MM:SS, MM:SS, "123", "123s", "12m", "1h 2m 3s"
-    const t = lower(s);
-    if (!t) return 0;
-
-    const hms = t.match(/^(\d+):(\d{1,2}):(\d{1,2})$/);
-    if (hms) return Number(hms[1]) * 3600 + Number(hms[2]) * 60 + Number(hms[3]);
-
-    const ms = t.match(/^(\d+):(\d{1,2})$/);
-    if (ms) return Number(ms[1]) * 60 + Number(ms[2]);
-
-    const numOnly = t.match(/^\d+(\.\d+)?$/);
-    if (numOnly) return Math.round(Number(t));
-
-    let sec = 0;
-    const re = /(\d+(\.\d+)?)\s*(h|hr|hrs|hour|hours|m|min|mins|minute|minutes|s|sec|secs|second|seconds)\b/g;
-    let m;
-    while ((m = re.exec(t))) {
-      const v = Number(m[1]);
-      const u = m[3];
-      if (u.startsWith("h")) sec += v * 3600;
-      else if (u.startsWith("m")) sec += v * 60;
-      else sec += v;
-    }
-    if (sec > 0) return Math.round(sec);
-
-    const lastNum = t.match(/(\d+(\.\d+)?)/);
-    return lastNum ? Math.round(Number(lastNum[1])) : 0;
-  };
-
-  const parseNumber = (s) => {
-    const t = String(s ?? "").replace(/[, ]+/g, "").trim();
-    const v = Number(t);
-    return Number.isFinite(v) ? v : NaN;
-  };
-
-  const pearson = (xs, ys) => {
-    const n = Math.min(xs.length, ys.length);
-    if (n < 2) return NaN;
-    let sx = 0,
-      sy = 0,
-      sxx = 0,
-      syy = 0,
-      sxy = 0;
-    for (let i = 0; i < n; i++) {
-      const x = xs[i],
-        y = ys[i];
-      sx += x;
-      sy += y;
-      sxx += x * x;
-      syy += y * y;
-      sxy += x * y;
-    }
-    const cov = sxy - (sx * sy) / n;
-    const vx = sxx - (sx * sx) / n;
-    const vy = syy - (sy * sy) / n;
-    const den = Math.sqrt(vx * vy);
-    return den === 0 ? NaN : cov / den;
-  };
-
-  const percentile = (arr, p) => {
-    const xs = arr.filter(Number.isFinite).slice().sort((a, b) => a - b);
-    if (!xs.length) return NaN;
-    const idx = (xs.length - 1) * p;
-    const lo = Math.floor(idx);
-    const hi = Math.ceil(idx);
-    if (lo === hi) return xs[lo];
-    const w = idx - lo;
-    return xs[lo] * (1 - w) + xs[hi] * w;
-  };
-
-  // Levenshtein (for fuzzy)
-  const levenshtein = (a, b) => {
-    a = lower(a);
-    b = lower(b);
-    const n = a.length,
-      m = b.length;
-    if (!n) return m;
-    if (!m) return n;
-    const dp = new Array(m + 1);
-    for (let j = 0; j <= m; j++) dp[j] = j;
-    for (let i = 1; i <= n; i++) {
-      let prev = dp[0];
-      dp[0] = i;
-      for (let j = 1; j <= m; j++) {
-        const tmp = dp[j];
-        const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-        dp[j] = Math.min(dp[j] + 1, dp[j - 1] + 1, prev + cost);
-        prev = tmp;
-      }
-    }
-    return dp[m];
-  };
-
-  const fuzzyScore = (query, candidate) => {
-    // Higher is better.
-    query = norm(query);
-    candidate = norm(candidate);
-    if (!query || !candidate) return -Infinity;
-
-    const q = lower(query);
-    const c = lower(candidate);
-
-    if (q === c) return 1_000_000;
-
-    // substring boost
-    if (c.includes(q)) return 500_000 + Math.max(0, 10_000 - (c.length - q.length));
-
-    // token partial
-    const qTokens = q.split(/\s+/).filter(Boolean);
-    const cTokens = c.split(/\s+/).filter(Boolean);
-    let tokenHits = 0;
-    for (const qt of qTokens) {
-      if (cTokens.some((ct) => ct.includes(qt))) tokenHits++;
-    }
-    const tokenScore = tokenHits * 50_000;
-
-    // levenshtein
-    const dist = levenshtein(q, c);
-    const maxLen = Math.max(q.length, c.length) || 1;
-    const levScore = Math.round((1 - dist / maxLen) * 100_000);
-
-    return tokenScore + levScore;
-  };
-
-  // =========================
-  // Core: DOM, chat IO, row access, status
-  // =========================
-  const Core = {
-    el: {
-      chatWindow: null,
-      chatLog: null,
-      msg: null,
-      sendBtn: null,
-      statusPill: null,
-    },
-
-    state: {
-      tableSel: "#mainTable",
-      rowsCache: null,
-      sortDeltaAsc: null,
-    },
-
-    init() {
-      this.el.chatWindow = $("#chatWindow");
-      this.el.chatLog = $("#chatLog");
-      this.el.msg = $("#msg");
-      this.el.sendBtn = $("#sendBtn");
-      this.el.statusPill = $("#statusPill");
-
-      if (this.el.sendBtn) {
-        this.el.sendBtn.addEventListener("click", () => this.chatSend());
-      }
-      if (this.el.msg) {
-        this.el.msg.addEventListener("keydown", (e) => {
-          if (e.key === "Enter" && !e.shiftKey) {
-            e.preventDefault();
-            this.chatSend();
-          }
-        });
-        this.el.msg.addEventListener("input", () => Part5.onInputChanged());
-        this.el.msg.addEventListener("focus", () => Part5.openOverlay());
-        this.el.msg.addEventListener("blur", () => {
-          // small delay so click works
-          setTimeout(() => Part5.closeOverlay(), 120);
-        });
-      }
-
-      // Optional delta header click
-      const deltaHeader = $('[data-sort="delta"]');
-      if (deltaHeader) {
-        deltaHeader.style.cursor = "pointer";
-        deltaHeader.addEventListener("click", () => this.toggleSortDelta());
-      }
-
-      Part5.buildIndexFromTable();
-      Part5.mount();
-      this.statusHide();
-    },
-
-    log(text, kind = "bot") {
-      if (!this.el.chatLog) return;
-
-      const line = document.createElement("div");
-      line.className = `chat-line ${kind}`;
-
-      // allow <pre> blocks
-      if (typeof text === "string" && text.startsWith("<pre>")) {
-        line.innerHTML = text;
-      } else {
-        line.textContent = String(text);
-      }
-
-      this.el.chatLog.appendChild(line);
-      this.el.chatLog.scrollTop = this.el.chatLog.scrollHeight;
-    },
-
-    chatSend() {
-      const raw = this.el.msg ? this.el.msg.value : "";
-      const text = norm(raw);
-      if (!text) return;
-
-      // user echo
-      this.log(text, "user");
-      if (this.el.msg) this.el.msg.value = "";
-
-      // pending dialog has priority
-      if (Part3.pending.intent && Part3.pending.job) {
-        Part3.handlePendingBatchResponse(text);
-        return;
-      }
-
-      const intent = Part3.parseIntent(text);
-      this.applyIntent(intent, text);
-    },
-
-    applyIntent(intent, rawText = "") {
-      if (!intent || intent.type === "unknown") {
-        this.log("Не разбирам. Пробвай: reset, покажи job X, покажи batch Y, между 20260101 и 20260115, delta > 300, анализ job X 20260101 20260201, линия, bar, heatmap, сортирай по delta", "bot");
-        return;
-      }
-
-      // Part4 override for analyzeJob
-      if (intent.type === "analyzeJob") {
-        Part4.handleAnalyze(intent);
-        return;
-      }
-
-      Part3.applyIntent(intent, rawText);
-    },
-
-    table() {
-      return $(this.state.tableSel);
-    },
-
-    readRows() {
-      // Cache only DOM refs + parsed fields; refresh if table changed
-      const table = this.table();
-      if (!table) return [];
-
-      const trs = $$("tbody tr", table);
-      const rows = trs.map((tr) => {
-        const cells = $$("td", tr).map((td) => norm(td.textContent));
-
-        // Support data-* overrides
-        const d = tr.dataset || {};
-        const get = (key, idxFallback) => {
-          if (d[key] != null && d[key] !== "") return norm(d[key]);
-          const i = idxFallback;
-          return i != null && cells[i] != null ? cells[i] : "";
-        };
-
-        // Heuristics:
-        // 0 date, 1 job, 2 batch, 3 elapsed, 4 processed, 5 throughput, 6 delta
-        const date = get("date", 0);
-        const job = get("job", 1);
-        const batch = get("batch", 2);
-        const elapsed = get("elapsed", 3);
-        const processed = get("processed", 4);
-        const throughput = get("throughput", 5);
-        const delta = get("delta", 6);
-
-        const ymd = isYMD(date) ? date : (date.match(/\b(\d{8})\b/) || [])[1] || "";
-
-        return {
-          tr,
-          cells,
-          date: ymd || date,
-          job,
-          batch,
-          elapsed,
-          processed,
-          throughput,
-          delta,
-        };
-      });
-
-      return rows;
-    },
-
-    statusUpdate(shown, total) {
-      if (!this.el.statusPill) return;
-      this.el.statusPill.style.display = "inline-flex";
-      this.el.statusPill.textContent = `${shown}/${total}`;
-    },
-
-    statusHide() {
-      if (!this.el.statusPill) return;
-      this.el.statusPill.style.display = "none";
-      this.el.statusPill.textContent = "";
-    },
-
-    toggleSortDelta() {
-      const rows = this.readRows();
-      const table = this.table();
-      if (!table) return;
-      const tbody = $("tbody", table);
-      if (!tbody) return;
-
-      const asc = this.state.sortDeltaAsc == null ? true : !this.state.sortDeltaAsc;
-      this.state.sortDeltaAsc = asc;
-
-      const visible = (r) => r.tr.style.display !== "none";
-
-      const parsed = rows.map((r) => {
-        let v = parseNumber(r.delta);
-        if (!Number.isFinite(v)) v = 0;
-        return { r, v };
-      });
-
-      // stable-ish: split visible and hidden; sort visible only but keep hidden at bottom in original order
-      const vis = parsed.filter((x) => visible(x.r));
-      const hid = parsed.filter((x) => !visible(x.r));
-
-      vis.sort((a, b) => (asc ? a.v - b.v : b.v - a.v));
-
-      const frag = document.createDocumentFragment();
-      for (const x of vis) frag.appendChild(x.r.tr);
-      for (const x of hid) frag.appendChild(x.r.tr);
-      tbody.appendChild(frag);
-    },
-  };
-
-  // =========================
-  // Part 3: NLP + Filters + Dialogs + Reset
-  // =========================
-  const Part3 = {
-    pending: {
-      job: null,
-      intent: null, // { type: 'filterJob'|'analyzeJob'|..., ... }
-      candidates: null, // batch candidates
-    },
-
-    parseIntent(text) {
-      const t = lower(text);
-
-      // reset
-      if (/^(reset|ресет)\b/.test(t)) return { type: "reset" };
-
-      // graphs
-      if (/^(линия|line)\b/.test(t)) return { type: "graphLine" };
-      if (/^(bar|бар)\b/.test(t)) return { type: "graphBar" };
-      if (/^(heatmap|календар)\b/.test(t)) return { type: "heatmap" };
-
-      // sort by delta
-      if (/сортирай\s+по\s+delta|sort\s+by\s+delta|sort\s+delta/.test(t))
-        return { type: "sort", by: "delta" };
-
-      // delta > N
-      {
-        const m = t.match(/\bdelta\s*(>=|=>|>|<=|=<|<|=)\s*([0-9]+(\.[0-9]+)?)\b/);
-        if (m) return { type: "filterDelta", op: m[1].replace("=>", ">=").replace("=<", "<="), value: Number(m[2]) };
-      }
-
-      // date exact: "покажи само дата 20260223"
-      {
-        const m = t.match(/покажи\s+само\s+дата\s+(\d{8})|only\s+date\s+(\d{8})/);
-        const ymd = (m && (m[1] || m[2])) || null;
-        if (ymd) return { type: "filterDateExact", ymd };
-      }
-
-      // date range: "между 20260101 и 20260115"
-      {
-        const m = t.match(/между\s+(\d{8})\s+и\s+(\d{8})|between\s+(\d{8})\s+and\s+(\d{8})/);
-        const a = m && (m[1] || m[3]);
-        const b = m && (m[2] || m[4]);
-        if (a && b) return { type: "filterDateRange", from: a, to: b };
-      }
-
-      // filter job: "покажи job EB.CLEAR.FILES"
-      {
-        const m = text.match(/покажи\s+job\s+(.+)$|show\s+job\s+(.+)$/i);
-        const job = m && (m[1] || m[2]);
-        if (job) return { type: "filterJob", job: norm(job) };
-      }
-
-      // filter batch: "покажи batch FILE.TIDY.UP"
-      {
-        const m = text.match(/покажи\s+batch\s+(.+)$|show\s+batch\s+(.+)$/i);
-        const batch = m && (m[1] || m[2]);
-        if (batch) return { type: "filterBatch", batch: norm(batch) };
-      }
-
-      // analyze: "анализ job X 20260101 20260201" (dates optional)
-      {
-        const m = text.match(/^(анализ|analysis)\s+job\s+(.+?)(\s+(\d{8}))?(\s+(\d{8}))?\s*$/i);
-        if (m) {
-          return {
-            type: "analyzeJob",
-            job: norm(m[2]),
-            from: m[4] || null,
-            to: m[6] || null,
-          };
-        }
-      }
-
-      // quick single tokens:
-      // "jobStats" -> day stats for job X (needs job)
-      {
-        const m = text.match(/^(day\s+stats|jobstats|дай\s+статистика)\s+за\s+job\s+(.+)$/i);
-        if (m) return { type: "jobStats", job: norm(m[2]) };
-      }
-
-      // "най-бавен ден за job X"
-      {
-        const m = text.match(/най-?бавен\s+ден\s+за\s+job\s+(.+)$|slowest\s+day\s+for\s+job\s+(.+)$/i);
-        const job = m && (m[1] || m[2]);
-        if (job) return { type: "jobSlowest", job: norm(job) };
-      }
-
-      return { type: "unknown" };
-    },
-
-    applyIntent(intent) {
-      switch (intent.type) {
-        case "reset":
-          return this.resetAll();
-
-        case "filterDateExact":
-          return this.filterDateExact(intent.ymd);
-
-        case "filterDateRange":
-          return this.filterDateRange(intent.from, intent.to);
-
-        case "filterJob":
-          return this.filterJob(intent.job);
-
-        case "filterBatch":
-          return this.filterBatch(intent.batch);
-
-        case "filterDelta":
-          return this.filterDelta(intent.op, intent.value);
-
-        case "jobSlowest":
-          return this.jobSlowest(intent.job);
-
-        case "jobStats":
-          return this.jobStats(intent.job);
-
-        case "graphLine":
-        case "graphBar":
-        case "heatmap":
-          return this.toggleGraph(intent.type);
-
-        case "sort":
-          if (intent.by === "delta") Core.toggleSortDelta();
-          return;
-
-        default:
-          Core.log("Неподдържан intent.", "bot");
-      }
-    },
-
-    // 3.4 Filters schema:
-    // 1) readRows()  2) match => display=""  3) no match => "none"
-    // 4) update status pill shown/total
-    _applyRowFilter(predicate) {
-      const rows = Core.readRows();
-      let shown = 0;
-      for (const r of rows) {
-        const ok = !!predicate(r);
-        r.tr.style.display = ok ? "" : "none";
-        if (ok) shown++;
-      }
-      Core.statusUpdate(shown, rows.length);
-    },
-
-    filterDateExact(ymd) {
-      const rows = Core.readRows();
-      const avail = this._availableDates(rows);
-
-      if (!isYMD(ymd) || !ymdToDate(ymd)) {
-        const fb = this._dateFallback(ymd, avail);
-        Core.log(
-          fb
-            ? `Невалидна дата. Най-близка: ${fb.nearest}${fb.lower ? ` (lower: ${fb.lower})` : ""}${fb.upper ? ` (upper: ${fb.upper})` : ""}`
-            : "Невалидна дата.",
-          "bot"
-        );
-        if (fb?.nearest) ymd = fb.nearest;
-        else return;
-      }
-
-      this._applyRowFilter((r) => String(r.date) === String(ymd));
-    },
-
-    filterDateRange(from, to) {
-      const rows = Core.readRows();
-      const avail = this._availableDates(rows);
-
-      if (!isYMD(from) || !ymdToDate(from)) {
-        const fb = this._dateFallback(from, avail);
-        if (fb?.nearest) from = fb.nearest;
-      }
-      if (!isYMD(to) || !ymdToDate(to)) {
-        const fb = this._dateFallback(to, avail);
-        if (fb?.nearest) to = fb.nearest;
-      }
-
-      if (!isYMD(from) || !isYMD(to)) {
-        Core.log("Невалиден диапазон дати.", "bot");
-        return;
-      }
-
-      const a = Number(from);
-      const b = Number(to);
-      const lo = Math.min(a, b);
-      const hi = Math.max(a, b);
-
-      this._applyRowFilter((r) => {
-        const d = Number(String(r.date).match(/\d{8}/)?.[0] || NaN);
-        return Number.isFinite(d) && d >= lo && d <= hi;
-      });
-    },
-
-    filterJob(job) {
-      const rows = Core.readRows();
-      const j = norm(job);
-
-      // apply job filter
-      this._applyRowFilter((r) => norm(r.job) === j);
-
-      // multi-batch dialog logic:
-      // if this job has 2+ unique batches -> ask question and set pending
-      const jobRows = rows.filter((r) => norm(r.job) === j);
-      const batches = Array.from(new Set(jobRows.map((r) => norm(r.batch)).filter(Boolean)));
-
-      if (batches.length >= 2) {
-        this.pending.job = j;
-        this.pending.intent = { type: "filterBatchForJob", job: j };
-        this.pending.candidates = batches;
-        Core.log(`Job "${j}" има ${batches.length} batch-а. Кой batch? (напиши име/част от име)`, "bot");
-      } else {
-        // clear pending if any
-        this.pending.job = null;
-        this.pending.intent = null;
-        this.pending.candidates = null;
-      }
-    },
-
-    filterBatch(batch) {
-      // batch is string, not number (3.3)
-      const b = norm(batch);
-      if (!b) return;
-
-      this._applyRowFilter((r) => lower(r.batch).includes(lower(b)) || norm(r.batch) === b);
-    },
-
-    filterDelta(op, value) {
-      const v = Number(value);
-      if (!Number.isFinite(v)) return;
-
-      const cmp = (x) => {
-        if (!Number.isFinite(x)) x = 0;
-        switch (op) {
-          case ">":
-            return x > v;
-          case ">=":
-            return x >= v;
-          case "<":
-            return x < v;
-          case "<=":
-            return x <= v;
-          case "=":
-            return x === v;
-          default:
-            return x > v;
-        }
-      };
-
-      this._applyRowFilter((r) => cmp(Number(parseNumber(r.delta)) || 0));
-    },
-
-    toggleGraph(kind) {
-      // Dispatch events so page can hook actual rendering.
-      // kind: graphLine | graphBar | heatmap
-      window.dispatchEvent(new CustomEvent("cob:graph", { detail: { kind } }));
-      Core.log(
-        kind === "graphLine"
-          ? "Line графика активирана."
-          : kind === "graphBar"
-          ? "Bar графика активирана."
-          : "Heatmap активиран.",
-        "bot"
-      );
-    },
-
-    jobSlowest(job) {
-      const rows = Core.readRows();
-      const j = norm(job);
-      const jobRows = rows.filter((r) => norm(r.job) === j);
-      if (!jobRows.length) {
-        Core.log(`Няма редове за job "${j}".`, "bot");
-        return;
-      }
-      // find day with max elapsed (sum or max). Blueprint: "намира деня с max elapsed"
-      const byDayMax = new Map();
-      for (const r of jobRows) {
-        const d = String(r.date).match(/\d{8}/)?.[0] || "";
-        if (!d) continue;
-        const sec = parseElapsedToSeconds(r.elapsed);
-        const prev = byDayMax.get(d) ?? -Infinity;
-        if (sec > prev) byDayMax.set(d, sec);
-      }
-      let bestDay = null,
-        best = -Infinity;
-      for (const [d, s] of byDayMax.entries()) {
-        if (s > best) {
-          best = s;
-          bestDay = d;
-        }
-      }
-      if (!bestDay) {
-        Core.log(`Не успях да определя ден (липсват дати).`, "bot");
-        return;
-      }
-      Core.log(`Най-бавен ден за job "${j}": ${bestDay} (max elapsed: ${best}s)`, "bot");
-    },
-
-    jobStats(job) {
-      const rows = Core.readRows();
-      const j = norm(job);
-      const jobRows = rows.filter((r) => norm(r.job) === j);
-      if (!jobRows.length) {
-        Core.log(`Няма редове за job "${j}".`, "bot");
-        return;
-      }
-      const byDay = new Map(); // day -> [secs]
-      for (const r of jobRows) {
-        const d = String(r.date).match(/\d{8}/)?.[0] || "";
-        if (!d) continue;
-        const sec = parseElapsedToSeconds(r.elapsed);
-        if (!byDay.has(d)) byDay.set(d, []);
-        byDay.get(d).push(sec);
-      }
-      const lines = [];
-      for (const [d, secs] of Array.from(byDay.entries()).sort((a, b) => a[0].localeCompare(b[0]))) {
-        const min = Math.min(...secs);
-        const max = Math.max(...secs);
-        const avg = secs.reduce((s, x) => s + x, 0) / (secs.length || 1);
-        lines.push(`${d}  avg=${avg.toFixed(1)}s  min=${min}s  max=${max}s  n=${secs.length}`);
-      }
-      Core.log(`<pre>Day stats за job "${j}"\n${lines.join("\n")}</pre>`, "bot");
-    },
-
-    // 3.5 Date Fallback
-    _availableDates(rows) {
-      const ds = new Set();
-      for (const r of rows) {
-        const d = String(r.date).match(/\d{8}/)?.[0];
-        if (d) ds.add(d);
-      }
-      return Array.from(ds).sort();
-    },
-
-    _dateFallback(input, availableDates) {
-      // parse, gather available, nearest lower/upper
-      const raw = String(input ?? "").match(/\d{8}/)?.[0] || null;
-      if (!raw || !availableDates?.length) return null;
-      const target = Number(raw);
-      if (!Number.isFinite(target)) return null;
-
-      let lowerD = null;
-      let upperD = null;
-      for (const d of availableDates) {
-        const n = Number(d);
-        if (!Number.isFinite(n)) continue;
-        if (n <= target) lowerD = d;
-        if (n >= target) {
-          upperD = d;
-          break;
-        }
-      }
-
-      let nearest = null;
-      if (lowerD && upperD) {
-        nearest = Math.abs(Number(lowerD) - target) <= Math.abs(Number(upperD) - target) ? lowerD : upperD;
-      } else {
-        nearest = lowerD || upperD || null;
-      }
-
-      return { lower: lowerD, upper: upperD, nearest };
-    },
-
-    // 3.6 Multi-batch dialog
-    handlePendingBatchResponse(userText) {
-      const job = this.pending.job;
-      const candidates = this.pending.candidates || [];
-      if (!job || !candidates.length) {
-        this.pending.job = null;
-        this.pending.intent = null;
-        this.pending.candidates = null;
-        Core.log("Няма активен pending диалог.", "bot");
-        return;
-      }
-
-      const q = norm(userText);
-      const scored = candidates
-        .map((b) => ({ b, s: fuzzyScore(q, b) }))
-        .sort((a, b) => b.s - a.s);
-
-      const best = scored[0];
-      const second = scored[1];
-
-      const isExact = candidates.some((b) => norm(b) === norm(q));
-      if (isExact) {
-        const exact = candidates.find((b) => norm(b) === norm(q));
-        this._finalizePending(job, exact);
-        return;
-      }
-
-      // ambiguous if best close to second
-      if (second && Math.abs(best.s - second.s) < 10_000) {
-        Core.log(
-          `Нееднозначно. Искаш "${best.b}" или "${second.b}"? (напиши по-точно)`,
-          "bot"
-        );
-        return;
-      }
-
-      // none
-      if (!best || best.s === -Infinity) {
-        Core.log("Не намерих batch. Пробвай пак.", "bot");
-        return;
-      }
-
-      // success
-      this._finalizePending(job, best.b);
-    },
-
-    _finalizePending(job, batch) {
-      // apply batch filter but constrained to job
-      const j = norm(job);
-      const b = norm(batch);
-
-      this._applyRowFilter((r) => norm(r.job) === j && (norm(r.batch) === b || lower(r.batch).includes(lower(b))));
-
-      // clear pending
-      this.pending.job = null;
-      this.pending.intent = null;
-      this.pending.candidates = null;
-
-      Core.log(`OK: job "${j}" + batch "${b}"`, "bot");
-    },
-
-    // 3.7 Reset
-    resetAll() {
-      const rows = Core.readRows();
-      for (const r of rows) r.tr.style.display = "";
-      Core.state.sortDeltaAsc = null;
-
-      this.pending.job = null;
-      this.pending.intent = null;
-      this.pending.candidates = null;
-
-      Part5.closeOverlay();
-      Core.statusHide();
-
-      window.dispatchEvent(new CustomEvent("cob:reset"));
-      Core.log("Reset OK.", "bot");
-    },
-  };
-
-  // =========================
-  // Part 4: Analytics Engine
-  // =========================
-  const Part4 = {
-    // 4.2 collectJobRows: val job, find all rows, if multi-batch -> batch dialog (reuse Part3)
-    collectJobRows(job, fromYMD, toYMD) {
-      const rows = Core.readRows();
-      const j = norm(job);
-      let jobRows = rows.filter((r) => norm(r.job) === j);
-
-      if (!jobRows.length) return { jobRows: [], window: null, note: `Няма редове за job "${j}".` };
-
-      const avail = Part3._availableDates(jobRows);
-      let from = fromYMD;
-      let to = toYMD;
-
-      if (from && (!isYMD(from) || !ymdToDate(from))) {
-        const fb = Part3._dateFallback(from, avail);
-        from = fb?.nearest || null;
-      }
-      if (to && (!isYMD(to) || !ymdToDate(to))) {
-        const fb = Part3._dateFallback(to, avail);
-        to = fb?.nearest || null;
-      }
-
-      if (!from) from = avail[0] || null;
-      if (!to) to = avail[avail.length - 1] || null;
-
-      const lo = from ? Number(from) : -Infinity;
-      const hi = to ? Number(to) : Infinity;
-      jobRows = jobRows.filter((r) => {
-        const d = Number(String(r.date).match(/\d{8}/)?.[0] || NaN);
-        return Number.isFinite(d) && d >= lo && d <= hi;
-      });
-
-      return {
-        jobRows,
-        window: { from, to },
-        note: null,
-      };
-    },
-
-    handleAnalyze(intent) {
-      const job = intent.job;
-      const from = intent.from;
-      const to = intent.to;
-
-      // If job has multi-batch and user didn't specify batch, we can still analyze all batches together
-      const { jobRows, window, note } = this.collectJobRows(job, from, to);
-      if (note) {
-        Core.log(note, "bot");
-        return;
-      }
-      if (!jobRows.length) {
-        Core.log("Няма данни в избрания диапазон.", "bot");
-        return;
-      }
-
-      // 4.3 process rows
-      const processedRows = jobRows.map((r) => {
-        const sec = parseElapsedToSeconds(r.elapsed);
-        const proc = parseNumber(r.processed);
-        const thrCol = norm(r.throughput); // string
-        const thrColNum = parseNumber(thrCol);
-        const thrCalc = Number.isFinite(proc) && sec > 0 ? proc / (sec / 60) : NaN; // per minute
-        let delta = parseNumber(r.delta);
-        if (!Number.isFinite(delta)) delta = 0;
-        const date = String(r.date).match(/\d{8}/)?.[0] || "";
-        return {
-          r,
-          date,
-          sec,
-          proc: Number.isFinite(proc) ? proc : NaN,
-          thr_col: thrCol,
-          thr_col_num: Number.isFinite(thrColNum) ? thrColNum : NaN,
-          thr_calc: Number.isFinite(thrCalc) ? thrCalc : NaN,
-          delta,
-        };
-      });
-
-      // Build feature vectors for K-means (sec, thr_calc, delta) normalized
-      const feats = processedRows.map((x) => [x.sec, x.thr_calc, x.delta]);
-
-      const km = this.kmeans3(feats, 3, 30);
-      const labels = km.labels;
-      const centroids = km.centroids;
-
-      // 4.5 phases: slowest=pre-opt, middle=ramp-up, fastest=steady (by centroid sec)
-      const idxBySec = centroids
-        .map((c, i) => ({ i, sec: c[0] }))
-        .sort((a, b) => b.sec - a.sec)
-        .map((x) => x.i);
-
-      const phaseOfCluster = new Map();
-      if (idxBySec[0] != null) phaseOfCluster.set(idxBySec[0], "pre-opt");
-      if (idxBySec[1] != null) phaseOfCluster.set(idxBySec[1], "ramp-up");
-      if (idxBySec[2] != null) phaseOfCluster.set(idxBySec[2], "steady");
-
-      const rowsWithPhase = processedRows.map((x, i) => ({
-        ...x,
-        cluster: labels[i],
-        phase: phaseOfCluster.get(labels[i]) || `c${labels[i]}`,
-      }));
-
-      // 4.6 outliers: p95 on Phase 3 (steady) for sec; above => notable spikes
-      const steadySecs = rowsWithPhase.filter((x) => x.phase === "steady").map((x) => x.sec);
-      const p95 = percentile(steadySecs, 0.95);
-      const spikes = rowsWithPhase
-        .filter((x) => Number.isFinite(p95) && x.sec > p95)
-        .sort((a, b) => b.sec - a.sec)
-        .slice(0, 20);
-
-      // 4.7 correlations:
-      // r(elapsed, throughput) -> use thr_calc primarily; if throughput column numeric available, also compute validation
-      const xsElapsed = rowsWithPhase.map((x) => x.sec);
-      const ysThrCalc = rowsWithPhase.map((x) => (Number.isFinite(x.thr_calc) ? x.thr_calc : 0));
-      const corrElapsedThr = pearson(xsElapsed, ysThrCalc);
-
-      // selection correlation (fallback): use delta vs elapsed
-      const corrDeltaElapsed = pearson(
-        rowsWithPhase.map((x) => x.delta),
-        xsElapsed
-      );
-
-      // throughput column validation: compare thr_col_num with thr_calc where numeric exists
-      const paired = rowsWithPhase.filter((x) => Number.isFinite(x.thr_col_num) && Number.isFinite(x.thr_calc));
-      const corrThrColVsCalc = pearson(
-        paired.map((x) => x.thr_col_num),
-        paired.map((x) => x.thr_calc)
-      );
-
-      // Phase summary
-      const phaseStats = this.phaseSummary(rowsWithPhase);
-
-      // 4.8 Executive Summary Output
-      const lines = [];
-      lines.push(`Time window: ${window?.from || "?"} to ${window?.to || "?"}`);
-      lines.push("");
-      lines.push("1. Executive Summary");
-      lines.push(`- job: ${norm(job)}`);
-      lines.push(`- rows: ${rowsWithPhase.length}`);
-      lines.push(`- phases: ${Array.from(new Set(rowsWithPhase.map((x) => x.phase))).join(", ")}`);
-      lines.push("");
-      lines.push("2. Key Charts");
-      lines.push("2.1 Elapsed vs Throughput");
-      lines.push("2.2 Delta over Time");
-      lines.push("");
-      lines.push("3. Analysis");
-      lines.push("3.1 Phase Summary");
-      for (const p of phaseStats) {
-        lines.push(
-          `- ${p.phase}: days=${p.days}  avg_elapsed_min=${p.avg_elapsed_min.toFixed(2)}  min=${p.min_elapsed_min.toFixed(
-            2
-          )}  max=${p.max_elapsed_min.toFixed(2)}`
-        );
-      }
-      lines.push("");
-      lines.push("3.2 Notable Dates & Outliers");
-      if (!Number.isFinite(p95)) {
-        lines.push("- p95(steady) = N/A");
-      } else {
-        lines.push(`- p95(steady elapsed) = ${p95.toFixed(2)}s`);
-        if (spikes.length) {
-          for (const s of spikes.slice(0, 10)) {
-            lines.push(`  - ${s.date}  batch="${norm(s.r.batch)}"  elapsed=${s.sec}s  delta=${s.delta}`);
-          }
-        } else {
-          lines.push("- no spikes above p95");
-        }
-      }
-      lines.push("");
-      lines.push("3.3 Correlations & Data Quality Checks");
-      lines.push(`- r(elapsed, throughput_calc) = ${Number.isFinite(corrElapsedThr) ? corrElapsedThr.toFixed(4) : "N/A"}`);
-      lines.push(`- r(delta, elapsed) = ${Number.isFinite(corrDeltaElapsed) ? corrDeltaElapsed.toFixed(4) : "N/A"}`);
-      lines.push(
-        `- throughput column validation (r(thr_col_num, thr_calc)) = ${
-          Number.isFinite(corrThrColVsCalc) ? corrThrColVsCalc.toFixed(4) : "N/A"
-        }  (n=${paired.length})`
-      );
-      lines.push("");
-      lines.push("4. Conclusions");
-      lines.push("- Output printed as <pre> in chatLog.");
-
-      Core.log(`<pre>${lines.join("\n")}</pre>`, "bot");
-
-      // emit analytics event for charts
-      window.dispatchEvent(
-        new CustomEvent("cob:analyze", {
-          detail: {
-            job: norm(job),
-            window,
-            rows: rowsWithPhase,
-            phases: phaseStats,
-            p95,
-            spikes,
-            correlations: {
-              elapsed_thr_calc: corrElapsedThr,
-              delta_elapsed: corrDeltaElapsed,
-              thr_col_vs_calc: corrThrColVsCalc,
-              thr_col_vs_calc_n: paired.length,
-            },
-          },
-        })
-      );
-    },
-
-    normalizeFeatures(xs) {
-      // xs: array of [a,b,c] with possible NaN
-      const cols = xs[0]?.length || 0;
-      const means = new Array(cols).fill(0);
-      const stds = new Array(cols).fill(0);
-
-      for (let j = 0; j < cols; j++) {
-        let sum = 0,
-          cnt = 0;
-        for (const row of xs) {
-          const v = row[j];
-          if (Number.isFinite(v)) {
-            sum += v;
-            cnt++;
-          }
-        }
-        means[j] = cnt ? sum / cnt : 0;
-      }
-
-      for (let j = 0; j < cols; j++) {
-        let sum = 0,
-          cnt = 0;
-        for (const row of xs) {
-          const v = row[j];
-          if (Number.isFinite(v)) {
-            const d = v - means[j];
-            sum += d * d;
-            cnt++;
-          }
-        }
-        stds[j] = cnt ? Math.sqrt(sum / cnt) : 1;
-        if (stds[j] === 0) stds[j] = 1;
-      }
-
-      const normed = xs.map((row) =>
-        row.map((v, j) => {
-          const x = Number.isFinite(v) ? v : means[j];
-          return (x - means[j]) / stds[j];
-        })
-      );
-
-      return { normed, means, stds };
-    },
-
-    kmeans3(xs, k = 3, iters = 25) {
-      if (!xs.length) return { labels: [], centroids: [] };
-      const { normed } = this.normalizeFeatures(xs);
-
-      // init: pick k spread points
-      const centroids = [];
-      centroids.push(normed[0].slice());
-      while (centroids.length < k) {
-        let bestIdx = 0;
-        let bestDist = -Infinity;
-        for (let i = 0; i < normed.length; i++) {
-          const p = normed[i];
-          let minD = Infinity;
-          for (const c of centroids) {
-            const d = this.dist2(p, c);
-            if (d < minD) minD = d;
-          }
-          if (minD > bestDist) {
-            bestDist = minD;
-            bestIdx = i;
-          }
-        }
-        centroids.push(normed[bestIdx].slice());
-      }
-
-      const labels = new Array(normed.length).fill(0);
-
-      for (let it = 0; it < iters; it++) {
-        // assign
-        let changed = false;
-        for (let i = 0; i < normed.length; i++) {
-          const p = normed[i];
-          let best = 0;
-          let bestD = Infinity;
-          for (let c = 0; c < centroids.length; c++) {
-            const d = this.dist2(p, centroids[c]);
-            if (d < bestD) {
-              bestD = d;
-              best = c;
-            }
-          }
-          if (labels[i] !== best) {
-            labels[i] = best;
-            changed = true;
-          }
-        }
-
-        // recompute
-        const sums = Array.from({ length: k }, () => new Array(normed[0].length).fill(0));
-        const cnts = new Array(k).fill(0);
-        for (let i = 0; i < normed.length; i++) {
-          const lab = labels[i];
-          cnts[lab]++;
-          const p = normed[i];
-          for (let j = 0; j < p.length; j++) sums[lab][j] += p[j];
-        }
-        for (let c = 0; c < k; c++) {
-          if (!cnts[c]) continue;
-          for (let j = 0; j < sums[c].length; j++) sums[c][j] /= cnts[c];
-          centroids[c] = sums[c];
-        }
-
-        if (!changed) break;
-      }
-
-      // Convert centroids back to original feature scale (approx) by using raw means/stds
-      // For phase ordering we only care relative; still, return "original-ish" using raw xs stats:
-      // We'll compute centroids in original scale by averaging original vectors per label:
-      const rawCentroids = Array.from({ length: k }, () => new Array(xs[0].length).fill(0));
-      const rawCnts = new Array(k).fill(0);
-      for (let i = 0; i < xs.length; i++) {
-        const lab = labels[i];
-        rawCnts[lab]++;
-        const p = xs[i].map((v) => (Number.isFinite(v) ? v : 0));
-        for (let j = 0; j < p.length; j++) rawCentroids[lab][j] += p[j];
-      }
-      for (let c = 0; c < k; c++) {
-        if (!rawCnts[c]) continue;
-        for (let j = 0; j < rawCentroids[c].length; j++) rawCentroids[c][j] /= rawCnts[c];
-      }
-
-      return { labels, centroids: rawCentroids };
-    },
-
-    dist2(a, b) {
-      let s = 0;
-      for (let i = 0; i < a.length; i++) {
-        const d = a[i] - b[i];
-        s += d * d;
-      }
-      return s;
-    },
-
-    phaseSummary(rows) {
-      // days count + avg/max/min elapsed (minutes)
-      const byPhaseDay = new Map(); // phase -> Map(day -> [secs])
-      for (const x of rows) {
-        const ph = x.phase;
-        const day = x.date || "";
-        if (!day) continue;
-        if (!byPhaseDay.has(ph)) byPhaseDay.set(ph, new Map());
-        const m = byPhaseDay.get(ph);
-        if (!m.has(day)) m.set(day, []);
-        m.get(day).push(x.sec);
-      }
-
-      const out = [];
-      for (const [phase, dayMap] of byPhaseDay.entries()) {
-        const dayMeans = [];
-        for (const secs of dayMap.values()) {
-          const avg = secs.reduce((s, v) => s + v, 0) / (secs.length || 1);
-          dayMeans.push(avg);
-        }
-        const mins = dayMeans.map((s) => s / 60);
-        out.push({
-          phase,
-          days: dayMap.size,
-          avg_elapsed_min: mins.reduce((s, v) => s + v, 0) / (mins.length || 1),
-          min_elapsed_min: Math.min(...mins),
-          max_elapsed_min: Math.max(...mins),
-        });
-      }
-
-      // stable output order
-      const order = { "pre-opt": 0, "ramp-up": 1, steady: 2 };
-      out.sort((a, b) => (order[a.phase] ?? 99) - (order[b.phase] ?? 99));
-      return out;
-    },
-  };
-
-  // =========================
-  // Part 5: UI & Autocomplete Overlay
-  // =========================
-  const Part5 = {
-    index: [], // [{job,batch}]
-    overlay: null,
-    overlayHeader: null,
-    overlayFilter: null,
-    overlayList: null,
-    activeIdx: 0,
-    isOpen: false,
-
-    buildIndexFromTable() {
-      const rows = Core.readRows();
-      const set = new Map(); // key -> {job,batch}
-      for (const r of rows) {
-        const job = norm(r.job);
-        const batch = norm(r.batch);
-        if (!job) continue;
-        const key = `${job}|||${batch}`;
-        if (!set.has(key)) set.set(key, { job, batch });
-      }
-      this.index = Array.from(set.values()).sort((a, b) => {
-        const c = a.job.localeCompare(b.job);
-        if (c) return c;
-        return a.batch.localeCompare(b.batch);
-      });
-      window.dispatchEvent(new CustomEvent("cob:ac_index", { detail: { size: this.index.length } }));
-    },
-
-    mount() {
-      if (this.overlay) return;
-
-      const wrap = document.createElement("div");
-      wrap.id = "cob-ac-overlay";
-      wrap.style.position = "absolute";
-      wrap.style.zIndex = "9999";
-      wrap.style.display = "none";
-      wrap.style.minWidth = "320px";
-      wrap.style.maxWidth = "720px";
-      wrap.style.background = "var(--cob-overlay-bg, #111)";
-      wrap.style.color = "var(--cob-overlay-fg, #eee)";
-      wrap.style.border = "1px solid rgba(255,255,255,0.18)";
-      wrap.style.borderRadius = "10px";
-      wrap.style.boxShadow = "0 10px 30px rgba(0,0,0,0.35)";
-      wrap.style.overflow = "hidden";
-
-      const header = document.createElement("div");
-      header.style.display = "flex";
-      header.style.gap = "8px";
-      header.style.alignItems = "center";
-      header.style.padding = "10px";
-      header.style.borderBottom = "1px solid rgba(255,255,255,0.12)";
-
-      const title = document.createElement("div");
-      title.textContent = "Autocomplete";
-      title.style.fontWeight = "600";
-      title.style.opacity = "0.9";
-
-      const filter = document.createElement("input");
-      filter.type = "text";
-      filter.placeholder = "filter job/batch…";
-      filter.style.flex = "1";
-      filter.style.padding = "8px 10px";
-      filter.style.borderRadius = "8px";
-      filter.style.border = "1px solid rgba(255,255,255,0.18)";
-      filter.style.background = "rgba(255,255,255,0.06)";
-      filter.style.color = "inherit";
-      filter.addEventListener("input", () => this.renderList());
-      filter.addEventListener("keydown", (e) => this.onKeyDown(e, true));
-
-      header.appendChild(title);
-      header.appendChild(filter);
-
-      const list = document.createElement("div");
-      list.style.maxHeight = "260px";
-      list.style.overflow = "auto";
-      list.style.padding = "6px";
-
-      wrap.appendChild(header);
-      wrap.appendChild(list);
-
-      document.body.appendChild(wrap);
-
-      this.overlay = wrap;
-      this.overlayHeader = header;
-      this.overlayFilter = filter;
-      this.overlayList = list;
-
-      // keyboard nav on main input
-      if (Core.el.msg) {
-        Core.el.msg.addEventListener("keydown", (e) => this.onKeyDown(e, false));
-      }
-
-      this.renderList();
-    },
-
-    onInputChanged() {
-      if (!this.overlay) return;
-      this.openOverlay();
-      this.renderList();
-      this.position();
-    },
-
-    openOverlay() {
-      if (!this.overlay || this.isOpen) return;
-      this.isOpen = true;
-      this.overlay.style.display = "block";
-      this.position();
-      this.renderList();
-    },
-
-    closeOverlay() {
-      if (!this.overlay) return;
-      this.isOpen = false;
-      this.overlay.style.display = "none";
-      this.activeIdx = 0;
-    },
-
-    position() {
-      if (!this.overlay || !Core.el.msg) return;
-      const r = Core.el.msg.getBoundingClientRect();
-      const top = r.bottom + window.scrollY + 8;
-      const left = r.left + window.scrollX;
-
-      this.overlay.style.top = `${top}px`;
-      this.overlay.style.left = `${left}px`;
-      this.overlay.style.minWidth = `${Math.max(320, r.width)}px`;
-    },
-
-    currentQuery() {
-      const a = norm(Core.el.msg?.value || "");
-      const b = norm(this.overlayFilter?.value || "");
-      // combine both (user can type in either)
-      return norm(`${a} ${b}`.trim());
-    },
-
-    filteredIndex() {
-      const q = this.currentQuery();
-      if (!q) return this.index.slice(0, 200);
-
-      const scored = this.index
-        .map((x) => ({
-          x,
-          s: Math.max(fuzzyScore(q, x.job), fuzzyScore(q, x.batch), fuzzyScore(q, `${x.job} ${x.batch}`)),
-        }))
-        .sort((a, b) => b.s - a.s)
-        .slice(0, 200);
-
-      return scored.map((o) => o.x);
-    },
-
-    renderList() {
-      if (!this.overlayList) return;
-      const items = this.filteredIndex();
-      this.overlayList.innerHTML = "";
-
-      if (!items.length) {
-        const empty = document.createElement("div");
-        empty.textContent = "No matches";
-        empty.style.padding = "10px";
-        empty.style.opacity = "0.7";
-        this.overlayList.appendChild(empty);
-        return;
-      }
-
-      const grid = document.createElement("div");
-      grid.style.display = "grid";
-      grid.style.gridTemplateColumns = "1fr 1fr";
-      grid.style.gap = "6px";
-
-      items.forEach((item, idx) => {
-        const row = document.createElement("div");
-        row.dataset.idx = String(idx);
-        row.style.display = "grid";
-        row.style.gridTemplateColumns = "1fr 1fr";
-        row.style.gap = "8px";
-        row.style.padding = "9px 10px";
-        row.style.borderRadius = "8px";
-        row.style.cursor = "pointer";
-        row.style.border = "1px solid rgba(255,255,255,0.10)";
-        row.style.background = idx === this.activeIdx ? "rgba(255,255,255,0.10)" : "rgba(255,255,255,0.04)";
-
-        const c1 = document.createElement("div");
-        c1.textContent = item.job;
-        c1.style.whiteSpace = "nowrap";
-        c1.style.overflow = "hidden";
-        c1.style.textOverflow = "ellipsis";
-
-        const c2 = document.createElement("div");
-        c2.textContent = item.batch || "";
-        c2.style.whiteSpace = "nowrap";
-        c2.style.overflow = "hidden";
-        c2.style.textOverflow = "ellipsis";
-        c2.style.opacity = "0.9";
-
-        row.appendChild(c1);
-        row.appendChild(c2);
-
-        row.addEventListener("mouseenter", () => {
-          this.activeIdx = idx;
-          this.renderList();
-        });
-
-        row.addEventListener("mousedown", (e) => {
-          e.preventDefault();
-          this.selectItem(item);
-        });
-
-        grid.appendChild(row);
-      });
-
-      // NOTE: we used grid-of-rows; keep it in a single column flow visually
-      // but blueprint says grid 2 columns job|batch; row already does that.
-      this.overlayList.appendChild(grid);
-
-      // ensure active visible
-      const active = this.overlayList.querySelector(`[data-idx="${this.activeIdx}"]`);
-      if (active) {
-        const rect = active.getBoundingClientRect();
-        const parent = this.overlayList.getBoundingClientRect();
-        if (rect.top < parent.top) active.scrollIntoView({ block: "nearest" });
-        if (rect.bottom > parent.bottom) active.scrollIntoView({ block: "nearest" });
-      }
-    },
-
-    onKeyDown(e, fromFilterBox) {
-      if (!this.isOpen && (e.key === "ArrowDown" || e.key === "ArrowUp")) this.openOverlay();
-      if (!this.isOpen) return;
-
-      const items = this.filteredIndex();
-      if (!items.length) return;
-
-      if (e.key === "Escape") {
-        e.preventDefault();
-        this.closeOverlay();
-        return;
-      }
-
-      if (e.key === "ArrowDown") {
-        e.preventDefault();
-        this.activeIdx = clamp(this.activeIdx + 1, 0, items.length - 1);
-        this.renderList();
-        return;
-      }
-
-      if (e.key === "ArrowUp") {
-        e.preventDefault();
-        this.activeIdx = clamp(this.activeIdx - 1, 0, items.length - 1);
-        this.renderList();
-        return;
-      }
-
-      if (e.key === "Enter") {
-        // If user is in filter input, enter picks item; if in main input, enter is handled by Core.chatSend
-        if (fromFilterBox) {
-          e.preventDefault();
-          const item = items[this.activeIdx];
-          if (item) this.selectItem(item);
-        }
-        return;
-      }
-    },
-
-    // 5.5 click selection behavior
-    selectItem(item) {
-      const job = norm(item.job);
-      const batch = norm(item.batch);
-
-      // Step 1: apply job filter
-      Core.applyIntent({ type: "filterJob", job });
-
-      // Step 2: if batch exists -> set pending + autofill batch + chatSend
-      if (batch) {
-        Part3.pending.job = job;
-        Part3.pending.intent = { type: "filterBatchForJob", job };
-        // candidates from index for this job
-        Part3.pending.candidates = this.index
-          .filter((x) => norm(x.job) === job)
-          .map((x) => norm(x.batch))
-          .filter(Boolean);
-
-        if (Core.el.msg) Core.el.msg.value = batch;
-
-        // auto-submit (5.5)
-        Core.chatSend();
-      }
-
-      this.closeOverlay();
-    },
-  };
-
-  // =========================
-  // Boot
-  // =========================
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", () => Core.init());
-  } else {
-    Core.init();
+<!DOCTYPE html>
+
+<html lang="bg">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SQL Report</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1c2128;
+    --border: #30363d;
+    --accent: #00d4aa;
+    --accent2: #ff6b35;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --text-dim: #484f58;
+    --row-even: #161b22;
+    --row-odd: #13181f;
+    --row-hover: #1f2937;
+    --match: rgba(0, 212, 170, 0.12);
+    --match-border: #00d4aa;
   }
 
-  // Expose for debugging / integration
-  window.COB = { Core, Part3, Part4, Part5 };
-})();
+- { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+background: var(–bg);
+color: var(–text);
+font-family: ‘IBM Plex Sans’, sans-serif;
+font-size: 14px;
+min-height: 100vh;
+}
+
+/* ── HEADER ── */
+header {
+background: var(–surface);
+border-bottom: 1px solid var(–border);
+padding: 18px 28px;
+display: flex;
+align-items: center;
+gap: 16px;
+position: sticky;
+top: 0;
+z-index: 100;
+}
+
+header .logo {
+font-family: ‘IBM Plex Mono’, monospace;
+font-size: 18px;
+font-weight: 600;
+color: var(–accent);
+letter-spacing: -0.5px;
+}
+
+header .logo span { color: var(–text-muted); }
+header .subtitle { color: var(–text-muted); font-size: 12px; }
+
+.header-right {
+margin-left: auto;
+display: flex;
+align-items: center;
+gap: 12px;
+}
+
+.badge {
+background: rgba(0,212,170,0.15);
+color: var(–accent);
+font-family: ‘IBM Plex Mono’, monospace;
+font-size: 11px;
+padding: 3px 10px;
+border-radius: 20px;
+border: 1px solid rgba(0,212,170,0.3);
+}
+
+/* ── FILTER PANEL ── */
+.filter-panel {
+background: var(–surface2);
+border-bottom: 1px solid var(–border);
+padding: 16px 28px;
+display: flex;
+flex-wrap: wrap;
+gap: 16px;
+align-items: flex-end;
+}
+
+.filter-group {
+display: flex;
+flex-direction: column;
+gap: 5px;
+}
+
+.filter-group label {
+font-size: 11px;
+font-weight: 500;
+color: var(–text-muted);
+text-transform: uppercase;
+letter-spacing: 0.8px;
+font-family: ‘IBM Plex Mono’, monospace;
+}
+
+.filter-group input, .filter-group select {
+background: var(–surface);
+border: 1px solid var(–border);
+color: var(–text);
+padding: 7px 12px;
+border-radius: 6px;
+font-family: ‘IBM Plex Mono’, monospace;
+font-size: 13px;
+outline: none;
+transition: border-color 0.15s, box-shadow 0.15s;
+min-width: 170px;
+}
+
+.filter-group input:focus, .filter-group select:focus {
+border-color: var(–accent);
+box-shadow: 0 0 0 3px rgba(0,212,170,0.12);
+}
+
+.filter-group input[type=“datetime-local”] { min-width: 200px; }
+
+.mode-tabs {
+display: flex;
+background: var(–surface);
+border: 1px solid var(–border);
+border-radius: 7px;
+overflow: hidden;
+}
+
+.mode-tab {
+padding: 7px 18px;
+cursor: pointer;
+font-size: 12px;
+font-weight: 500;
+color: var(–text-muted);
+transition: all 0.15s;
+border: none;
+background: none;
+font-family: ‘IBM Plex Sans’, sans-serif;
+}
+
+.mode-tab.active {
+background: var(–accent);
+color: #000;
+font-weight: 600;
+}
+
+.btn {
+padding: 8px 20px;
+border-radius: 6px;
+border: none;
+cursor: pointer;
+font-size: 13px;
+font-weight: 500;
+font-family: ‘IBM Plex Sans’, sans-serif;
+transition: all 0.15s;
+}
+
+.btn-primary {
+background: var(–accent);
+color: #000;
+}
+.btn-primary:hover { background: #00f0c0; }
+
+.btn-ghost {
+background: transparent;
+color: var(–text-muted);
+border: 1px solid var(–border);
+}
+.btn-ghost:hover { border-color: var(–text-muted); color: var(–text); }
+
+.filter-inputs { display: flex; gap: 12px; align-items: flex-end; flex-wrap: wrap; }
+.filter-inputs.hidden { display: none; }
+
+/* ── STATS BAR ── */
+.stats-bar {
+padding: 10px 28px;
+display: flex;
+gap: 24px;
+align-items: center;
+border-bottom: 1px solid var(–border);
+background: var(–bg);
+}
+
+.stat {
+display: flex;
+align-items: baseline;
+gap: 6px;
+}
+
+.stat-val {
+font-family: ‘IBM Plex Mono’, monospace;
+font-size: 20px;
+font-weight: 600;
+color: var(–accent);
+}
+
+.stat-label {
+font-size: 11px;
+color: var(–text-muted);
+text-transform: uppercase;
+letter-spacing: 0.5px;
+}
+
+.stat-sep { color: var(–border); font-size: 18px; }
+
+/* ── TABLE CONTAINER ── */
+.table-wrap {
+overflow: auto;
+max-height: calc(100vh - 220px);
+padding: 0 28px 28px;
+}
+
+table {
+width: 100%;
+border-collapse: collapse;
+font-family: ‘IBM Plex Mono’, monospace;
+font-size: 13px;
+margin-top: 16px;
+}
+
+thead {
+position: sticky;
+top: 0;
+z-index: 10;
+}
+
+th {
+background: var(–surface2);
+color: var(–text-muted);
+font-size: 11px;
+font-weight: 500;
+text-transform: uppercase;
+letter-spacing: 0.8px;
+padding: 10px 14px;
+text-align: left;
+border-bottom: 1px solid var(–border);
+white-space: nowrap;
+cursor: pointer;
+user-select: none;
+transition: color 0.15s;
+}
+
+th:hover { color: var(–text); }
+th.sorted { color: var(–accent); }
+th .sort-icon { margin-left: 4px; opacity: 0.5; }
+th.sorted .sort-icon { opacity: 1; }
+
+tbody tr {
+border-bottom: 1px solid rgba(48,54,61,0.4);
+transition: background 0.1s;
+}
+
+tbody tr:nth-child(even) { background: var(–row-even); }
+tbody tr:nth-child(odd) { background: var(–row-odd); }
+tbody tr:hover { background: var(–row-hover); }
+
+tbody tr.highlight {
+background: var(–match) !important;
+border-left: 3px solid var(–match-border);
+}
+
+td {
+padding: 9px 14px;
+color: var(–text);
+white-space: nowrap;
+border: none;
+}
+
+td.name-col {
+color: var(–text);
+font-weight: 500;
+max-width: 200px;
+overflow: hidden;
+text-overflow: ellipsis;
+}
+
+td.date-col { color: #79c0ff; }
+td.time-col { color: #d2a8ff; }
+td.duration-col { color: var(–accent2); font-weight: 500; }
+td.number-col { color: var(–text-muted); text-align: right; }
+
+td.empty { color: var(–text-dim); font-style: italic; }
+
+/* no results */
+.no-results {
+text-align: center;
+padding: 60px 20px;
+color: var(–text-muted);
+}
+.no-results .icon { font-size: 36px; margin-bottom: 12px; }
+.no-results h3 { font-size: 16px; margin-bottom: 6px; color: var(–text); }
+
+/* ── PASTE AREA ── */
+.data-section {
+padding: 20px 28px;
+border-bottom: 1px solid var(–border);
+background: var(–surface2);
+}
+
+.data-section label {
+display: block;
+font-size: 11px;
+font-weight: 500;
+color: var(–text-muted);
+text-transform: uppercase;
+letter-spacing: 0.8px;
+font-family: ‘IBM Plex Mono’, monospace;
+margin-bottom: 8px;
+}
+
+.data-row {
+display: flex;
+gap: 10px;
+align-items: flex-start;
+}
+
+textarea {
+flex: 1;
+background: var(–surface);
+border: 1px solid var(–border);
+color: var(–text);
+padding: 10px 14px;
+border-radius: 6px;
+font-family: ‘IBM Plex Mono’, monospace;
+font-size: 12px;
+height: 80px;
+resize: vertical;
+outline: none;
+transition: border-color 0.15s;
+}
+
+textarea:focus { border-color: var(–accent); }
+
+.hint {
+font-size: 11px;
+color: var(–text-dim);
+margin-top: 6px;
+font-family: ‘IBM Plex Mono’, monospace;
+}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(–bg); }
+::-webkit-scrollbar-thumb { background: var(–border); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(–text-dim); }
+
+/* ── DURATION BADGE ── */
+.dur-badge {
+display: inline-block;
+padding: 2px 8px;
+border-radius: 4px;
+background: rgba(255,107,53,0.15);
+color: var(–accent2);
+border: 1px solid rgba(255,107,53,0.3);
+font-size: 12px;
+}
+
+@media (max-width: 700px) {
+header, .filter-panel, .stats-bar, .table-wrap, .data-section { padding-left: 14px; padding-right: 14px; }
+.filter-panel { gap: 10px; }
+}
+</style>
+
+</head>
+<body>
+
+<header>
+  <div>
+    <div class="logo">SQL<span>/</span>Report</div>
+    <div class="subtitle">Интерактивен филтър по дата и час</div>
+  </div>
+  <div class="header-right">
+    <span class="badge" id="totalBadge">0 реда</span>
+  </div>
+</header>
+
+<!-- DATA INPUT -->
+
+<div class="data-section">
+  <label>📋 Поставете данните (pipe-separated: Name|Date|StartDateTime|EndDate|EndTime|Duration|Number)</label>
+  <div class="data-row">
+    <textarea id="rawData" placeholder="Name|2026-01-27|2026-01-27 22:30:20.0|2026-01-28| 01:30:21.0|03:02:01|8140
+Name2|2026-01-27|2026-01-27 08:00:00.0|2026-01-27| 10:30:00.0|02:30:00|5200
+..."></textarea>
+    <div>
+      <button class="btn btn-primary" onclick="loadData()">▶ Зареди</button>
+      <br><br>
+      <button class="btn btn-ghost" onclick="loadSample()">Примерни</button>
+    </div>
+  </div>
+  <div class="hint">Формат: Name | Дата | Start DateTime | End Date | End Time | Duration | Number — всеки ред на нов ред</div>
+</div>
+
+<!-- FILTERS -->
+
+<div class="filter-panel">
+  <div class="filter-group">
+    <label>Режим на филтриране</label>
+    <div class="mode-tabs">
+      <button class="mode-tab active" onclick="setMode('datetime')" id="tab-datetime">Дата + Час</button>
+      <button class="mode-tab" onclick="setMode('range')" id="tab-range">Диапазон</button>
+      <button class="mode-tab" onclick="setMode('date')" id="tab-date">Само дата</button>
+    </div>
+  </div>
+
+  <!-- DateTime mode -->
+
+  <div class="filter-inputs" id="inputs-datetime">
+    <div class="filter-group">
+      <label>Начало (от)</label>
+      <input type="datetime-local" id="dt-from" step="1">
+    </div>
+  </div>
+
+  <!-- Range mode -->
+
+  <div class="filter-inputs hidden" id="inputs-range">
+    <div class="filter-group">
+      <label>От</label>
+      <input type="datetime-local" id="range-from" step="1">
+    </div>
+    <div class="filter-group">
+      <label>До</label>
+      <input type="datetime-local" id="range-to" step="1">
+    </div>
+  </div>
+
+  <!-- Date-only mode -->
+
+  <div class="filter-inputs hidden" id="inputs-date">
+    <div class="filter-group">
+      <label>Дата</label>
+      <input type="date" id="date-only">
+    </div>
+  </div>
+
+  <div class="filter-group">
+    <label>&nbsp;</label>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="applyFilter()">🔍 Филтрирай</button>
+      <button class="btn btn-ghost" onclick="clearFilter()">✕ Изчисти</button>
+    </div>
+  </div>
+
+  <div class="filter-group" style="margin-left:auto">
+    <label>Търсене по име</label>
+    <input type="text" id="searchName" placeholder="Въведи текст..." oninput="applyFilter()" style="min-width:180px;font-family:'IBM Plex Sans',sans-serif">
+  </div>
+</div>
+
+<!-- STATS -->
+
+<div class="stats-bar">
+  <div class="stat">
+    <span class="stat-val" id="statAll">0</span>
+    <span class="stat-label">Общо реда</span>
+  </div>
+  <span class="stat-sep">|</span>
+  <div class="stat">
+    <span class="stat-val" id="statFiltered">0</span>
+    <span class="stat-label">Показани</span>
+  </div>
+  <span class="stat-sep">|</span>
+  <div class="stat">
+    <span class="stat-val" id="statEmpty">0</span>
+    <span class="stat-label">Без час</span>
+  </div>
+  <span class="stat-sep">|</span>
+  <div class="stat" id="statDurGroup" style="display:none">
+    <span class="stat-val" id="statDur">—</span>
+    <span class="stat-label">Общо времетраене</span>
+  </div>
+</div>
+
+<!-- TABLE -->
+
+<div class="table-wrap">
+  <div id="tableContainer">
+    <div class="no-results">
+      <div class="icon">📂</div>
+      <h3>Няма заредени данни</h3>
+      <p>Поставете данни по-горе и натиснете "Зареди"</p>
+    </div>
+  </div>
+</div>
+
+<script>
+// ─────────────────────────────────────────────
+//  State
+// ─────────────────────────────────────────────
+let allRows = [];
+let currentMode = 'datetime';
+let sortCol = null, sortDir = 1;
+
+// ─────────────────────────────────────────────
+//  Mode switching
+// ─────────────────────────────────────────────
+function setMode(mode) {
+  currentMode = mode;
+  ['datetime','range','date'].forEach(m => {
+    document.getElementById('inputs-' + m).classList.toggle('hidden', m !== mode);
+    document.getElementById('tab-' + m).classList.toggle('active', m === mode);
+  });
+}
+
+// ─────────────────────────────────────────────
+//  Parse helpers
+// ─────────────────────────────────────────────
+function parseDateTime(datePart, timePart) {
+  // datePart: "2026-01-27", timePart: " 22:30:20.0" or "22:30:20.0"
+  if (!datePart || !datePart.trim()) return null;
+  const d = datePart.trim();
+  const t = timePart ? timePart.trim().split('.')[0] : '';
+  if (!t) return new Date(d + 'T00:00:00');
+  return new Date(d + 'T' + t);
+}
+
+function parseDuration(str) {
+  if (!str || !str.trim()) return null;
+  const parts = str.trim().split(':');
+  if (parts.length < 2) return null;
+  return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseInt(parts[2] || '0');
+}
+
+function formatDurSecs(s) {
+  if (s === null || isNaN(s)) return '—';
+  const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+  return [h, m, sec].map(x => String(x).padStart(2,'0')).join(':');
+}
+
+function parseLine(line) {
+  if (!line.trim()) return null;
+  const parts = line.split('|');
+  // Expected: Name | Date | StartDateTime | EndDate | EndTime | Duration | Number
+  const name     = parts[0] || '';
+  const date     = parts[1] || '';
+  const startDT  = parts[2] || '';  // "2026-01-27 22:30:20.0"
+  const endDate  = parts[3] || '';
+  const endTime  = parts[4] || '';
+  const duration = parts[5] || '';
+  const number   = parts[6] || '';
+
+  // Parse start: split date and time from startDT
+  let startObj = null;
+  if (startDT.trim()) {
+    const sp = startDT.trim().split(' ');
+    const sd = sp[0];
+    const st = sp[1] ? sp[1].split('.')[0] : '00:00:00';
+    startObj = new Date(sd + 'T' + st);
+  } else if (date.trim()) {
+    startObj = new Date(date.trim() + 'T00:00:00');
+  }
+
+  // Parse end
+  let endObj = null;
+  if (endDate.trim() && endTime.trim()) {
+    const et = endTime.trim().split('.')[0];
+    endObj = new Date(endDate.trim() + 'T' + et);
+  }
+
+  return {
+    name,
+    date: date.trim(),
+    startDT: startDT.trim(),
+    endDate: endDate.trim(),
+    endTime: endTime.trim(),
+    duration: duration.trim(),
+    number: number.trim(),
+    startObj,
+    endObj,
+    durationSecs: parseDuration(duration)
+  };
+}
+
+// ─────────────────────────────────────────────
+//  Load data
+// ─────────────────────────────────────────────
+function loadData() {
+  const raw = document.getElementById('rawData').value.trim();
+  if (!raw) return;
+  const lines = raw.split('\n');
+  allRows = lines.map(parseLine).filter(Boolean);
+  document.getElementById('totalBadge').textContent = allRows.length + ' реда';
+  applyFilter();
+}
+
+function loadSample() {
+  const sample = `Иван Иванов|2026-01-27|2026-01-27 08:00:00.0|2026-01-27| 10:30:00.0|02:30:00|5200
+Мария Петрова|2026-01-27|2026-01-27 22:30:20.0|2026-01-28| 01:30:21.0|03:00:01|8140
+Георги Стоянов|2026-01-27|2026-01-27 09:15:00.0|2026-01-27| 11:00:00.0|01:45:00|3200
+Анна Димитрова|2026-01-27||2026-01-27| |00:00:00|0
+Петър Николов|2026-01-28|2026-01-28 06:00:00.0|2026-01-28| 14:00:00.0|08:00:00|12000
+Елена Попова|2026-01-28|2026-01-28 22:00:00.0|2026-01-29| 02:30:00.0|04:30:00|9800
+Христо Василев|2026-01-29|2026-01-29 07:30:00.0|2026-01-29| 09:00:00.0|01:30:00|2900
+Ния Тодорова|2026-01-27|2026-01-27 14:00:00.0|2026-01-27| 18:45:00.0|04:45:00|6700
+Борис Лазаров|2026-01-28|2026-01-28 10:00:00.0|2026-01-28| 12:00:00.0|02:00:00|4100
+Светла Колева|2026-01-29|2026-01-29 23:00:00.0|2026-01-30| 01:00:00.0|02:00:00|3900`;
+  document.getElementById('rawData').value = sample;
+  loadData();
+}
+
+// ─────────────────────────────────────────────
+//  Filter logic
+// ─────────────────────────────────────────────
+function applyFilter() {
+  const nameQ = document.getElementById('searchName').value.toLowerCase();
+
+  let fromDT = null, toDT = null;
+  if (currentMode === 'datetime') {
+    const v = document.getElementById('dt-from').value;
+    if (v) fromDT = new Date(v);
+  } else if (currentMode === 'range') {
+    const vf = document.getElementById('range-from').value;
+    const vt = document.getElementById('range-to').value;
+    if (vf) fromDT = new Date(vf);
+    if (vt) toDT = new Date(vt);
+  } else if (currentMode === 'date') {
+    const v = document.getElementById('date-only').value;
+    if (v) {
+      fromDT = new Date(v + 'T00:00:00');
+      toDT   = new Date(v + 'T23:59:59');
+    }
+  }
+
+  const filtered = allRows.filter(row => {
+    // Name search
+    if (nameQ && !row.name.toLowerCase().includes(nameQ)) return false;
+
+    // No date filter → show all
+    if (!fromDT && !toDT) return true;
+
+    // Row must have start (and optionally end) to filter
+    const s = row.startObj;
+    const e = row.endObj;
+
+    if (!s && !e) return false; // no timestamps → exclude when filtering
+
+    if (currentMode === 'datetime') {
+      // Show rows whose interval overlaps or starts at/after fromDT
+      // We show rows where start >= fromDT OR (start < fromDT AND end >= fromDT)
+      if (!fromDT) return true;
+      if (s && s >= fromDT) return true;
+      if (s && e && s < fromDT && e >= fromDT) return true;
+      return false;
+    } else {
+      // Range / date-only: row's start-end interval must overlap [fromDT, toDT]
+      const f = fromDT || new Date(0);
+      const t = toDT || new Date(8640000000000000);
+      // Overlap: row_start <= range_end AND row_end >= range_start
+      const rowStart = s || f;
+      const rowEnd   = e || (s ? new Date(s.getTime() + 86400000) : t);
+      return rowStart <= t && rowEnd >= f;
+    }
+  });
+
+  // Sort
+  let sorted = [...filtered];
+  if (sortCol !== null) {
+    sorted.sort((a, b) => {
+      const va = getSortVal(a, sortCol);
+      const vb = getSortVal(b, sortCol);
+      if (va === vb) return 0;
+      if (va === null || va === '') return 1;
+      if (vb === null || vb === '') return -1;
+      return va < vb ? -sortDir : sortDir;
+    });
+  }
+
+  renderTable(sorted);
+  updateStats(filtered);
+}
+
+function getSortVal(row, col) {
+  switch(col) {
+    case 0: return row.name;
+    case 1: return row.startObj ? row.startObj.getTime() : null;
+    case 2: return row.endObj ? row.endObj.getTime() : null;
+    case 3: return row.durationSecs;
+    case 4: return parseInt(row.number) || 0;
+    default: return null;
+  }
+}
+
+function clearFilter() {
+  document.getElementById('dt-from').value = '';
+  document.getElementById('range-from').value = '';
+  document.getElementById('range-to').value = '';
+  document.getElementById('date-only').value = '';
+  document.getElementById('searchName').value = '';
+  applyFilter();
+}
+
+// ─────────────────────────────────────────────
+//  Render
+// ─────────────────────────────────────────────
+function renderTable(rows) {
+  const container = document.getElementById('tableContainer');
+
+  if (rows.length === 0) {
+    container.innerHTML = `<div class="no-results">
+      <div class="icon">🔍</div>
+      <h3>Няма намерени редове</h3>
+      <p>Опитайте с различен диапазон или изчистете филтъра</p>
+    </div>`;
+    return;
+  }
+
+  const cols = [
+    { label: 'Име', idx: 0 },
+    { label: 'Начало', idx: 1 },
+    { label: 'Край', idx: 2 },
+    { label: 'Времетраене', idx: 3 },
+    { label: 'Номер', idx: 4 },
+  ];
+
+  let html = `<table><thead><tr>`;
+  cols.forEach(c => {
+    const sorted = sortCol === c.idx;
+    const icon = sorted ? (sortDir === 1 ? '↑' : '↓') : '⇅';
+    html += `<th class="${sorted ? 'sorted' : ''}" onclick="toggleSort(${c.idx})">${c.label} <span class="sort-icon">${icon}</span></th>`;
+  });
+  html += `</tr></thead><tbody>`;
+
+  for (const row of rows) {
+    const startStr = row.startDT || '';
+    const endStr   = (row.endDate && row.endTime)
+                       ? row.endDate + ' ' + row.endTime.trim()
+                       : (row.endDate || '');
+
+    const nameCell = `<td class="name-col" title="${esc(row.name)}">${esc(row.name) || '<span class="empty">—</span>'}</td>`;
+    const startCell = startStr
+      ? `<td class="date-col">${esc(startStr)}</td>`
+      : `<td class="empty">—</td>`;
+    const endCell = endStr
+      ? `<td class="time-col">${esc(endStr)}</td>`
+      : `<td class="empty">—</td>`;
+    const durCell = row.duration
+      ? `<td class="duration-col"><span class="dur-badge">${esc(row.duration)}</span></td>`
+      : `<td class="empty">—</td>`;
+    const numCell = row.number
+      ? `<td class="number-col">${esc(row.number)}</td>`
+      : `<td class="empty">—</td>`;
+
+    html += `<tr>${nameCell}${startCell}${endCell}${durCell}${numCell}</tr>`;
+  }
+
+  html += `</tbody></table>`;
+  container.innerHTML = html;
+}
+
+function esc(s) {
+  if (!s) return '';
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ─────────────────────────────────────────────
+//  Sort
+// ─────────────────────────────────────────────
+function toggleSort(colIdx) {
+  if (sortCol === colIdx) {
+    sortDir *= -1;
+  } else {
+    sortCol = colIdx;
+    sortDir = 1;
+  }
+  applyFilter();
+}
+
+// ─────────────────────────────────────────────
+//  Stats
+// ─────────────────────────────────────────────
+function updateStats(filtered) {
+  const withoutTime = filtered.filter(r => !r.startObj).length;
+  document.getElementById('statAll').textContent = allRows.length;
+  document.getElementById('statFiltered').textContent = filtered.length;
+  document.getElementById('statEmpty').textContent = withoutTime;
+
+  const totalSecs = filtered.reduce((sum, r) => sum + (r.durationSecs || 0), 0);
+  if (totalSecs > 0) {
+    document.getElementById('statDur').textContent = formatDurSecs(totalSecs);
+    document.getElementById('statDurGroup').style.display = '';
+  } else {
+    document.getElementById('statDurGroup').style.display = 'none';
+  }
+}
+</script>
+
+</body>
+</html>
