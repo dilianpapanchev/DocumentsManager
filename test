@@ -1,4 +1,300 @@
 <!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="UTF-8">
+<title>COB Filter</title>
+
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background: #f4f4f4;
+        padding: 20px;
+    }
+
+    textarea {
+        width: 100%;
+        height: 220px;
+        font-family: monospace;
+        font-size: 14px;
+    }
+
+    .panel {
+        background: white;
+        padding: 15px;
+        margin-top: 15px;
+        border-radius: 8px;
+        box-shadow: 0 0 8px rgba(0,0,0,0.15);
+    }
+
+    label {
+        display: block;
+        margin-top: 10px;
+        font-weight: bold;
+    }
+
+    input, select, button {
+        padding: 8px;
+        margin-top: 5px;
+        font-size: 14px;
+    }
+
+    button {
+        cursor: pointer;
+        background: #2f6fed;
+        color: white;
+        border: none;
+        border-radius: 5px;
+        margin-top: 15px;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+        background: white;
+    }
+
+    th, td {
+        border: 1px solid #ccc;
+        padding: 8px;
+        text-align: left;
+    }
+
+    th {
+        background: #333;
+        color: white;
+    }
+
+    .invalid {
+        background: #ffe0e0;
+        color: #900;
+    }
+
+    .hidden {
+        display: none;
+    }
+</style>
+</head>
+
+<body>
+
+<h2>COB Filter</h2>
+
+<div class="panel">
+    <label>Постави съдържанието на файла:</label>
+    <textarea id="fileContent">RECID|COB_DATE|STARTED|STOPPED|ELAPSED|TRANSACTIONS
+TSM|2026-04-13|2026-04-11 07:56:19.0|2026-04-25 03:57:09.0|20:00:50|0
+TSM|2026-04-27|2026-04-25 04:43:13.0|2026-04-26 06:03:46.0|01:20:33|
+TSM|2026-04-27|2026-04-26 06:45:38.0|||
+XML.TRANSFORMATION|2026-01-14|2026-01-13 23:37:33.0|2026-01-13 23:40:13.0|00:02:40|7970
+XML.TRANSFORMATION|2026-01-15|2026-01-14 23:14:29.0|2026-01-14 23:14:47.0|00:00:18|
+XML.TRANSFORMATION|2026-01-27|2026-01-27 00:35:20.0|2026-01-27 00:37:25.0|00:02:05|8140</textarea>
+</div>
+
+<div class="panel">
+    <label>Тип филтър:</label>
+    <select id="filterMode" onchange="changeMode()">
+        <option value="single">Дата и час</option>
+        <option value="range">Дата + диапазон от часове</option>
+    </select>
+
+    <div id="singleFilter">
+        <label>Избери дата и час:</label>
+        <input type="datetime-local" id="singleDateTime">
+    </div>
+
+    <div id="rangeFilter" class="hidden">
+        <label>Избери дата:</label>
+        <input type="date" id="rangeDate">
+
+        <label>Начален час:</label>
+        <input type="time" id="rangeStartTime">
+
+        <label>Краен час:</label>
+        <input type="time" id="rangeEndTime">
+    </div>
+
+    <br>
+    <button onclick="filterData()">Филтрирай</button>
+    <button onclick="showAll()">Покажи всички валидни</button>
+</div>
+
+<div id="result"></div>
+
+<script>
+function changeMode() {
+    const mode = document.getElementById("filterMode").value;
+
+    document.getElementById("singleFilter").classList.toggle("hidden", mode !== "single");
+    document.getElementById("rangeFilter").classList.toggle("hidden", mode !== "range");
+}
+
+function parseDateTime(value) {
+    if (!value || value.trim() === "") {
+        return null;
+    }
+
+    value = value.trim();
+
+    if (value.endsWith(".0")) {
+        value = value.slice(0, -2);
+    }
+
+    const parts = value.split(" ");
+    if (parts.length !== 2) {
+        return null;
+    }
+
+    const datePart = parts[0];
+    const timePart = parts[1];
+
+    return new Date(datePart + "T" + timePart);
+}
+
+function parseInputDateTime(value) {
+    if (!value) {
+        return null;
+    }
+
+    return new Date(value);
+}
+
+function parseRecords() {
+    const content = document.getElementById("fileContent").value.trim();
+    const lines = content.split(/\r?\n/);
+
+    const records = [];
+
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+
+        if (!line) {
+            continue;
+        }
+
+        const cols = line.split("|");
+
+        const record = {
+            recid: cols[0] || "",
+            cobDate: cols[1] || "",
+            startedRaw: cols[2] || "",
+            stoppedRaw: cols[3] || "",
+            elapsed: cols[4] || "",
+            transactions: cols[5] || "",
+            started: parseDateTime(cols[2]),
+            stopped: parseDateTime(cols[3]),
+            isValid: true
+        };
+
+        if (!record.started || !record.stopped || isNaN(record.started) || isNaN(record.stopped)) {
+            record.isValid = false;
+        }
+
+        records.push(record);
+    }
+
+    return records;
+}
+
+function filterData() {
+    const records = parseRecords();
+    const mode = document.getElementById("filterMode").value;
+
+    let filtered = [];
+
+    if (mode === "single") {
+        const inputValue = document.getElementById("singleDateTime").value;
+        const selectedDateTime = parseInputDateTime(inputValue);
+
+        if (!selectedDateTime || isNaN(selectedDateTime)) {
+            alert("Моля избери валидна дата и час.");
+            return;
+        }
+
+        filtered = records.filter(r =>
+            r.isValid &&
+            selectedDateTime >= r.started &&
+            selectedDateTime <= r.stopped
+        );
+    }
+
+    if (mode === "range") {
+        const date = document.getElementById("rangeDate").value;
+        const startTime = document.getElementById("rangeStartTime").value;
+        const endTime = document.getElementById("rangeEndTime").value;
+
+        if (!date || !startTime || !endTime) {
+            alert("Моля избери дата, начален час и краен час.");
+            return;
+        }
+
+        let rangeStart = new Date(date + "T" + startTime + ":00");
+        let rangeEnd = new Date(date + "T" + endTime + ":00");
+
+        if (rangeEnd < rangeStart) {
+            rangeEnd.setDate(rangeEnd.getDate() + 1);
+        }
+
+        filtered = records.filter(r =>
+            r.isValid &&
+            r.started <= rangeEnd &&
+            r.stopped >= rangeStart
+        );
+    }
+
+    displayRecords(filtered);
+}
+
+function showAll() {
+    const records = parseRecords().filter(r => r.isValid);
+    displayRecords(records);
+}
+
+function displayRecords(records) {
+    let html = "";
+
+    html += "<table>";
+    html += "<tr>";
+    html += "<th>RECID</th>";
+    html += "<th>COB_DATE</th>";
+    html += "<th>STARTED</th>";
+    html += "<th>STOPPED</th>";
+    html += "<th>ELAPSED</th>";
+    html += "<th>TRANSACTIONS</th>";
+    html += "</tr>";
+
+    if (records.length === 0) {
+        html += "<tr><td colspan='6'>Няма намерени валидни редове.</td></tr>";
+    }
+
+    records.forEach(r => {
+        html += "<tr>";
+        html += "<td>" + r.recid + "</td>";
+        html += "<td>" + r.cobDate + "</td>";
+        html += "<td>" + r.startedRaw + "</td>";
+        html += "<td>" + r.stoppedRaw + "</td>";
+        html += "<td>" + r.elapsed + "</td>";
+        html += "<td>" + r.transactions + "</td>";
+        html += "</tr>";
+    });
+
+    html += "</table>";
+
+    document.getElementById("result").innerHTML = html;
+}
+</script>
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+<!DOCTYPE html>
 
 <html lang="bg">
 <head>
