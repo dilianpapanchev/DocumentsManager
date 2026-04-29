@@ -5,6 +5,342 @@
 <title>COB Filter</title>
 
 <style>
+body {
+    font-family: Arial, sans-serif;
+    background: #f4f4f4;
+    padding: 20px;
+}
+
+textarea {
+    width: 100%;
+    height: 220px;
+    font-family: Consolas, monospace;
+    font-size: 14px;
+}
+
+.panel {
+    background: white;
+    padding: 15px;
+    margin-top: 15px;
+    border-radius: 8px;
+    box-shadow: 0 0 8px rgba(0,0,0,0.15);
+}
+
+label {
+    display: block;
+    margin-top: 10px;
+    font-weight: bold;
+}
+
+input, select, button {
+    padding: 8px;
+    margin-top: 5px;
+    font-size: 14px;
+}
+
+button {
+    cursor: pointer;
+    background: #2f6fed;
+    color: white;
+    border: none;
+    border-radius: 5px;
+    margin-right: 5px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 20px;
+    background: white;
+}
+
+th, td {
+    border: 1px solid #ccc;
+    padding: 8px;
+    text-align: left;
+}
+
+th {
+    background: #333;
+    color: white;
+}
+
+.hidden {
+    display: none;
+}
+
+.info {
+    font-size: 13px;
+    color: #555;
+}
+</style>
+</head>
+
+<body>
+
+<h2>COB Filter</h2>
+
+<div class="panel">
+    <label>Постави съдържанието на файла:</label>
+    <textarea id="fileContent">RECID|COB_DATE|STARTED|STOPPED|ELAPSED|TRANSACTIONS
+TSM|2026-04-13|2026-04-11 07:56:19.0|2026-04-25 03:57:09.0|20:00:50|0
+TSM|2026-04-27|2026-04-25 04:43:13.0|2026-04-26 06:03:46.0|01:20:33|
+TSM|2026-04-27|2026-04-26 06:45:38.0|||
+XML.TRANSFORMATION|2026-01-14|2026-01-13 23:37:33.0|2026-01-13 23:40:13.0|00:02:40|7970
+XML.TRANSFORMATION|2026-01-15|2026-01-14 23:14:29.0|2026-01-14 23:14:47.0|00:00:18|
+XML.TRANSFORMATION|2026-01-16|2026-01-15 23:57:17.0|2026-01-15 23:59:26.0|00:02:09|8370
+XML.TRANSFORMATION|2026-01-19|2026-01-16 23:17:42.0|2026-01-16 23:19:56.0|00:02:14|7783
+XML.TRANSFORMATION|2026-01-20|2026-01-19 23:31:32.0|2026-01-19 23:33:41.0|00:02:09|8563
+XML.TRANSFORMATION|2026-01-21|2026-01-20 23:35:05.0|2026-01-20 23:35:13.0|00:00:08|
+XML.TRANSFORMATION|2026-01-22|2026-01-21 23:07:18.0|2026-01-21 23:07:28.0|00:00:10|
+XML.TRANSFORMATION|2026-01-23|2026-01-22 23:27:42.0|2026-01-22 23:27:53.0|00:00:11|
+XML.TRANSFORMATION|2026-01-26|2026-01-23 23:13:44.0|2026-01-23 23:15:41.0|00:01:57|7392
+XML.TRANSFORMATION|2026-01-27|2026-01-27 00:35:20.0|2026-01-27 00:37:25.0|00:02:05|8140</textarea>
+</div>
+
+<div class="panel">
+    <label>Тип филтър:</label>
+    <select id="filterMode" onchange="changeMode()">
+        <option value="single">Дата + час</option>
+        <option value="range">Дата + диапазон от часове</option>
+    </select>
+
+    <div id="singleFilter">
+        <label>Дата:</label>
+        <input type="date" id="singleDate">
+
+        <label>Час във формат HH:MM:</label>
+        <input
+            type="time"
+            id="singleTime"
+            min="00:00"
+            max="23:59"
+            step="60"
+            lang="bg-BG">
+
+        <div class="info">Пример: 23:20</div>
+    </div>
+
+    <div id="rangeFilter" class="hidden">
+        <label>Дата:</label>
+        <input type="date" id="rangeDate">
+
+        <label>Начален час HH:MM:</label>
+        <input
+            type="time"
+            id="rangeStartTime"
+            min="00:00"
+            max="23:59"
+            step="60"
+            lang="bg-BG">
+
+        <label>Краен час HH:MM:</label>
+        <input
+            type="time"
+            id="rangeEndTime"
+            min="00:00"
+            max="23:59"
+            step="60"
+            lang="bg-BG">
+
+        <div class="info">Ако крайният час е по-малък от началния, диапазонът минава през полунощ.</div>
+    </div>
+
+    <br><br>
+    <button onclick="filterData()">Филтрирай</button>
+    <button onclick="showAll()">Покажи всички валидни</button>
+</div>
+
+<div id="result"></div>
+
+<script>
+function changeMode() {
+    var mode = document.getElementById("filterMode").value;
+
+    document.getElementById("singleFilter").classList.toggle("hidden", mode !== "single");
+    document.getElementById("rangeFilter").classList.toggle("hidden", mode !== "range");
+}
+
+function parseDateTime(value) {
+    if (!value || value.trim() === "") {
+        return null;
+    }
+
+    value = value.trim();
+
+    if (value.endsWith(".0")) {
+        value = value.slice(0, -2);
+    }
+
+    var parts = value.split(" ");
+
+    if (parts.length !== 2) {
+        return null;
+    }
+
+    return new Date(parts[0] + "T" + parts[1]);
+}
+
+function parseRecords() {
+    var content = document.getElementById("fileContent").value.trim();
+    var lines = content.split(/\r?\n/);
+    var records = [];
+
+    for (var i = 1; i < lines.length; i++) {
+        var line = lines[i].trim();
+
+        if (!line) {
+            continue;
+        }
+
+        var cols = line.split("|");
+
+        var record = {
+            recid: cols[0] || "",
+            cobDate: cols[1] || "",
+            startedRaw: cols[2] || "",
+            stoppedRaw: cols[3] || "",
+            elapsed: cols[4] || "",
+            transactions: cols[5] || "",
+            started: parseDateTime(cols[2]),
+            stopped: parseDateTime(cols[3]),
+            isValid: true
+        };
+
+        if (
+            !record.started ||
+            !record.stopped ||
+            isNaN(record.started.getTime()) ||
+            isNaN(record.stopped.getTime())
+        ) {
+            record.isValid = false;
+        }
+
+        records.push(record);
+    }
+
+    return records;
+}
+
+function filterData() {
+    var records = parseRecords();
+    var mode = document.getElementById("filterMode").value;
+    var filtered = [];
+
+    if (mode === "single") {
+        var date = document.getElementById("singleDate").value;
+        var time = document.getElementById("singleTime").value;
+
+        if (!date || !time) {
+            alert("Моля избери дата и час.");
+            return;
+        }
+
+        var selectedDateTime = new Date(date + "T" + time + ":00");
+
+        filtered = records.filter(function(r) {
+            return r.isValid &&
+                   selectedDateTime >= r.started &&
+                   selectedDateTime <= r.stopped;
+        });
+    }
+
+    if (mode === "range") {
+        var rangeDate = document.getElementById("rangeDate").value;
+        var startTime = document.getElementById("rangeStartTime").value;
+        var endTime = document.getElementById("rangeEndTime").value;
+
+        if (!rangeDate || !startTime || !endTime) {
+            alert("Моля избери дата, начален час и краен час.");
+            return;
+        }
+
+        var rangeStart = new Date(rangeDate + "T" + startTime + ":00");
+        var rangeEnd = new Date(rangeDate + "T" + endTime + ":00");
+
+        if (rangeEnd < rangeStart) {
+            rangeEnd.setDate(rangeEnd.getDate() + 1);
+        }
+
+        filtered = records.filter(function(r) {
+            return r.isValid &&
+                   r.started <= rangeEnd &&
+                   r.stopped >= rangeStart;
+        });
+    }
+
+    displayRecords(filtered);
+}
+
+function showAll() {
+    var records = parseRecords().filter(function(r) {
+        return r.isValid;
+    });
+
+    displayRecords(records);
+}
+
+function displayRecords(records) {
+    var html = "";
+
+    html += "<table>";
+    html += "<tr>";
+    html += "<th>RECID</th>";
+    html += "<th>COB_DATE</th>";
+    html += "<th>STARTED</th>";
+    html += "<th>STOPPED</th>";
+    html += "<th>ELAPSED</th>";
+    html += "<th>TRANSACTIONS</th>";
+    html += "</tr>";
+
+    if (records.length === 0) {
+        html += "<tr><td colspan='6'>Няма намерени валидни редове.</td></tr>";
+    }
+
+    for (var i = 0; i < records.length; i++) {
+        var r = records[i];
+
+        html += "<tr>";
+        html += "<td>" + escapeHtml(r.recid) + "</td>";
+        html += "<td>" + escapeHtml(r.cobDate) + "</td>";
+        html += "<td>" + escapeHtml(r.startedRaw) + "</td>";
+        html += "<td>" + escapeHtml(r.stoppedRaw) + "</td>";
+        html += "<td>" + escapeHtml(r.elapsed) + "</td>";
+        html += "<td>" + escapeHtml(r.transactions) + "</td>";
+        html += "</tr>";
+    }
+
+    html += "</table>";
+
+    document.getElementById("result").innerHTML = html;
+}
+
+function escapeHtml(value) {
+    return String(value)
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+</script>
+
+</body>
+</html>
+
+
+
+
+
+
+
+<!DOCTYPE html>
+<html lang="bg">
+<head>
+<meta charset="UTF-8">
+<title>COB Filter</title>
+
+<style>
     body {
         font-family: Arial, sans-serif;
         background: #f4f4f4;
