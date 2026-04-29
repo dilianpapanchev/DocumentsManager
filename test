@@ -1,4 +1,541 @@
 <!DOCTYPE html>
+
+<html lang="bg">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transaction Log Viewer</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Syne:wght@400;700;800&display=swap');
+
+:root {
+–bg: #0a0d14;
+–surface: #111520;
+–surface2: #181d2e;
+–border: #232840;
+–accent: #3d7eff;
+–accent2: #00d4aa;
+–warn: #ff6b35;
+–text: #c8d0e8;
+–text-dim: #5a6480;
+–text-bright: #eef2ff;
+–valid: #00d4aa;
+–invalid: #ff4466;
+}
+
+- { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+background: var(–bg);
+color: var(–text);
+font-family: ‘JetBrains Mono’, monospace;
+min-height: 100vh;
+padding: 0;
+}
+
+header {
+background: linear-gradient(135deg, #0d1526 0%, #111a30 100%);
+border-bottom: 1px solid var(–border);
+padding: 24px 32px;
+display: flex;
+align-items: center;
+gap: 16px;
+}
+
+header h1 {
+font-family: ‘Syne’, sans-serif;
+font-size: 1.4rem;
+font-weight: 800;
+color: var(–text-bright);
+letter-spacing: -0.02em;
+}
+
+header .tag {
+background: var(–accent);
+color: #fff;
+font-size: 0.65rem;
+font-weight: 700;
+padding: 3px 8px;
+border-radius: 4px;
+letter-spacing: 0.08em;
+text-transform: uppercase;
+}
+
+.main {
+max-width: 1100px;
+margin: 0 auto;
+padding: 28px 24px;
+}
+
+.filter-card {
+background: var(–surface);
+border: 1px solid var(–border);
+border-radius: 12px;
+padding: 24px;
+margin-bottom: 24px;
+}
+
+.filter-card h2 {
+font-family: ‘Syne’, sans-serif;
+font-size: 0.85rem;
+font-weight: 700;
+color: var(–text-dim);
+text-transform: uppercase;
+letter-spacing: 0.1em;
+margin-bottom: 20px;
+}
+
+.mode-tabs {
+display: flex;
+gap: 8px;
+margin-bottom: 20px;
+}
+
+.mode-tab {
+padding: 8px 18px;
+border: 1px solid var(–border);
+border-radius: 6px;
+background: transparent;
+color: var(–text-dim);
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.8rem;
+cursor: pointer;
+transition: all 0.15s;
+}
+
+.mode-tab.active {
+background: var(–accent);
+border-color: var(–accent);
+color: #fff;
+}
+
+.mode-tab:hover:not(.active) {
+border-color: var(–accent);
+color: var(–text-bright);
+}
+
+.filter-row {
+display: flex;
+gap: 16px;
+flex-wrap: wrap;
+align-items: flex-end;
+}
+
+.field {
+display: flex;
+flex-direction: column;
+gap: 6px;
+}
+
+.field label {
+font-size: 0.72rem;
+color: var(–text-dim);
+text-transform: uppercase;
+letter-spacing: 0.08em;
+}
+
+.field input {
+background: var(–surface2);
+border: 1px solid var(–border);
+border-radius: 6px;
+color: var(–text-bright);
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.85rem;
+padding: 9px 12px;
+outline: none;
+transition: border-color 0.15s;
+min-width: 180px;
+}
+
+.field input:focus {
+border-color: var(–accent);
+}
+
+/* Hide default calendar icon and style consistently */
+input[type=“date”]::-webkit-calendar-picker-indicator,
+input[type=“time”]::-webkit-calendar-picker-indicator {
+filter: invert(0.5) sepia(1) saturate(3) hue-rotate(190deg);
+cursor: pointer;
+}
+
+.btn {
+padding: 9px 22px;
+border-radius: 6px;
+border: none;
+font-family: ‘JetBrains Mono’, monospace;
+font-size: 0.82rem;
+font-weight: 600;
+cursor: pointer;
+transition: all 0.15s;
+letter-spacing: 0.04em;
+}
+
+.btn-primary {
+background: var(–accent);
+color: #fff;
+}
+
+.btn-primary:hover {
+background: #5590ff;
+transform: translateY(-1px);
+}
+
+.btn-reset {
+background: transparent;
+border: 1px solid var(–border);
+color: var(–text-dim);
+}
+
+.btn-reset:hover {
+border-color: var(–warn);
+color: var(–warn);
+}
+
+.results-header {
+display: flex;
+align-items: center;
+justify-content: space-between;
+margin-bottom: 12px;
+padding: 0 2px;
+}
+
+.results-count {
+font-size: 0.78rem;
+color: var(–text-dim);
+}
+
+.results-count span {
+color: var(–accent2);
+font-weight: 700;
+}
+
+.table-wrap {
+background: var(–surface);
+border: 1px solid var(–border);
+border-radius: 12px;
+overflow: hidden;
+overflow-x: auto;
+}
+
+table {
+width: 100%;
+border-collapse: collapse;
+font-size: 0.78rem;
+}
+
+thead tr {
+background: var(–surface2);
+border-bottom: 1px solid var(–border);
+}
+
+th {
+padding: 12px 16px;
+text-align: left;
+color: var(–text-dim);
+font-weight: 600;
+text-transform: uppercase;
+letter-spacing: 0.08em;
+font-size: 0.68rem;
+white-space: nowrap;
+}
+
+tbody tr {
+border-bottom: 1px solid var(–border);
+transition: background 0.1s;
+}
+
+tbody tr:last-child { border-bottom: none; }
+
+tbody tr:hover { background: rgba(61, 126, 255, 0.05); }
+
+td {
+padding: 11px 16px;
+color: var(–text);
+white-space: nowrap;
+}
+
+.td-recid {
+color: var(–accent);
+font-weight: 600;
+}
+
+.td-date { color: var(–text-bright); }
+
+.td-elapsed {
+color: var(–accent2);
+font-weight: 600;
+}
+
+.td-transactions { color: var(–warn); font-weight: 600; }
+
+.badge {
+display: inline-flex;
+align-items: center;
+gap: 4px;
+padding: 2px 8px;
+border-radius: 4px;
+font-size: 0.68rem;
+font-weight: 700;
+}
+
+.badge-valid { background: rgba(0,212,170,0.12); color: var(–valid); }
+.badge-invalid { background: rgba(255,68,102,0.12); color: var(–invalid); }
+
+.empty-state {
+text-align: center;
+padding: 60px 20px;
+color: var(–text-dim);
+font-size: 0.85rem;
+}
+
+.empty-state .icon { font-size: 2.5rem; margin-bottom: 12px; opacity: 0.4; }
+
+@media (max-width: 600px) {
+.filter-row { flex-direction: column; }
+.field input { min-width: 100%; }
+}
+</style>
+
+</head>
+<body>
+
+<header>
+  <h1>Transaction Log Viewer</h1>
+  <span class="tag">COB Log</span>
+</header>
+
+<div class="main">
+  <div class="filter-card">
+    <h2>Филтриране</h2>
+
+```
+<div class="mode-tabs">
+  <button class="mode-tab active" onclick="setMode('datetime')" id="tab-datetime">Дата + Точен час</button>
+  <button class="mode-tab" onclick="setMode('range')" id="tab-range">Дата + Диапазон от часове</button>
+</div>
+
+<!-- Mode 1: exact date+time -->
+<div id="mode-datetime">
+  <div class="filter-row">
+    <div class="field">
+      <label>Дата</label>
+      <input type="date" id="dt-date">
+    </div>
+    <div class="field">
+      <label>Час (24h)</label>
+      <input type="time" id="dt-time" step="1">
+    </div>
+    <button class="btn btn-primary" onclick="applyFilter()">Търси</button>
+    <button class="btn btn-reset" onclick="resetFilter()">Изчисти</button>
+  </div>
+</div>
+
+<!-- Mode 2: date + time range -->
+<div id="mode-range" style="display:none">
+  <div class="filter-row">
+    <div class="field">
+      <label>Дата</label>
+      <input type="date" id="r-date">
+    </div>
+    <div class="field">
+      <label>От час (24h)</label>
+      <input type="time" id="r-from" step="1">
+    </div>
+    <div class="field">
+      <label>До час (24h)</label>
+      <input type="time" id="r-to" step="1">
+    </div>
+    <button class="btn btn-primary" onclick="applyFilter()">Търси</button>
+    <button class="btn btn-reset" onclick="resetFilter()">Изчисти</button>
+  </div>
+</div>
+```
+
+  </div>
+
+  <div class="results-header">
+    <div class="results-count">Показани: <span id="shown-count">—</span> реда</div>
+  </div>
+
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr>
+          <th>RECID</th>
+          <th>COB_DATE</th>
+          <th>STARTED</th>
+          <th>STOPPED</th>
+          <th>ELAPSED</th>
+          <th>TRANSACTIONS</th>
+          <th>Статус</th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+    <div id="empty" class="empty-state" style="display:none">
+      <div class="icon">🔍</div>
+      Няма намерени редове за избраните критерии.
+    </div>
+  </div>
+</div>
+
+<script>
+// ─── RAW DATA ───────────────────────────────────────────────────────────────
+const RAW = `RECID|COB_DATE|STARTED|STOPPED|ELAPSED|TRANSACTIONS
+TSM|2026-04-13|2026-04-11 07:56:19.0|2026-04-25 03:57:09.0|20:00:50|
+TSM|2026-04-27|2026-04-25 04:43:13.0|2026-04-26 06:03:46.0|01:20:33|
+TSM|2026-04-27|2026-04-26 06:45:38.0|||
+XML.TRANSFORMATION|2026-01-14|2026-01-13 23:37:33.0|2026-01-13 23:40:13.0|00:02:40|7970
+XML.TRANSFORMATION|2026-01-15|2026-01-14 23:14:29.0|2026-01-14 23:14:47.0|00:00:18|
+XML.TRANSFORMATION|2026-01-16|2026-01-15 23:57:17.0|2026-01-15 23:59:26.0|00:02:09|8370
+XML.TRANSFORMATION|2026-01-19|2026-01-16 23:17:42.0|2026-01-16 23:19:56.0|00:02:14|7783
+XML.TRANSFORMATION|2026-01-20|2026-01-19 23:31:32.0|2026-01-19 23:33:41.0|00:02:09|8563
+XML.TRANSFORMATION|2026-01-21|2026-01-20 23:35:05.0|2026-01-20 23:35:13.0|00:00:08|
+XML.TRANSFORMATION|2026-01-22|2026-01-21 23:07:18.0|2026-01-21 23:07:28.0|00:00:10|
+XML.TRANSFORMATION|2026-01-23|2026-01-22 23:27:42.0|2026-01-22 23:27:53.0|00:00:11|
+XML.TRANSFORMATION|2026-01-26|2026-01-23 23:13:44.0|2026-01-23 23:15:41.0|00:01:57|7392
+XML.TRANSFORMATION|2026-01-27|2026-01-27 00:35:20.0|2026-01-27 00:37:25.0|00:02:05|8140`;
+
+// ─── PARSE ──────────────────────────────────────────────────────────────────
+const lines = RAW.trim().split('\n');
+const headers = lines[0].split('|');
+const DATA = lines.slice(1).map(line => {
+  const cols = line.split('|');
+  return {
+    RECID:        cols[0] || '',
+    COB_DATE:     cols[1] || '',
+    STARTED:      cols[2] || '',
+    STOPPED:      cols[3] || '',
+    ELAPSED:      cols[4] || '',
+    TRANSACTIONS: cols[5] || ''
+  };
+});
+
+// Parse "2026-01-27 00:35:20.0" → Date object, or null if empty/invalid
+function parseTs(s) {
+  if (!s || s.trim() === '') return null;
+  // Remove trailing ".0" sub-seconds for clean parse
+  const clean = s.replace(/\.\d+$/, '').trim();
+  const d = new Date(clean.replace(' ', 'T'));
+  return isNaN(d.getTime()) ? null : d;
+}
+
+// Is a row "valid"? — both STARTED and STOPPED must be non-empty parseable
+function isValid(row) {
+  return parseTs(row.STARTED) !== null && parseTs(row.STOPPED) !== null;
+}
+
+// ─── UI STATE ────────────────────────────────────────────────────────────────
+let currentMode = 'datetime';
+
+function setMode(m) {
+  currentMode = m;
+  document.getElementById('mode-datetime').style.display = m === 'datetime' ? '' : 'none';
+  document.getElementById('mode-range').style.display   = m === 'range'    ? '' : 'none';
+  document.getElementById('tab-datetime').classList.toggle('active', m === 'datetime');
+  document.getElementById('tab-range').classList.toggle('active', m === 'range');
+}
+
+function resetFilter() {
+  ['dt-date','dt-time','r-date','r-from','r-to'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) el.value = '';
+  });
+  renderRows(DATA);
+}
+
+function applyFilter() {
+  let filtered;
+
+  if (currentMode === 'datetime') {
+    const dateVal = document.getElementById('dt-date').value; // "YYYY-MM-DD"
+    const timeVal = document.getElementById('dt-time').value; // "HH:MM" or "HH:MM:SS"
+
+    if (!dateVal || !timeVal) { alert('Моля въведете дата и час.'); return; }
+
+    const target = new Date(`${dateVal}T${timeVal}`);
+    if (isNaN(target.getTime())) { alert('Невалидна дата/час.'); return; }
+
+    filtered = DATA.filter(row => {
+      if (!isValid(row)) return false;
+      const started = parseTs(row.STARTED);
+      const stopped = parseTs(row.STOPPED);
+      return target >= started && target <= stopped;
+    });
+
+  } else {
+    // range mode
+    const dateVal = document.getElementById('r-date').value;
+    const fromVal = document.getElementById('r-from').value;
+    const toVal   = document.getElementById('r-to').value;
+
+    if (!dateVal || !fromVal || !toVal) { alert('Моля въведете дата, начален и краен час.'); return; }
+
+    const from = new Date(`${dateVal}T${fromVal}`);
+    const to   = new Date(`${dateVal}T${toVal}`);
+    if (isNaN(from.getTime()) || isNaN(to.getTime())) { alert('Невалидни часове.'); return; }
+    if (from > to) { alert('Началният час трябва да е преди крайния.'); return; }
+
+    // Row matches if its [STARTED, STOPPED] interval overlaps with [from, to]
+    filtered = DATA.filter(row => {
+      if (!isValid(row)) return false;
+      const started = parseTs(row.STARTED);
+      const stopped = parseTs(row.STOPPED);
+      // Overlap: started <= to AND stopped >= from
+      return started <= to && stopped >= from;
+    });
+  }
+
+  renderRows(filtered);
+}
+
+function fmt(s) {
+  // Remove trailing .0 for display
+  return s ? s.replace(/\.\d+$/, '') : '';
+}
+
+function renderRows(rows) {
+  const tbody = document.getElementById('tbody');
+  const empty = document.getElementById('empty');
+  document.getElementById('shown-count').textContent = rows.length;
+
+  if (rows.length === 0) {
+    tbody.innerHTML = '';
+    empty.style.display = '';
+    return;
+  }
+  empty.style.display = 'none';
+
+  tbody.innerHTML = rows.map(r => {
+    const valid = isValid(r);
+    const badge = valid
+      ? `<span class="badge badge-valid">✓ Валиден</span>`
+      : `<span class="badge badge-invalid">✗ Невалиден</span>`;
+    return `<tr>
+      <td class="td-recid">${r.RECID}</td>
+      <td class="td-date">${r.COB_DATE}</td>
+      <td class="td-date">${fmt(r.STARTED)}</td>
+      <td class="td-date">${fmt(r.STOPPED)}</td>
+      <td class="td-elapsed">${r.ELAPSED || '—'}</td>
+      <td class="td-transactions">${r.TRANSACTIONS || '—'}</td>
+      <td>${badge}</td>
+    </tr>`;
+  }).join('');
+}
+
+// Initial render — all rows
+renderRows(DATA);
+</script>
+
+</body>
+</html>
+
+
+
+
+
+
+<!DOCTYPE html>
 <html lang="bg">
 <head>
 <meta charset="UTF-8">
